@@ -14,6 +14,5 @@ yarl==1.24.5
 yt-dlp
 PyNaCl
 dave.py
-audioop-lts
-
+audioop-lts; python_version >= "3.13"
 edge-tts
