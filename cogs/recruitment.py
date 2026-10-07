@@ -11,6 +11,7 @@ from database import (
     DB_PATH
 )
 import aiosqlite
+from cogs.banner_panel import get_banner_url, get_banner_file
 
 class RejectReasonModal(disnake.ui.Modal):
     def __init__(self, app_id: int, thread: disnake.Thread, applicant_id: int, original_message: disnake.Message):
@@ -19,7 +20,7 @@ class RejectReasonModal(disnake.ui.Modal):
         self.applicant_id = applicant_id
         self.original_message = original_message
 
-        title = get_text("modal_reject_title", "Отклонение заявки в Zakonov FAMQ")
+        title = get_text("modal_reject_title", "Отклонение заявки в Hallez FAMQ")
         label = get_text("modal_reject_label", "Причина отказа")
         placeholder = get_text("modal_reject_ph", "Укажите причину отказа...")
 
@@ -106,7 +107,7 @@ class RejectReasonModal(disnake.ui.Modal):
             try:
                 dm_tpl = get_text(
                     "recruit_rejected_dm",
-                    "Здравствуйте, {nick}!\nК сожалению, ваша заявка на вступление в семью **Zakonov FAMQ** была отклонена.\n\n**Причина:** {reason}"
+                    "Здравствуйте, {nick}!\nК сожалению, ваша заявка на вступление в семью **Hallez FAMQ** была отклонена.\n\n**Причина:** {reason}"
                 )
                 dm_text = dm_tpl.format(
                     nick=applicant.display_name,
@@ -115,7 +116,7 @@ class RejectReasonModal(disnake.ui.Modal):
                     reason=reason
                 )
                 dm_emb = error_embed(
-                    "Вердикт по заявке в Zakonov FAMQ",
+                    "Вердикт по заявке в Hallez FAMQ",
                     dm_text,
                     guild=inter.guild
                 )
@@ -184,7 +185,7 @@ class VoiceSelect(disnake.ui.StringSelect):
         title = get_text("recruit_interview_title", "🎙️ Вызов на собеседование (обзвон)")
         desc_tpl = get_text(
             "recruit_interview_desc",
-            "{mention}, рекрутер {reviewer} приглашает вас на обзвон в семью **Zakonov FAMQ**!\n\n📍 **Голосовой канал:** {voice}\n⏳ Пожалуйста, зайдите в указанный канал и ожидайте рекрутера."
+            "{mention}, рекрутер {reviewer} приглашает вас на обзвон в семью **Hallez FAMQ**!\n\n📍 **Голосовой канал:** {voice}\n⏳ Пожалуйста, зайдите в указанный канал и ожидайте рекрутера."
         )
         desc = desc_tpl.format(mention=mention_str, reviewer=inter.author.mention, voice=voice_link)
 
@@ -259,16 +260,16 @@ class RecruitmentManageView(disnake.ui.View):
 
 class RecruitModal(disnake.ui.Modal):
     def __init__(self):
-        title = get_text("modal_recruit_title", "Анкета на вступление в Zakonov FAMQ")
+        title = get_text("modal_recruit_title", "Анкета на вступление в Hallez FAMQ")
         lbl_nick = get_text("modal_recruit_nick_label", "Игровой никнейм (Имя Фамилия)")
-        ph_nick = get_text("modal_recruit_nick_ph", "Пример: Travis Zakonov")
+        ph_nick = get_text("modal_recruit_nick_ph", "Пример: Travis Hallez")
         lbl_static = get_text("modal_recruit_static_label", "Ваш статик (Static ID)")
         ph_static = get_text("modal_recruit_static_ph", "Пример: 12345")
         lbl_age = get_text("modal_recruit_age_label", "Реальный возраст")
         ph_age = get_text("modal_recruit_age_ph", "Пример: 18")
         lbl_prev = get_text("modal_recruit_prev_label", "В каких семьях состояли ранее?")
         ph_prev = get_text("modal_recruit_prev_ph", "Укажите названия семей и причину ухода...")
-        lbl_why = get_text("modal_recruit_why_label", "Почему именно Zakonov и как узнали о нас?")
+        lbl_why = get_text("modal_recruit_why_label", "Почему именно Hallez и как узнали о нас?")
         ph_why = get_text("modal_recruit_why_ph", "Ваши цели, планы в семье, откуда узнали...")
 
         components = [
@@ -307,7 +308,7 @@ class RecruitModal(disnake.ui.Modal):
             ),
             disnake.ui.TextInput(
                 label=lbl_why[:45],
-                custom_id="why_codex",
+                custom_id="why_hallez",
                 style=disnake.TextInputStyle.paragraph,
                 placeholder=ph_why[:100],
                 min_length=5,
@@ -320,7 +321,7 @@ class RecruitModal(disnake.ui.Modal):
     async def callback(self, inter: disnake.ModalInteraction):
         config = load_config()
         if not config.get("recruitment_open", True):
-            closed_msg = get_text("recruit_closed_msg", "❌ Набор в семью **Zakonov FAMQ** на данный момент закрыт.")
+            closed_msg = get_text("recruit_closed_msg", "❌ Набор в семью **Hallez FAMQ** на данный момент закрыт.")
             await inter.response.send_message(closed_msg, ephemeral=True)
             return
 
@@ -328,7 +329,7 @@ class RecruitModal(disnake.ui.Modal):
         static_id = inter.text_values.get("static_id", "").strip()
         raw_age = inter.text_values.get("age", "").strip()
         prev_families = inter.text_values.get("prev_families", "").strip()
-        why_codex = inter.text_values.get("why_codex", "").strip()
+        why_hallez = inter.text_values.get("why_hallez", "").strip()
 
         try:
             age = int(raw_age)
@@ -341,17 +342,21 @@ class RecruitModal(disnake.ui.Modal):
         channel = inter.channel
         thread_name = f"заявка-{nick} [{static_id}]"
         
+        # Только приватная ветка: в канале не появляется ни одного сообщения
         try:
             thread = await channel.create_thread(
-                name=thread_name,
+                name=thread_name[:100],
                 type=disnake.ChannelType.private_thread,
-                auto_archive_duration=1440
+                invitable=False,
+                auto_archive_duration=10080
             )
-        except Exception:
-            thread = await channel.create_thread(
-                name=thread_name,
-                auto_archive_duration=1440
+        except Exception as e:
+            print(f"Не удалось создать приватную ветку: {e}")
+            await inter.edit_original_response(
+                content="❌ Не удалось создать приватную ветку. Проверьте права бота: "
+                        "Create Private Threads, Send Messages in Threads, Manage Threads."
             )
+            return
 
         try:
             await thread.add_user(inter.author)
@@ -364,14 +369,14 @@ class RecruitModal(disnake.ui.Modal):
             static_id=static_id,
             age=age,
             prev_families=prev_families,
-            why_codex=why_codex,
+            why_hallez=why_hallez,
             thread_id=thread.id
         )
 
         title_tpl = get_text("recruit_card_title", "⚜️ Новая анкета кандидата: {nick}")
         desc_tpl = get_text(
             "recruit_card_desc",
-            "Кандидат {mention} подал заявку на вступление в семью **Zakonov FAMQ**.\nСтатус: 🟡 **Новая заявка**"
+            "Кандидат {mention} подал заявку на вступление в семью **Hallez FAMQ**.\nСтатус: 🟡 **Новая заявка**"
         )
         app_card = base_embed(
             title_tpl.format(nick=nick),
@@ -382,7 +387,18 @@ class RecruitModal(disnake.ui.Modal):
         app_card.add_field(name="🆔 Статический ID", value=f"`{static_id}`", inline=True)
         app_card.add_field(name="🎂 Возраст", value=f"`{age}` лет", inline=True)
         app_card.add_field(name="🏛️ Прошлые семьи", value=prev_families, inline=False)
-        app_card.add_field(name="🎯 Почему Zakonov FAMQ?", value=why_codex, inline=False)
+        app_card.add_field(name="🎯 Почему Hallez FAMQ?", value=why_hallez, inline=False)
+
+        # Баннер внизу карточки анкеты (задаётся командой /banner)
+        banner_kwargs = {}
+        banner_file = get_banner_file()
+        if banner_file:
+            app_card.set_image(url=f"attachment://{banner_file[1]}")
+            banner_kwargs["file"] = disnake.File(banner_file[0], filename=banner_file[1])
+        else:
+            banner_url = get_banner_url()
+            if banner_url:
+                app_card.set_image(url=banner_url)
 
         recruiter_roles = config.get("recruiter_role_ids", [])
         ping_content = " ".join([f"<@&{r_id}>" for r_id in recruiter_roles if r_id > 0])
@@ -390,7 +406,7 @@ class RecruitModal(disnake.ui.Modal):
             ping_content = "📢 Рекрутеры, поступила новая анкета!"
 
         view = RecruitmentManageView(app_id=app_id, applicant_id=inter.author.id)
-        await thread.send(content=f"{inter.author.mention} {ping_content}", embed=app_card, view=view)
+        await thread.send(content=f"{inter.author.mention} {ping_content}", embed=app_card, view=view, **banner_kwargs)
 
         await inter.edit_original_response(
             content=f"✅ Ваша заявка успешно отправлена! Перейдите в созданную ветку: {thread.mention}"
@@ -415,7 +431,7 @@ class RecruitLaunchView(disnake.ui.View):
     """Постоянная кнопка в канале набора"""
     def __init__(self):
         super().__init__(timeout=None)
-        label = get_text("btn_recruit_apply", "Подать заявку в Zakonov FAMQ")
+        label = get_text("btn_recruit_apply", "Подать заявку в Hallez FAMQ")
         self.apply_btn = disnake.ui.Button(
             label=label[:80],
             style=disnake.ButtonStyle.danger,
@@ -437,7 +453,7 @@ class Recruitment(commands.Cog):
         if custom_id == "codex:recruit_apply":
             config = load_config()
             if not config.get("recruitment_open", True):
-                closed_msg = get_text("recruit_closed_msg", "❌ Набор в семью **Zakonov FAMQ** на данный момент закрыт.")
+                closed_msg = get_text("recruit_closed_msg", "❌ Набор в семью **Hallez FAMQ** на данный момент закрыт.")
                 await inter.response.send_message(closed_msg, ephemeral=True)
                 return
             modal = RecruitModal()
@@ -545,11 +561,11 @@ class Recruitment(commands.Cog):
 
             if applicant and roles_to_add:
                 try:
-                    await applicant.add_roles(*roles_to_add, reason=f"Принят в семью Zakonov FAMQ рекрутером {inter.author}")
+                    await applicant.add_roles(*roles_to_add, reason=f"Принят в семью Hallez FAMQ рекрутером {inter.author}")
                 except Exception as e:
                     print(f"Ошибка выдачи ролей: {e}")
 
-            nick_format = get_text("nickname_format", "[Zakonov | {rank}] {nick} | {static}")
+            nick_format = get_text("nickname_format", "[Hallez | {rank}] {nick} | {static}")
             new_nick = nick_format.format(rank="1", nick=app["nick"], static=app["static_id"])
             if applicant and config.get("auto_nicknames", True):
                 try:
@@ -560,7 +576,7 @@ class Recruitment(commands.Cog):
             await update_application_status(app_id, status="accepted", reviewer_id=inter.author.id, reason="Принят по результатам обзвона")
             await upsert_member(user_id=applicant_id, nick=app["nick"], static_id=app["static_id"], rank=1)
 
-            acc_title = get_text("recruit_accepted_title", "Добро пожаловать в Zakonov FAMQ!")
+            acc_title = get_text("recruit_accepted_title", "Добро пожаловать в Hallez FAMQ!")
             acc_thread_msg = get_text(
                 "recruit_accepted_thread_msg",
                 "🎉 Кандидат {mention} успешно принят в семью рекрутером {reviewer}!\nРоли выданы. Ветка архивирована."
@@ -597,10 +613,10 @@ class Recruitment(commands.Cog):
                 try:
                     dm_tpl = get_text(
                         "recruit_accepted_dm",
-                        "Поздравляем с вступлением в Zakonov FAMQ!\nВы успешно приняты в семью **Zakonov FAMQ**!\nВам выданы роли семьи на сервере. Ознакомьтесь с правилами семьи и подключайтесь к общению!"
+                        "Поздравляем с вступлением в Hallez FAMQ!\nВы успешно приняты в семью **Hallez FAMQ**!\nВам выданы роли семьи на сервере. Ознакомьтесь с правилами семьи и подключайтесь к общению!"
                     )
                     dm_emb = success_embed(
-                        "Поздравляем с вступлением в Zakonov FAMQ!",
+                        "Поздравляем с вступлением в Hallez FAMQ!",
                         dm_tpl.format(mention=applicant.mention, nick=app["nick"]),
                         guild=inter.guild
                     )
