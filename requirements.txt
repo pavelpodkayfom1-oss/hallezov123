@@ -14,5 +14,9 @@ yarl==1.24.5
 yt-dlp
 PyNaCl
 dave.py
-audioop-lts; python_version >= "3.13"
+audioop-lts
+
 edge-tts
+Pillow
+
+imageio-ffmpeg
