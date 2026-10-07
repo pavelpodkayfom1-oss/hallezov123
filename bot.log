@@ -3787,3 +3787,518 @@ Loop thread traceback (most recent call last):
   File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
     status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
 
+2026-10-08 04:39:34,432 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 1980 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:39:44,434 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 1990 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:39:49,636 [WARNING] disnake.gateway: Can't keep up, shard ID None websocket is 2038.2s behind.
+2026-10-08 04:39:54,437 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2000 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:40:04,449 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2010 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:40:14,465 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2020 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:40:24,472 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2030 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:40:34,480 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2040 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:40:39,325 [WARNING] disnake.gateway: Can't keep up, shard ID None websocket is 2087.9s behind.
+2026-10-08 04:40:44,483 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2050 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:40:54,485 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2060 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:41:04,500 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2070 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:41:14,514 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2080 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:41:24,523 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2090 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:41:29,041 [WARNING] disnake.gateway: Can't keep up, shard ID None websocket is 2137.6s behind.
+2026-10-08 04:41:34,536 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2100 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:41:44,546 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2110 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:41:54,547 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2120 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:42:04,562 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2130 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:42:14,562 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2140 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:42:18,727 [WARNING] disnake.gateway: Can't keep up, shard ID None websocket is 2187.3s behind.
+2026-10-08 04:42:24,564 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2150 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:42:34,569 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2160 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:42:44,583 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2170 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:42:54,599 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2180 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2057, in _run_once
+    handle._run()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+  File "C:\Users\user\Desktop\12345\.venv\Lib\site-packages\disnake\ext\tasks\__init__.py", line 156, in _loop
+    await self.coro(*args, **kwargs)
+  File "C:\Users\user\Desktop\12345\cogs\hall_panel.py", line 821, in afk_loop
+    for s in await afk_due(now):
+  File "C:\Users\user\Desktop\12345\cogs\hall_panel.py", line 149, in afk_due
+    return await _afk_query("SELECT * FROM hp_afk_sessions WHERE ends_at <= ?", (now,))
+  File "C:\Users\user\Desktop\12345\cogs\hall_panel.py", line 138, in _afk_query
+    async with aiosqlite.connect(DB_PATH) as db:
+  File "C:\Users\user\Desktop\12345\.venv\Lib\site-packages\aiosqlite\core.py", line 181, in __aenter__
+    return await self
+  File "C:\Users\user\Desktop\12345\.venv\Lib\site-packages\aiosqlite\core.py", line 177, in __await__
+    self._thread.start()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\threading.py", line 1011, in start
+    self._started.wait()  # Will set ident and native_id
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\threading.py", line 670, in wait
+    signaled = self._cond.wait(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\threading.py", line 369, in wait
+    waiter.acquire()
+
+2026-10-08 04:43:04,602 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2190 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:43:08,416 [WARNING] disnake.gateway: Can't keep up, shard ID None websocket is 2236.9s behind.
+2026-10-08 04:43:14,617 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2200 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:43:24,620 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2210 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:43:34,627 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2220 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
+2026-10-08 04:43:44,638 [WARNING] disnake.gateway: Shard ID None heartbeat blocked for more than 2230 seconds.
+Loop thread traceback (most recent call last):
+  File "C:\Users\user\Desktop\12345\main.py", line 179, in <module>
+    asyncio.run(main())
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 204, in run
+    return runner.run(main)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 706, in run_until_complete
+    self.run_forever()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 677, in run_forever
+    self._run_once()
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\base_events.py", line 2019, in _run_once
+    event_list = self._selector.select(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 446, in select
+    self._poll(timeout)
+  File "C:\Users\user\AppData\Local\Python\pythoncore-3.14-64\Lib\asyncio\windows_events.py", line 775, in _poll
+    status = _overlapped.GetQueuedCompletionStatus(self._iocp, ms)
+
