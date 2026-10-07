@@ -18,5 +18,3 @@ audioop-lts
 
 edge-tts
 Pillow
-
-imageio-ffmpeg
