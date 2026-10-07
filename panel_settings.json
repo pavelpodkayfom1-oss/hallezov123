@@ -1,0 +1,95 @@
+{
+  "general": {
+    "tz_offset": 5,
+    "ignore_bots": true
+  },
+  "logs": {
+    "default": 0,
+    "join": 0,
+    "leave": 0,
+    "messages": 0,
+    "voice": 1529413989954486362,
+    "roles": 0,
+    "nicknames": 0,
+    "moderation": 0,
+    "server": 0,
+    "commands": 0,
+    "bot": 0,
+    "audit": 0,
+    "vacation": 0,
+    "treasury": 0,
+    "giveaway": 0
+  },
+  "autorole": {
+    "enabled": true,
+    "roles": [
+      1529412320202195057
+    ],
+    "bots": 1529412320202195057
+  },
+  "vacation": {
+    "role_id": 1552906807939436724,
+    "afk_role_id": 1556013048488140851,
+    "review_channel_id": 1529412322337095787,
+    "panel_channel_id": 1556770663631556609,
+    "panel_message_id": 1557307762998771753,
+    "reviewer_roles": [
+      1529412320202195061,
+      1529538272177688616,
+      1529538418659295474,
+      1529546861118230548,
+      1555683397240619008
+    ],
+    "min_days": 1,
+    "max_days": 30
+  },
+  "warn_guard": {
+    "enabled": true,
+    "keywords": "warn,варн,выговор"
+  },
+  "rank_roles": {
+    "1": [
+      1529412320202195058
+    ],
+    "2": [
+      1541987271526318100
+    ],
+    "3": [
+      1529538891907072142
+    ],
+    "4": [
+      1529546861118230548,
+      1529412320202195061,
+      1555683397240619008,
+      1529412320202195060,
+      1529538830817034506
+    ]
+  },
+  "rank_sync": {
+    "auto": true
+  },
+  "candidates": {
+    "enabled": true,
+    "channel_id": 0,
+    "min_days": 14,
+    "min_voice_hours": 3,
+    "max_warns": 0,
+    "max_from_rank": 2,
+    "weekday": 6,
+    "hour": 18,
+    "last_run": ""
+  },
+  "treasury": {
+    "channel_id": 1529412322337095786,
+    "weekly_due": 0,
+    "weekday": 6,
+    "hour": 19,
+    "report_enabled": true,
+    "dm_debtors": true,
+    "last_run": ""
+  },
+  "giveaway": {
+    "channel_id": 0,
+    "ping_role_id": 0
+  }
+}

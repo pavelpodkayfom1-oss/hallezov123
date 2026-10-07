@@ -1,0 +1,14 @@
+{
+  "channels": {
+    "default": 1529549341868691618,
+    "voice": 1529549341868691618,
+    "applications": 1529549341868691618
+  },
+  "disabled": [],
+  "ignore_bots": true,
+  "stats": {
+    "bot": 1,
+    "commands": 3,
+    "server": 5
+  }
+}

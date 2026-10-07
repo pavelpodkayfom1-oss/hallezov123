@@ -1,0 +1,193 @@
+{
+  "channels": {
+    "panel": 1557516516893659147,
+    "review": 1556024316930560050,
+    "orders": 1557520800209313812,
+    "points_panel": 1557515541902663830
+  },
+  "staff_roles": [
+    1529538418659295474,
+    1529412320202195059,
+    1529538830817034506
+  ],
+  "published": {
+    "apply": [
+      1529412321456164904,
+      1557509192598683739
+    ],
+    "points": [
+      1557515541902663830,
+      1557516806925848669
+    ]
+  },
+  "design": {
+    "title": ":red_crown: НАБОР В HALLEZ FAMQ",
+    "description": ":hz_megaphone: Мы открываем двери для амбициозных, адекватных и стрессоустойчивых игроков семьи **Hallez FAMQ** — **Loyalty • Power • Respect**.\n\n:pinkghost: **Что мы ждём от тебя**\n :number1: > • Адекватность, дисциплина, уважение к субординации\n :number2: > • Микрофон и желание бывать на семейных МП\n :number3: > • Смена фамилии на **Hallez** после испытательного срока\n\n :hz_shareicon: о даём взамен**\n :number1: > • Дружный коллектив и поддержку старших\n :number2: > • Рост по рангам, награды и призы за активность\n\n:hz_followicon: Нажми кнопку ниже и заполни анкету — это займёт пару минут.",
+    "color": "0x990000",
+    "footer": "Majestic RP • Hallez FAMQ",
+    "steps": null,
+    "video_file": "video.mp4",
+    "video_url": ""
+  },
+  "form": [
+    {
+      "key": "nick",
+      "label": "Игровой никнейм (Имя Фамилия)",
+      "placeholder": "Пример: Travis Hallez",
+      "style": "short",
+      "required": true,
+      "enabled": true
+    },
+    {
+      "key": "static",
+      "label": "Ваш статик (Static ID)",
+      "placeholder": "Только цифры, например 12345",
+      "style": "short",
+      "required": true,
+      "enabled": true
+    },
+    {
+      "key": "age",
+      "label": "Реальный возраст",
+      "placeholder": "Например: 18",
+      "style": "short",
+      "required": true,
+      "enabled": true
+    },
+    {
+      "key": "prev",
+      "label": "В каких семьях состояли ранее?",
+      "placeholder": "Названия семей и причина ухода (или «нет»)",
+      "style": "long",
+      "required": true,
+      "enabled": true
+    },
+    {
+      "key": "why",
+      "label": "Почему Hallez и как узнали о нас?",
+      "placeholder": "Ваши цели, планы в семье, откуда узнали...",
+      "style": "long",
+      "required": true,
+      "enabled": true
+    }
+  ],
+  "points": {
+    "accept": 10,
+    "referral": 15
+  },
+  "shop": [
+    {
+      "key": "cash100",
+      "name": "Приз 100 000$",
+      "emoji": "💵",
+      "desc": "Выплата 100 000$ в игре от руководства",
+      "cost": 120,
+      "stock": -1,
+      "enabled": true
+    },
+    {
+      "key": "cash150",
+      "name": "Приз 150 000$",
+      "emoji": "💰",
+      "desc": "Выплата 150 000$ в игре от руководства",
+      "cost": 180,
+      "stock": -1,
+      "enabled": true
+    },
+    {
+      "key": "promo",
+      "name": "Повышение в семье",
+      "emoji": "⬆️",
+      "desc": "Повышение на 1 ранг (по решению руководства)",
+      "cost": 350,
+      "stock": -1,
+      "enabled": true
+    },
+    {
+      "key": "nft",
+      "name": "Подарок в Telegram (NFT)",
+      "emoji": "🎁",
+      "desc": "NFT-подарок в Telegram на ваш аккаунт",
+      "cost": 700,
+      "stock": -1,
+      "enabled": true
+    }
+  ],
+  "emoji": {
+    "shop": "<:hz_shoppingcart:1557492359099457650>",
+    "apply": "<:hz_pencil:1557492409586159616>",
+    "crown": "<a:red_crown:1557369271674208337>",
+    "review": "<:hz_megaphone:1557492511742885951>",
+    "interview": "<:hz_followicon:1557492337758703626>",
+    "star": "<:hz_supersubscribericon:1557492390267199531>",
+    "gift": "<:hz_gifticon:1557492481916936192>",
+    "accept": "<:hz_verifiedgreen:1557507951214858401>",
+    "points": "<a:hz_Rainbow_Diamond:1557507793647308832>",
+    "referral": "<:hz_handshake:1557507942884835409>",
+    "top": "<:hz_crownicon:1557507890447650977>",
+    "reject": "<:hz_forbidden:1557507841156448358>"
+  },
+  "buttons": {
+    "apply": {
+      "label": "",
+      "emoji": ":hz_membericon:",
+      "style": ""
+    },
+    "interview": {
+      "label": "",
+      "emoji": ":hz_megaphone:",
+      "style": ""
+    },
+    "review": {
+      "label": "",
+      "emoji": ":hz_discord:",
+      "style": ""
+    },
+    "accept": {
+      "label": "",
+      "emoji": "<:hz_verifiedblue:1557507797527167036>",
+      "style": ""
+    },
+    "ref_ok": {
+      "label": "",
+      "emoji": "<:hz_verifiedblue:1557507797527167036>",
+      "style": ""
+    },
+    "ord_ok": {
+      "label": "",
+      "emoji": "<:hz_verifiedblue:1557507797527167036>",
+      "style": ""
+    },
+    "reject": {
+      "label": "",
+      "emoji": "<:hz_forbidden:1557507841156448358>",
+      "style": ""
+    },
+    "ref_no": {
+      "label": "",
+      "emoji": "<:hz_forbidden:1557507841156448358>",
+      "style": ""
+    },
+    "ord_no": {
+      "label": "",
+      "emoji": "<:hz_forbidden:1557507841156448358>",
+      "style": ""
+    },
+    "ref": {
+      "label": "",
+      "emoji": "<:hz_link:1557507816657395825>",
+      "style": ""
+    },
+    "me": {
+      "label": "",
+      "emoji": "<a:hz_Rainbow_Diamond:1557507793647308832>",
+      "style": ""
+    },
+    "top": {
+      "label": "",
+      "emoji": "<:hz_donationicon:1557507983674441789>",
+      "style": ""
+    }
+  },
+  "texts": {}
+}
