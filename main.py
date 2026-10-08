@@ -23,8 +23,14 @@ load_dotenv(BASE_DIR / ".env")
 logging.basicConfig(
     level=logging.WARNING,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.FileHandler(BASE_DIR / "bot.log", encoding="utf-8")],
+    handlers=[
+        logging.StreamHandler(sys.stdout),  # теперь предупреждения видны и в консоли хостинга
+        logging.FileHandler(BASE_DIR / "bot.log", encoding="utf-8"),
+    ],
 )
+# Показываем ход подключения к Discord
+logging.getLogger("disnake.gateway").setLevel(logging.INFO)
+logging.getLogger("disnake.client").setLevel(logging.INFO)
 
 from database import init_db
 from utils.checks import load_config
@@ -143,6 +149,20 @@ async def on_message_command_error(inter: disnake.MessageCommandInteraction, err
 
 
 # ───────────────────────── Startup ─────────────────────────
+async def _watchdog():
+    """Пишет в консоль, пока бот не готов, чтобы было видно, что он жив."""
+    waited = 0
+    while not bot.is_ready():
+        await asyncio.sleep(30)
+        waited += 30
+        if bot.is_ready():
+            break
+        print(f"⏳ Ждём ответа Discord… {waited} сек", flush=True)
+        if waited == 120:
+            print("👉 Если так долго: проверьте Intents в Developer Portal (Server Members + Message Content) "
+                  "и что бот не запущен в другом месте.", flush=True)
+
+
 async def main():
     await init_db()
 
@@ -162,7 +182,20 @@ async def main():
 
     print("🔌 Подключение к Discord Gateway...", flush=True)
     try:
-        await bot.start(token)
+        try:
+            await asyncio.wait_for(bot.login(token), timeout=60)
+        except asyncio.TimeoutError:
+            print("❌ Discord не ответил за 60 сек при входе по токену.", file=sys.stderr, flush=True)
+            print("👉 Вероятно, IP хостинга временно ограничен Discord. Остановите бота на 10-15 минут и запустите снова.", flush=True)
+            return
+        print("✅ Токен принят, открываю соединение с Discord...", flush=True)
+        asyncio.create_task(_watchdog())
+        await bot.connect()
+    except disnake.HTTPException as e:
+        if e.status == 429 or "1015" in str(e) or "Cloudflare" in str(e):
+            print("❌ Discord ограничил запросы с IP хостинга (429/1015). Подождите 15-30 минут и запустите снова.", file=sys.stderr, flush=True)
+        else:
+            print(f"❌ Ошибка HTTP при входе: {e}", file=sys.stderr, flush=True)
     except disnake.PrivilegedIntentsRequired:
         print("\n❌ Не включены привилегированные Intents!", file=sys.stderr, flush=True)
         print("👉 Discord Developer Portal → ваше приложение → Bot → Privileged Gateway Intents:", flush=True)
