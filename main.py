@@ -51,7 +51,7 @@ bot = commands.Bot(
     command_prefix=commands.when_mentioned,
     intents=intents,
     test_guilds=test_guilds,
-    reload=True,
+    chunk_guilds_at_startup=False,  # обход ошибки "future belongs to a different loop" при старте
 )
 
 # Автозагрузка: подхватывает ВСЕ файлы из папки cogs (логи, emoji, голос, теги и т.д.)
@@ -101,6 +101,14 @@ async def on_ready():
         print(f"    • Сервер: {g.name} (ID: {g.id}) | Участников: {g.member_count}", flush=True)
     print(f"📁  Загружено модулей: {len(bot.extensions)}/{len(COGS)}", flush=True)
     print("=" * 60, flush=True)
+
+    # Список участников грузим отдельно, чтобы возможная ошибка не мешала запуску бота
+    for g in bot.guilds:
+        try:
+            await asyncio.wait_for(g.chunk(), timeout=60)
+            print(f"👥  Участники загружены: {g.name} ({len(g.members)})", flush=True)
+        except Exception as e:
+            print(f"⚠️ Не удалось загрузить список участников {g.name}: {e}", file=sys.stderr, flush=True)
 
 
 async def _handle_error(inter: disnake.Interaction, error: Exception, kind: str):
@@ -152,15 +160,19 @@ async def on_message_command_error(inter: disnake.MessageCommandInteraction, err
 async def _watchdog():
     """Пишет в консоль, пока бот не готов, чтобы было видно, что он жив."""
     waited = 0
-    while not bot.is_ready():
-        await asyncio.sleep(30)
+    await asyncio.sleep(30)
+    while True:
+        try:
+            if bot.is_ready():
+                break
+        except Exception:
+            pass
         waited += 30
-        if bot.is_ready():
-            break
         print(f"⏳ Ждём ответа Discord… {waited} сек", flush=True)
         if waited == 120:
             print("👉 Если так долго: проверьте Intents в Developer Portal (Server Members + Message Content) "
                   "и что бот не запущен в другом месте.", flush=True)
+        await asyncio.sleep(30)
 
 
 async def main():
