@@ -47,12 +47,21 @@ intents.voice_states = True     # логи голосовых каналов
 guild_id_str = os.getenv("GUILD_ID", "0")
 test_guilds = [int(guild_id_str)] if guild_id_str.isdigit() and int(guild_id_str) > 0 else None
 
-bot = commands.Bot(
+# Один и тот же цикл событий и для бота, и для запуска.
+# Исправляет "future belongs to a different loop" и "heartbeat blocked".
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+_bot_kwargs = dict(
     command_prefix=commands.when_mentioned,
     intents=intents,
     test_guilds=test_guilds,
-    chunk_guilds_at_startup=False,  # обход ошибки "future belongs to a different loop" при старте
+    chunk_guilds_at_startup=False,
 )
+try:
+    bot = commands.Bot(loop=loop, **_bot_kwargs)
+except TypeError:
+    bot = commands.Bot(**_bot_kwargs)
 
 # Автозагрузка: подхватывает ВСЕ файлы из папки cogs (логи, emoji, голос, теги и т.д.)
 COGS_DIR = BASE_DIR / "cogs"
@@ -214,6 +223,12 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        loop.run_until_complete(main())
     except KeyboardInterrupt:
         print("\n🛑 Бот остановлен администратором.", flush=True)
+    finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:
+            pass
+        loop.close()
