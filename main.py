@@ -182,15 +182,8 @@ async def main():
 
     print("🔌 Подключение к Discord Gateway...", flush=True)
     try:
-        try:
-            await asyncio.wait_for(bot.login(token), timeout=60)
-        except asyncio.TimeoutError:
-            print("❌ Discord не ответил за 60 сек при входе по токену.", file=sys.stderr, flush=True)
-            print("👉 Вероятно, IP хостинга временно ограничен Discord. Остановите бота на 10-15 минут и запустите снова.", flush=True)
-            return
-        print("✅ Токен принят, открываю соединение с Discord...", flush=True)
         asyncio.create_task(_watchdog())
-        await bot.connect()
+        await bot.start(token)
     except disnake.HTTPException as e:
         if e.status == 429 or "1015" in str(e) or "Cloudflare" in str(e):
             print("❌ Discord ограничил запросы с IP хостинга (429/1015). Подождите 15-30 минут и запустите снова.", file=sys.stderr, flush=True)
