@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import asyncio
 import logging
 import traceback
@@ -65,11 +66,25 @@ except TypeError:
 
 # Автозагрузка: подхватывает ВСЕ файлы из папки cogs (логи, emoji, голос, теги и т.д.)
 COGS_DIR = BASE_DIR / "cogs"
+
+
+def _panel_disabled_cogs() -> set:
+    """Модули, которые отключены в веб-панели (хранится в panel_state.json)."""
+    try:
+        with open(BASE_DIR / "panel_state.json", "r", encoding="utf-8") as f:
+            return {c for c in json.load(f).get("disabled_cogs", []) if isinstance(c, str)}
+    except Exception:
+        return set()
+
+
+_DISABLED_COGS = _panel_disabled_cogs()
 COGS = sorted(
     f"cogs.{p.stem}"
     for p in COGS_DIR.glob("*.py")
-    if not p.name.startswith("_")
+    if not p.name.startswith("_") and f"cogs.{p.stem}" not in _DISABLED_COGS
 )
+if _DISABLED_COGS:
+    print(f"⏸️ Отключены в панели: {', '.join(sorted(_DISABLED_COGS))}", flush=True)
 
 _ready_once = False
 
@@ -101,6 +116,11 @@ async def on_ready():
         name=f"за порядком в {bot_name} | /logs panel",
     )
     await bot.change_presence(status=disnake.Status.online, activity=activity)
+
+    # Если статус бота меняли в веб-панели, возвращаем выбранный там
+    panel = bot.get_cog("WebPanel")
+    if panel is not None:
+        await panel.apply_saved_presence()
 
     print("=" * 60, flush=True)
     print(f"⚜️  Бот {bot_name} успешно запущен!", flush=True)
