@@ -521,7 +521,7 @@ class TegPanelView(disnake.ui.View):
             e.set_footer(text=self.status)
         return e
 
-    async def refresh(self, inter: disnake.MessageInteraction):
+    async def refresh_panel(self, inter: disnake.MessageInteraction):
         await inter.response.edit_message(embed=self.render(), view=self)
 
     def _sync_buttons(self):
@@ -538,7 +538,7 @@ class TegPanelView(disnake.ui.View):
         self.everyone = not self.everyone
         self.status = ""
         self._sync_buttons()
-        await self.refresh(inter)
+        await self.refresh_panel(inter)
 
     @disnake.ui.button(label="Настроить текст", emoji="✏️", style=disnake.ButtonStyle.primary, row=0)
     async def text_btn(self, button, inter: disnake.MessageInteraction):
@@ -553,7 +553,7 @@ class TegPanelView(disnake.ui.View):
         self.channel_on = not self.channel_on
         self.status = ""
         self._sync_buttons()
-        await self.refresh(inter)
+        await self.refresh_panel(inter)
 
     @disnake.ui.button(label="Отправить", emoji="🚀", style=disnake.ButtonStyle.success, row=0)
     async def send_btn(self, button, inter: disnake.MessageInteraction):
@@ -677,7 +677,7 @@ class TegPanelView(disnake.ui.View):
         self.role_ids, self.user_ids = [], []
         self.title = self.time = self.info = self.status = ""
         self._sync_buttons()
-        await self.refresh(inter)
+        await self.refresh_panel(inter)
 
     # ---- личные сообщения ----
     async def dm_member(self, member: disnake.Member, call: dict, cfg: dict) -> bool:
@@ -716,7 +716,7 @@ class TegPanelView(disnake.ui.View):
             return await deny(inter)
         self.role_ids = ids_of(select.values)
         self.status = ""
-        await self.refresh(inter)
+        await self.refresh_panel(inter)
 
     @disnake.ui.user_select(placeholder="👤 Выбрать людей для тега (до 10)", min_values=0, max_values=10, row=2)
     async def users_select(self, select: disnake.ui.UserSelect, inter: disnake.MessageInteraction):
@@ -724,7 +724,7 @@ class TegPanelView(disnake.ui.View):
             return await deny(inter)
         self.user_ids = ids_of(select.values)
         self.status = ""
-        await self.refresh(inter)
+        await self.refresh_panel(inter)
 
     @disnake.ui.channel_select(
         placeholder="🔊 Голосовой канал и/или 📍 текстовый для дубля (можно оба)",
@@ -745,7 +745,7 @@ class TegPanelView(disnake.ui.View):
                 self.channel_on = True          # выбрали текстовый канал — значит хотим дублировать
         self.status = ""
         self._sync_buttons()
-        await self.refresh(inter)
+        await self.refresh_panel(inter)
 
     # ---- доступ (ряд 4, только админам) ----
     @disnake.ui.button(label="Доступ", emoji="⚙️", style=disnake.ButtonStyle.secondary, row=4)

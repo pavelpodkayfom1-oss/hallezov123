@@ -1,3 +1,4 @@
+import re
 import disnake
 from disnake.ext import commands
 from utils.checks import load_config, is_recruiter, get_text
@@ -70,21 +71,30 @@ class Events(commands.Cog):
     @commands.Cog.listener()
     async def on_button_click(self, inter: disnake.MessageInteraction):
         custom_id = inter.component.custom_id
-        if custom_id in ("codex:event_yes", "codex:event_late", "codex:event_no"):
-            action = custom_id.replace("codex:event_", "")
-            view = EventAttendanceView()
-            # Пытаемся восстановить списки пользователей из текущего эмбеда
-            try:
-                emb = inter.message.embeds[0]
-                # Просто обновляем статус пользователя
-                if action == "yes":
-                    await inter.response.send_message("✅ Вы отметились, что **будете** на сборе!", ephemeral=True)
-                elif action == "late":
-                    await inter.response.send_message("🟡 Вы отметились, что **опоздаете**!", ephemeral=True)
-                elif action == "no":
-                    await inter.response.send_message("🔴 Вы отметились, что **не сможете** присутствовать.", ephemeral=True)
-            except Exception:
-                pass
+        if custom_id not in ("codex:event_yes", "codex:event_late", "codex:event_no"):
+            return
+        action = custom_id.replace("codex:event_", "")
+        if not inter.message.embeds or len(inter.message.embeds[0].fields) < 3:
+            return await inter.response.send_message("❌ Не удалось прочитать сбор.", ephemeral=True)
+
+        emb = inter.message.embeds[0]
+        # списки участников восстанавливаем из полей карточки (переживает перезапуск бота)
+        groups = {"yes": [], "late": [], "no": []}
+        for key, field in zip(("yes", "late", "no"), emb.fields[:3]):
+            groups[key] = [int(x) for x in re.findall(r"<@!?(\d+)>", field.value or "")]
+        uid = inter.author.id
+        for k in groups:
+            groups[k] = [u for u in groups[k] if u != uid]
+        groups[action].append(uid)
+
+        def fmt(ids):
+            if not ids:
+                return "*Пока никто*"
+            return f"**Всего ({len(ids)}):**\n" + ", ".join(f"<@{u}>" for u in ids)
+
+        for i, key in enumerate(("yes", "late", "no")):
+            emb.set_field_at(i, name=emb.fields[i].name, value=fmt(groups[key])[:1024], inline=True)
+        await inter.response.edit_message(embed=emb)
 
     @commands.slash_command(
         name="event",
@@ -108,7 +118,7 @@ class Events(commands.Cog):
         title_tpl = get_text("event_card_title", "⚔️ ОБЩИЙ СБОР СЕМЬИ: {title}")
         desc_tpl = get_text(
             "event_card_desc",
-            "Руководство объявило сбор бойцов **Zakonov FAMQ**!\n\n⏰ **Время сбора:** `{time}`\n📍 **Требования:** {info}\n\nОбязательно прожмите статус присутствия кнопками ниже:"
+            "Руководство объявило сбор бойцов **Hallez FAMQ**!\n\n⏰ **Время сбора:** `{time}`\n📍 **Требования:** {info}\n\nОбязательно прожмите статус присутствия кнопками ниже:"
         )
 
         event_emb = base_embed(

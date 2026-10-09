@@ -1,6 +1,6 @@
 """
 =====================================================================
-  ИГРОВОЙ МОДУЛЬ Zakonov FAMQ — ВСЁ В ОДНОМ ФАЙЛЕ
+  ИГРОВОЙ МОДУЛЬ Hallez FAMQ — ВСЁ В ОДНОМ ФАЙЛЕ
 =====================================================================
 
 Просто положи этот файл в папку cogs/ и добавь "cogs.games" в список
@@ -1196,7 +1196,7 @@ class PrankTemplateView(disnake.ui.View):
     async def on_select(self, inter: disnake.MessageInteraction):
         colors = get_colors()
         cfg = load_local_config()
-        bot_name = cfg.get("bot_name", "Zakonov FAMQ")
+        bot_name = cfg.get("bot_name", "Hallez FAMQ")
 
         template_key = self.children[0].values[0]
         template = PRANK_TEMPLATES[template_key]

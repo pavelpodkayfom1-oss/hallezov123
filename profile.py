@@ -17,7 +17,7 @@ class Profile(commands.Cog):
 
     @commands.slash_command(
         name="profile",
-        description="Просмотреть карточку бойца семьи Zakonov FAMQ"
+        description="Просмотреть карточку бойца семьи Hallez FAMQ"
     )
     async def profile_command(
         self,
@@ -32,7 +32,7 @@ class Profile(commands.Cog):
 
         if not db_member:
             await inter.response.send_message(
-                f"ℹ️ Участник {target.mention} еще не зарегистрирован в базе данных семьи Zakonov FAMQ.",
+                f"ℹ️ Участник {target.mention} еще не зарегистрирован в базе данных семьи Hallez FAMQ.",
                 ephemeral=True
             )
             return
@@ -42,7 +42,7 @@ class Profile(commands.Cog):
 
         emb = base_embed(
             f"👤 Личное дело бойца: {db_member['nick']}",
-            f"Карточка участника семьи **Zakonov FAMQ** на сервере Majestic RP."
+            f"Карточка участника семьи **Hallez FAMQ** на сервере Majestic RP."
         )
         if target.avatar:
             emb.set_thumbnail(url=target.avatar.url)
@@ -74,7 +74,7 @@ class Profile(commands.Cog):
     ):
         db_member = await find_member_by_static(static_id.strip())
         if not db_member:
-            await inter.response.send_message(f"❌ Боец со статиком `{static_id}` не найден в семье Zakonov FAMQ.", ephemeral=True)
+            await inter.response.send_message(f"❌ Боец со статиком `{static_id}` не найден в семье Hallez FAMQ.", ephemeral=True)
             return
 
         user_id = db_member["user_id"]
@@ -86,7 +86,7 @@ class Profile(commands.Cog):
 
         emb = base_embed(
             f"🔎 Результат поиска по статику: {static_id}",
-            f"Найден участник семьи Zakonov FAMQ."
+            f"Найден участник семьи Hallez FAMQ."
         )
         emb.add_field(name="Игровой ник", value=f"`{db_member['nick']}`", inline=True)
         emb.add_field(name="Статик", value=f"`{db_member['static_id']}`", inline=True)
@@ -124,7 +124,7 @@ class Profile(commands.Cog):
         if total_warns >= 3:
             emb.add_field(
                 name="🚨 ВНИМАНИЕ РУКОВОДСТВУ",
-                value=f"Участник {member.mention} набрал критическое количество выговоров (**{total_warns}/3**)! Рекомендуется исключение из семьи Zakonov FAMQ.",
+                value=f"Участник {member.mention} набрал критическое количество выговоров (**{total_warns}/3**)! Рекомендуется исключение из семьи Hallez FAMQ.",
                 inline=False
             )
 
@@ -133,7 +133,7 @@ class Profile(commands.Cog):
         # ЛС нарушителю
         try:
             dm_emb = warning_embed(
-                "Вам выдан семейный выговор в Zakonov FAMQ",
+                "Вам выдан семейный выговор в Hallez FAMQ",
                 f"Вам был назначен выговор в семье.\n"
                 f"**Причина:** {reason}\n"
                 f"**Выдал:** {inter.author.display_name}\n"

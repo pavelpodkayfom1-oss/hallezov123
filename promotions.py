@@ -12,6 +12,18 @@ from database import (
 )
 
 
+
+def build_nick(fmt: str, nick: str, static: str, rank: str = "1") -> str:
+    """Ник по формату, укладывается в 32 символа: обрезается имя, а не статик."""
+    nick = (nick or "").strip()
+    static = (static or "").strip()
+    full = fmt.format(rank=rank, nick=nick, static=static)
+    if len(full) <= 32:
+        return full
+    short = nick[:max(1, len(nick) - (len(full) - 32))].rstrip()
+    return fmt.format(rank=rank, nick=short, static=static)[:32]
+
+
 class PromoRejectModal(disnake.ui.Modal):
     def __init__(self, promo_id: int, applicant_id: int):
         self.promo_id = promo_id
@@ -72,7 +84,7 @@ class PromoRejectModal(disnake.ui.Modal):
                     "Здравствуйте, {nick}!\nВаш отчет на повышение был проверен и **отклонен**.\n\n**Причина:** {reason}\n\nИсправьте недочеты и отправьте отчет заново."
                 )
                 dm_emb = error_embed(
-                    "Отчет на повышение в Zakonov FAMQ отклонен",
+                    "Отчет на повышение в Hallez FAMQ отклонен",
                     dm_tpl.format(nick=applicant.display_name, reason=reason, reviewer=inter.author.display_name),
                     guild=inter.guild
                 )
@@ -94,14 +106,14 @@ class PromotionModal(disnake.ui.Modal):
     def __init__(self, target_rank: int):
         self.target_rank = target_rank
         rank_titles = {
-            2: "1 ➔ 2 ранг (Смена фамилии на Zakonov)",
+            2: "1 ➔ 2 ранг (Смена фамилии на Hallez FAMQ)",
             3: "2 ➔ 3 ранг (>2 недель в семье)",
             4: "3 ➔ 4 ранг (Актив и спец. задания)"
         }
         title = rank_titles.get(target_rank, f"Отчет на {target_rank} ранг")
         
         lbl_nick = get_text("modal_promo_nick_label", "Игровой никнейм (Имя Фамилия)")
-        ph_nick = get_text("modal_promo_nick_ph", "Пример: Travis Zakonov")
+        ph_nick = get_text("modal_promo_nick_ph", "Пример: Travis Hallez FAMQ")
         lbl_static = get_text("modal_promo_static_label", "Статический ID")
         ph_static = get_text("modal_promo_static_ph", "Пример: 12345")
         
@@ -170,7 +182,7 @@ class PromotionModal(disnake.ui.Modal):
         title_tpl = get_text("promo_card_title", "📈 Отчет на повышение #{id}")
         desc_tpl = get_text(
             "promo_card_desc",
-            "Участник {mention} подал отчет на повышение в должности семьи **Zakonov FAMQ**.\nКвалификация: **{prev_name} ({prev_rank}) ➔ {target_name} ({target_rank})**"
+            "Участник {mention} подал отчет на повышение в должности семьи **Hallez FAMQ**.\nКвалификация: **{prev_name} ({prev_rank}) ➔ {target_name} ({target_rank})**"
         )
         report_emb = base_embed(
             title_tpl.format(id=promo_id),
@@ -219,8 +231,8 @@ class PromotionModal(disnake.ui.Modal):
 class PromotionRankSelect(disnake.ui.StringSelect):
     def __init__(self):
         ph = get_text("select_promo_ph", "Выберите ранг, на который повышаетесь...")
-        opt1_lbl = get_text("select_promo_opt_1_2_label", "1 ➔ 2 ранг (Смена фамилии на Zakonov)")
-        opt1_desc = get_text("select_promo_opt_1_2_desc", "Требуется скрин смены фамилии на Zakonov")
+        opt1_lbl = get_text("select_promo_opt_1_2_label", "1 ➔ 2 ранг (Смена фамилии на Hallez FAMQ)")
+        opt1_desc = get_text("select_promo_opt_1_2_desc", "Требуется скрин смены фамилии на Hallez FAMQ")
         opt2_lbl = get_text("select_promo_opt_2_3_label", "2 ➔ 3 ранг (>2 недель в семье)")
         opt2_desc = get_text("select_promo_opt_2_3_desc", "Требуется скрин доказательства нахождения в семье > 14 дней")
 
@@ -355,13 +367,13 @@ class Promotions(commands.Cog):
                         except Exception as e:
                             print(f"Ошибка добавления новой роли ранга: {e}")
 
-                nick_format = get_text("nickname_format", "[Zakonov | {rank}] {nick} | {static}")
+                nick_format = get_text("nickname_format", "[Hallez FAMQ] {nick} | {static}")
                 if config.get("auto_nicknames", True):
                     try:
-                        new_nick = nick_format.format(rank=str(target_rank), nick=promo["nick"], static=promo["static_id"])
-                        await applicant.edit(nick=new_nick[:32])
-                    except Exception:
-                        pass
+                        new_nick = build_nick(nick_format, promo["nick"], promo["static_id"], str(target_rank))
+                        await applicant.edit(nick=new_nick, reason=f"Повышение до {target_rank} ранга")
+                    except Exception as e:
+                        print(f"Не удалось сменить ник при повышении: {e!r}")
 
             await update_promotion_status(promo_id, status="approved", reviewer_id=inter.author.id)
             await upsert_member(user_id=applicant_id, nick=promo["nick"], static_id=promo["static_id"], rank=target_rank)
@@ -393,7 +405,7 @@ class Promotions(commands.Cog):
                 try:
                     dm_tpl = get_text(
                         "promo_approved_dm",
-                        "Поздравляем с повышением в семье Zakonov FAMQ!\nВаш отчет на повышение был **одобрен** проверяющим {reviewer}!\nВам присвоен ранг: **{target_name} ({target_rank} ранг)**.\nПродолжайте показывать отличный актив на благо семьи!"
+                        "Поздравляем с повышением в семье Hallez FAMQ!\nВаш отчет на повышение был **одобрен** проверяющим {reviewer}!\nВам присвоен ранг: **{target_name} ({target_rank} ранг)**.\nПродолжайте показывать отличный актив на благо семьи!"
                     )
                     dm_text = dm_tpl.format(
                         reviewer=inter.author.display_name,
@@ -401,7 +413,7 @@ class Promotions(commands.Cog):
                         target_rank=target_rank,
                         nick=promo["nick"]
                     )
-                    dm_emb = success_embed("Поздравляем с повышением в семье Zakonov FAMQ!", dm_text, guild=inter.guild)
+                    dm_emb = success_embed("Поздравляем с повышением в семье Hallez FAMQ!", dm_text, guild=inter.guild)
                     await applicant.send(embed=dm_emb)
                 except Exception:
                     pass

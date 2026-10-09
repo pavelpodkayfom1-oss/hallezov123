@@ -11,7 +11,20 @@ from database import (
     DB_PATH
 )
 import aiosqlite
-from cogs.banner_panel import get_banner_url, get_banner_file
+
+
+def build_nick(fmt: str, nick: str, static: str, rank: str = "1") -> str:
+    """Собирает ник по формату и укладывает в лимит Discord (32 символа),
+    обрезая именно имя, а не хвост со статиком."""
+    nick = (nick or "").strip()
+    static = (static or "").strip()
+    full = fmt.format(rank=rank, nick=nick, static=static)
+    if len(full) <= 32:
+        return full
+    overflow = len(full) - 32
+    short = nick[:max(1, len(nick) - overflow)].rstrip()
+    return fmt.format(rank=rank, nick=short, static=static)[:32]
+
 
 class RejectReasonModal(disnake.ui.Modal):
     def __init__(self, app_id: int, thread: disnake.Thread, applicant_id: int, original_message: disnake.Message):
@@ -262,14 +275,14 @@ class RecruitModal(disnake.ui.Modal):
     def __init__(self):
         title = get_text("modal_recruit_title", "Анкета на вступление в Hallez FAMQ")
         lbl_nick = get_text("modal_recruit_nick_label", "Игровой никнейм (Имя Фамилия)")
-        ph_nick = get_text("modal_recruit_nick_ph", "Пример: Travis Hallez")
+        ph_nick = get_text("modal_recruit_nick_ph", "Пример: Travis Hallez FAMQ")
         lbl_static = get_text("modal_recruit_static_label", "Ваш статик (Static ID)")
         ph_static = get_text("modal_recruit_static_ph", "Пример: 12345")
         lbl_age = get_text("modal_recruit_age_label", "Реальный возраст")
         ph_age = get_text("modal_recruit_age_ph", "Пример: 18")
         lbl_prev = get_text("modal_recruit_prev_label", "В каких семьях состояли ранее?")
         ph_prev = get_text("modal_recruit_prev_ph", "Укажите названия семей и причину ухода...")
-        lbl_why = get_text("modal_recruit_why_label", "Почему именно Hallez и как узнали о нас?")
+        lbl_why = get_text("modal_recruit_why_label", "Почему именно Hallez FAMQ и как узнали о нас?")
         ph_why = get_text("modal_recruit_why_ph", "Ваши цели, планы в семье, откуда узнали...")
 
         components = [
@@ -308,7 +321,7 @@ class RecruitModal(disnake.ui.Modal):
             ),
             disnake.ui.TextInput(
                 label=lbl_why[:45],
-                custom_id="why_hallez",
+                custom_id="why_codex",
                 style=disnake.TextInputStyle.paragraph,
                 placeholder=ph_why[:100],
                 min_length=5,
@@ -329,7 +342,7 @@ class RecruitModal(disnake.ui.Modal):
         static_id = inter.text_values.get("static_id", "").strip()
         raw_age = inter.text_values.get("age", "").strip()
         prev_families = inter.text_values.get("prev_families", "").strip()
-        why_hallez = inter.text_values.get("why_hallez", "").strip()
+        why_codex = inter.text_values.get("why_codex", "").strip()
 
         try:
             age = int(raw_age)
@@ -342,21 +355,17 @@ class RecruitModal(disnake.ui.Modal):
         channel = inter.channel
         thread_name = f"заявка-{nick} [{static_id}]"
         
-        # Только приватная ветка: в канале не появляется ни одного сообщения
         try:
             thread = await channel.create_thread(
-                name=thread_name[:100],
+                name=thread_name,
                 type=disnake.ChannelType.private_thread,
-                invitable=False,
-                auto_archive_duration=10080
+                auto_archive_duration=1440
             )
-        except Exception as e:
-            print(f"Не удалось создать приватную ветку: {e}")
-            await inter.edit_original_response(
-                content="❌ Не удалось создать приватную ветку. Проверьте права бота: "
-                        "Create Private Threads, Send Messages in Threads, Manage Threads."
+        except Exception:
+            thread = await channel.create_thread(
+                name=thread_name,
+                auto_archive_duration=1440
             )
-            return
 
         try:
             await thread.add_user(inter.author)
@@ -369,7 +378,7 @@ class RecruitModal(disnake.ui.Modal):
             static_id=static_id,
             age=age,
             prev_families=prev_families,
-            why_hallez=why_hallez,
+            why_codex=why_codex,
             thread_id=thread.id
         )
 
@@ -387,18 +396,7 @@ class RecruitModal(disnake.ui.Modal):
         app_card.add_field(name="🆔 Статический ID", value=f"`{static_id}`", inline=True)
         app_card.add_field(name="🎂 Возраст", value=f"`{age}` лет", inline=True)
         app_card.add_field(name="🏛️ Прошлые семьи", value=prev_families, inline=False)
-        app_card.add_field(name="🎯 Почему Hallez FAMQ?", value=why_hallez, inline=False)
-
-        # Баннер внизу карточки анкеты (задаётся командой /banner)
-        banner_kwargs = {}
-        banner_file = get_banner_file()
-        if banner_file:
-            app_card.set_image(url=f"attachment://{banner_file[1]}")
-            banner_kwargs["file"] = disnake.File(banner_file[0], filename=banner_file[1])
-        else:
-            banner_url = get_banner_url()
-            if banner_url:
-                app_card.set_image(url=banner_url)
+        app_card.add_field(name="🎯 Почему Hallez FAMQ?", value=why_codex, inline=False)
 
         recruiter_roles = config.get("recruiter_role_ids", [])
         ping_content = " ".join([f"<@&{r_id}>" for r_id in recruiter_roles if r_id > 0])
@@ -406,7 +404,7 @@ class RecruitModal(disnake.ui.Modal):
             ping_content = "📢 Рекрутеры, поступила новая анкета!"
 
         view = RecruitmentManageView(app_id=app_id, applicant_id=inter.author.id)
-        await thread.send(content=f"{inter.author.mention} {ping_content}", embed=app_card, view=view, **banner_kwargs)
+        await thread.send(content=f"{inter.author.mention} {ping_content}", embed=app_card, view=view)
 
         await inter.edit_original_response(
             content=f"✅ Ваша заявка успешно отправлена! Перейдите в созданную ветку: {thread.mention}"
@@ -538,6 +536,14 @@ class Recruitment(commands.Cog):
         elif action == "app_accept":
             await inter.response.defer()
 
+            # повторная проверка статуса (защита от двойного клика)
+            async with aiosqlite.connect(DB_PATH) as db:
+                async with db.execute("SELECT status FROM applications WHERE id = ?", (app_id,)) as cur:
+                    r = await cur.fetchone()
+            if not r or r[0] in ("accepted", "rejected"):
+                await inter.followup.send("⚠️ Заявка уже обработана.", ephemeral=True)
+                return
+
             try:
                 disabled_view = disnake.ui.View.from_message(inter.message)
                 for item in disabled_view.children:
@@ -546,36 +552,40 @@ class Recruitment(commands.Cog):
             except Exception:
                 pass
 
-            roles_to_add = []
-            family_role_id = config.get("roles", {}).get("family_role_id")
-            rank_1_role_id = config.get("roles", {}).get("rank_1_role_id")
-            
-            if family_role_id:
-                f_role = inter.guild.get_role(family_role_id)
-                if f_role:
-                    roles_to_add.append(f_role)
-            if rank_1_role_id:
-                r1_role = inter.guild.get_role(rank_1_role_id)
-                if r1_role:
-                    roles_to_add.append(r1_role)
+            problems = []
 
+            # 1) СНАЧАЛА ник (из анкеты), чтобы famq_sync при выдаче роли увидел уже правильный ник
+            nick_format = get_text("nickname_format", "[Hallez FAMQ] {nick} | {static}")
+            new_nick = build_nick(nick_format, app["nick"], app["static_id"])
+            if not applicant:
+                problems.append("кандидата нет на сервере — ник и роли не выданы")
+            elif config.get("auto_nicknames", True):
+                try:
+                    await applicant.edit(nick=new_nick, reason=f"Принят в семью, рекрутер {inter.author}")
+                except Exception as e:
+                    problems.append(f"ник `{new_nick}` не установлен: {e}")
+                    print(f"Не удалось сменить никнейм: {e!r}")
+
+            # 2) роли
+            roles_to_add = []
+            for key in ("family_role_id", "rank_1_role_id"):
+                rid = config.get("roles", {}).get(key)
+                if rid:
+                    role = inter.guild.get_role(int(rid))
+                    if role:
+                        roles_to_add.append(role)
             if applicant and roles_to_add:
                 try:
                     await applicant.add_roles(*roles_to_add, reason=f"Принят в семью Hallez FAMQ рекрутером {inter.author}")
                 except Exception as e:
-                    print(f"Ошибка выдачи ролей: {e}")
+                    problems.append(f"роли не выданы: {e}")
+                    print(f"Ошибка выдачи ролей: {e!r}")
 
-            nick_format = get_text("nickname_format", "[Hallez | {rank}] {nick} | {static}")
-            new_nick = nick_format.format(rank="1", nick=app["nick"], static=app["static_id"])
-            if applicant and config.get("auto_nicknames", True):
-                try:
-                    await applicant.edit(nick=new_nick[:32])
-                except Exception as e:
-                    print(f"Не удалось сменить никнейм: {e}")
-
+            # 3) база
             await update_application_status(app_id, status="accepted", reviewer_id=inter.author.id, reason="Принят по результатам обзвона")
             await upsert_member(user_id=applicant_id, nick=app["nick"], static_id=app["static_id"], rank=1)
 
+            # 4) сообщение в ветке
             acc_title = get_text("recruit_accepted_title", "Добро пожаловать в Hallez FAMQ!")
             acc_thread_msg = get_text(
                 "recruit_accepted_thread_msg",
@@ -586,8 +596,17 @@ class Recruitment(commands.Cog):
                 acc_thread_msg.format(mention=f"<@{applicant_id}>", reviewer=inter.author.mention),
                 guild=inter.guild
             )
-            await inter.channel.send(content=f"<@{applicant_id}>", embed=acc_emb)
+            try:
+                await inter.channel.send(content=f"<@{applicant_id}>", embed=acc_emb)
+            except Exception:
+                pass
+            if problems:
+                try:
+                    await inter.followup.send("⚠️ Заявка принята, но: " + "; ".join(problems), ephemeral=True)
+                except Exception:
+                    pass
 
+            # 5) лог (до закрытия ветки, чтобы ссылка в логе была живой)
             log_channel_id = config.get("channels", {}).get("logs_channel_id")
             if log_channel_id:
                 log_ch = inter.guild.get_channel(log_channel_id)
@@ -602,18 +621,23 @@ class Recruitment(commands.Cog):
                         static=app["static_id"],
                         reviewer=inter.author.mention
                     )
-                    log_emb = success_embed(
-                        f"📝 Аудит лог: Кандидат принят #{app_id}",
-                        desc + f"\n📂 **Ветка:** {thread.mention if thread else '—'}",
-                        guild=inter.guild
-                    )
-                    await log_ch.send(embed=log_emb)
+                    desc += f"\n🏷️ **Ник на сервере:** `{new_nick}`"
+                    if thread:
+                        desc += f"\n📂 **Ветка:** `{thread.name}` (#{app_id})"
+                    if problems:
+                        desc += "\n⚠️ " + "; ".join(problems)
+                    log_emb = success_embed(f"📝 Аудит лог: Кандидат принят #{app_id}", desc, guild=inter.guild)
+                    try:
+                        await log_ch.send(embed=log_emb)
+                    except Exception as e:
+                        print(f"Не удалось отправить лог: {e!r}")
 
+            # 6) ЛС
             if applicant:
                 try:
                     dm_tpl = get_text(
                         "recruit_accepted_dm",
-                        "Поздравляем с вступлением в Hallez FAMQ!\nВы успешно приняты в семью **Hallez FAMQ**!\nВам выданы роли семьи на сервере. Ознакомьтесь с правилами семьи и подключайтесь к общению!"
+                        "Поздравляем с вступлением в Hallez FAMQ!\nВы успешно приняты в семью **Hallez FAMQ**!"
                     )
                     dm_emb = success_embed(
                         "Поздравляем с вступлением в Hallez FAMQ!",
@@ -624,11 +648,22 @@ class Recruitment(commands.Cog):
                 except Exception:
                     pass
 
+            # 7) закрыть ветку: config["accept_thread_action"] = "archive" (по умолчанию) или "delete"
             if thread:
+                action_t = str(config.get("accept_thread_action", "archive")).lower()
                 try:
-                    await thread.edit(locked=True, archived=True)
-                except Exception:
-                    pass
+                    if action_t == "delete":
+                        await thread.delete(reason=f"Заявка #{app_id} принята")
+                    else:
+                        await thread.edit(locked=True, archived=True, reason=f"Заявка #{app_id} принята")
+                except Exception as e:
+                    print(f"Не удалось закрыть ветку {thread.id}: {e!r} (нужно право 'Управление ветками')")
+                    try:
+                        await inter.followup.send(
+                            "⚠️ Не удалось закрыть ветку: выдайте боту право **Управление ветками** (Manage Threads).",
+                            ephemeral=True)
+                    except Exception:
+                        pass
 
         elif action == "app_reject":
             if not thread:
