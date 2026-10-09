@@ -1066,6 +1066,46 @@ def _card_update(message: disnake.Message, user_id: int, status: str, color: int
     return emb
 
 
+def voice_channels_text() -> str:
+    """Каналы обзвона из config.json: элементы могут быть числами или словарями {"name":..,"id":..}."""
+    ids = []
+    for item in get_cfg().get("voice_channels", []) or []:
+        try:
+            cid = int(item.get("id", 0)) if isinstance(item, dict) else int(item)
+        except (TypeError, ValueError):
+            continue
+        if cid and cid not in ids:
+            ids.append(cid)
+    return ", ".join(f"<#{i}>" for i in ids) or "голосовой канал рекрутинга"
+
+
+def build_nick(fmt: str, nick: str, static: str) -> str:
+    """Ник по формату в лимит Discord (32): обрезается имя, а не статик."""
+    nick = (nick or "").strip()
+    static = (static or "").strip()
+    kw = dict(rank="1", nick=nick, static=static)
+    full = fmt.format(**kw)
+    if len(full) <= 32:
+        return full
+    kw["nick"] = nick[:max(1, len(nick) - (len(full) - 32))].rstrip()
+    return fmt.format(**kw)[:32]
+
+
+async def close_thread(th, app_id, delete: bool = False, reason: str = "Заявка обработана"):
+    """Закрывает ветку заявки: блокирует и архивирует (или удаляет). Возвращает текст ошибки или None."""
+    if th is None:
+        return None
+    try:
+        if delete:
+            await th.delete(reason=reason)
+        else:
+            await th.edit(locked=True, archived=True, reason=reason)
+        return None
+    except Exception as e:
+        print(f"Не удалось закрыть ветку заявки #{app_id}: {e!r}")
+        return f"ветку не удалось закрыть ({e.__class__.__name__}) — выдайте боту право «Управление ветками»"
+
+
 async def h_review(inter: disnake.MessageInteraction):
     app = await _load_card(inter)
     if not app:
@@ -1088,8 +1128,7 @@ async def h_interview(inter: disnake.MessageInteraction):
     app = await _load_card(inter)
     if not app:
         return
-    vcs = [i for i in get_cfg().get("voice_channels", []) if i]
-    voice = " ".join(f"<#{i}>" for i in vcs) or "голосовой канал рекрутинга"
+    voice = voice_channels_text()
     await db.update_application_status(app["id"], "in_review", inter.author.id)
     emb = _card_update(inter.message, app["user_id"], f"{em('interview')} **Вызван на обзвон**",
                        cfg_color("embed_color", 0x990000), inter.author.mention)
@@ -1123,6 +1162,18 @@ async def h_accept(inter: disnake.MessageInteraction):
 
     cfg = get_cfg()
     warnings = []
+
+    # 1) СНАЧАЛА ник из анкеты (чтобы синхронизация рангов при выдаче роли увидела уже верный ник)
+    new_nick = None
+    if cfg.get("auto_nicknames", True):
+        pattern = cfg.get("texts", {}).get("nickname_format", "[Hallez FAMQ] {nick} | {static}")
+        try:
+            new_nick = build_nick(pattern, app["nick"], app["static_id"])
+            await member.edit(nick=new_nick, reason=f"Принят в семью ({inter.author})")
+        except Exception as e:
+            warnings.append(f"ник не изменён ({e.__class__.__name__}): роль бота должна быть выше роли кандидата; владельцу сервера ник сменить нельзя")
+
+    # 2) роли
     role_ids = []
     fam = cfg.get("roles", {}).get("family_role_id", 0)
     rk1 = (cfg.get("ranks", {}).get("1", {}) or {}).get("role_id") or cfg.get("roles", {}).get("rank_1_role_id", 0)
@@ -1139,13 +1190,6 @@ async def h_accept(inter: disnake.MessageInteraction):
     else:
         warnings.append("роли семьи не настроены в config.json")
 
-    if cfg.get("auto_nicknames", True):
-        pattern = cfg.get("texts", {}).get("nickname_format", "[Hallez FAMQ] {nick} | {static}")
-        try:
-            await member.edit(nick=pattern.format(nick=app["nick"], static=app["static_id"])[:32])
-        except Exception:
-            warnings.append("ник не изменён (нет прав или владелец сервера)")
-
     await db.upsert_member(app["user_id"], app["nick"], app["static_id"], 1)
     # внутри вызывается хук, который начисляет баллы рекруту и приглашающему
     await db.update_application_status(app["id"], "accepted", inter.author.id)
@@ -1159,9 +1203,13 @@ async def h_accept(inter: disnake.MessageInteraction):
         try:
             await th.send(T("recruit_accepted_thread_msg", "🎉 {mention} принят в семью рекрутером {reviewer}!",
                             mention=f"<@{app['user_id']}>", reviewer=inter.author.mention))
-            await th.edit(archived=True)
         except Exception:
             pass
+        # "archive" (по умолчанию) — заблокировать и архивировать, "delete" — удалить ветку
+        err = await close_thread(th, app["id"], delete=str(cfg.get("accept_thread_action", "archive")).lower() == "delete",
+                                 reason=f"Заявка #{app['id']} принята")
+        if err:
+            warnings.append(err)
 
     dm_text = T("recruit_accepted_dm", "🎉 Добро пожаловать в **Hallez FAMQ**!",
                 nick=app["nick"], static=app["static_id"], reviewer=inter.author.mention)
@@ -1200,9 +1248,9 @@ class RejectModal(disnake.ui.Modal):
             try:
                 await th.send(T("recruit_rejected_desc", "👤 {mention}\n📝 Причина: {reason}",
                                 mention=f"<@{app['user_id']}>", reviewer=inter.author.mention, reason=reason))
-                await th.edit(archived=True)
             except Exception:
                 pass
+            await close_thread(th, app["id"], reason=f"Заявка #{app['id']} отклонена")
         text = T("recruit_rejected_dm", "К сожалению, заявка отклонена.\n📝 Причина: {reason}",
                  nick=app["nick"], reason=reason)
         await dm(app["user_id"], "Решение по вашей заявке", text, color=cfg_color("error_color", 0xE74C3C))
