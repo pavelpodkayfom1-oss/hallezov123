@@ -20,6 +20,7 @@ import json
 import sys
 import time
 import copy
+import io
 from typing import Optional, Dict, Any, List
 
 import disnake
@@ -1106,6 +1107,55 @@ async def close_thread(th, app_id, delete: bool = False, reason: str = "Заяв
         return f"ветку не удалось закрыть ({e.__class__.__name__}) — выдайте боту право «Управление ветками»"
 
 
+def _thread_dump(messages: List[disnake.Message]) -> str:
+    out = []
+    for m in messages:
+        lines = []
+        if m.clean_content:
+            lines.append("    " + m.clean_content.replace("\n", "\n    "))
+        for e in m.embeds:
+            if e.title:
+                lines.append(f"    [{e.title}]")
+            if e.description:
+                lines.append("    " + e.description.replace("\n", "\n    "))
+            for f in e.fields:
+                lines.append(f"    {f.name}: {f.value}")
+        for a in m.attachments:
+            lines.append(f"    📎 {a.filename}: {a.url}")
+        if not lines:
+            continue
+        ts = m.created_at.strftime("%d.%m.%Y %H:%M:%S")
+        out.append(f"[{ts} UTC] {m.author.display_name}:\n" + "\n".join(lines))
+    return "\n\n".join(out)
+
+
+async def archive_thread_to_logs(th, app: Dict[str, Any], reviewer, result: str, color: int):
+    """Сохраняет переписку ветки заявки файлом .txt в канал логов. Возвращает текст ошибки или None."""
+    cid = int(get_cfg().get("channels", {}).get("logs_channel_id", 0) or 0)
+    log_ch = await get_channel(cid)
+    if log_ch is None:
+        return "архив ветки не отправлен: канал логов не найден (channels.logs_channel_id в config.json)"
+    try:
+        messages = [m async for m in th.history(limit=None, oldest_first=True)]
+        data = _thread_dump(messages) or "(в ветке нет сообщений)"
+        emb = disnake.Embed(
+            title=f"📁 Архив заявки #{app['id']} — {result}",
+            description=(f"👤 **Кандидат:** <@{app['user_id']}>\n"
+                         f"🎮 **Ник:** `{app['nick']}` • **Статик:** `{app['static_id']}`\n"
+                         f"👮 **Решение принял:** {reviewer.mention}\n"
+                         f"📂 **Ветка:** {th.name}\n"
+                         f"💬 **Сообщений:** {len(messages)}"),
+            color=color,
+        )
+        emb.set_footer(text=footer_text())
+        file = disnake.File(io.BytesIO(data.encode("utf-8")), filename=f"application_{app['id']}.txt")
+        await log_ch.send(embed=emb, file=file)
+        return None
+    except Exception as e:
+        print(f"[hall_recruit] архив ветки заявки #{app['id']}: {e!r}", file=sys.stderr, flush=True)
+        return f"архив ветки не отправлен ({e.__class__.__name__}) — проверьте права бота в канале логов и «Читать историю сообщений»"
+
+
 async def h_review(inter: disnake.MessageInteraction):
     app = await _load_card(inter)
     if not app:
@@ -1124,15 +1174,63 @@ async def h_review(inter: disnake.MessageInteraction):
             pass
 
 
-async def h_interview(inter: disnake.MessageInteraction):
-    app = await _load_card(inter)
-    if not app:
-        return
-    voice = voice_channels_text()
+def voice_options(guild: disnake.Guild) -> List[disnake.SelectOption]:
+    """Голосовые каналы обзвона из config.json (числа или {"name":..,"id":..}) → пункты выпадающего списка."""
+    opts, seen = [], set()
+    for item in get_cfg().get("voice_channels", []) or []:
+        try:
+            cid = int(item.get("id", 0)) if isinstance(item, dict) else int(item)
+        except (TypeError, ValueError):
+            continue
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        ch = guild.get_channel(cid)
+        name = (item.get("name") if isinstance(item, dict) else None) or (ch.name if ch else f"Канал {cid}")
+        opts.append(disnake.SelectOption(label=str(name)[:100], value=str(cid),
+                                         description="Позвать кандидата в этот канал", emoji="🎙️"))
+    return opts[:25]
+
+
+class VoicePickView(disnake.ui.View):
+    """Мини-панель (видна только рекрутёру): выбор голосового канала для обзвона."""
+
+    def __init__(self, card_message: disnake.Message, app: Dict[str, Any], recruiter_id: int,
+                 options: List[disnake.SelectOption]):
+        super().__init__(timeout=120)
+        self.card_message = card_message
+        self.app = app
+        self.recruiter_id = recruiter_id
+        self.add_item(HrSelect(self.on_pick, placeholder="Выберите голосовой канал для обзвона...",
+                               min_values=1, max_values=1, options=options))
+
+    async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
+        if inter.author.id != self.recruiter_id:
+            await inter.response.send_message("❌ Это меню открыл другой рекрутер.", ephemeral=True)
+            return False
+        return True
+
+    async def on_pick(self, inter: disnake.MessageInteraction, values: List[str]):
+        fresh = await db.get_application_by_thread(self.app["thread_id"])
+        if not fresh or fresh["status"] in ("accepted", "rejected"):
+            return await inter.response.edit_message(content="ℹ️ Эта заявка уже обработана.", view=None)
+        await do_interview(inter, self.card_message, fresh, f"<#{int(values[0])}>")
+
+
+async def do_interview(inter: disnake.Interaction, card_message: disnake.Message, app: Dict[str, Any], voice: str):
+    """Вызов на обзвон: статус, карточка, сообщение в ветку и ЛС кандидату. voice — упоминание выбранного канала."""
+    done = f"✅ Кандидат приглашён на обзвон: {voice}"
+    if inter.response.is_done():
+        await inter.followup.send(done, ephemeral=True)
+    else:
+        await inter.response.edit_message(content=done, view=None)
     await db.update_application_status(app["id"], "in_review", inter.author.id)
-    emb = _card_update(inter.message, app["user_id"], f"{em('interview')} **Вызван на обзвон**",
-                       cfg_color("embed_color", 0x990000), inter.author.mention)
-    await inter.response.edit_message(embed=emb)
+    try:
+        emb = _card_update(card_message, app["user_id"], f"{em('interview')} **Вызван на обзвон**",
+                           cfg_color("embed_color", 0x990000), inter.author.mention)
+        await card_message.edit(embed=emb)
+    except Exception as e:
+        print(f"[hall_recruit] не удалось обновить карточку заявки #{app['id']}: {e!r}", file=sys.stderr, flush=True)
     text = T("recruit_interview_desc",
              "{mention}, рекрутер {reviewer} приглашает вас на обзвон!\n📍 Канал: {voice}",
              mention=f"<@{app['user_id']}>", reviewer=inter.author.mention, voice=voice)
@@ -1142,7 +1240,23 @@ async def h_interview(inter: disnake.MessageInteraction):
             await th.send(text)
         except Exception:
             pass
-    await dm(app["user_id"], X("interview_dm_title"), X("interview_dm_desc", reviewer=inter.author.mention, voice=voice), banner=False)
+    await dm(app["user_id"], X("interview_dm_title"),
+             X("interview_dm_desc", reviewer=inter.author.mention, voice=voice), banner=False)
+
+
+async def h_interview(inter: disnake.MessageInteraction):
+    app = await _load_card(inter)
+    if not app:
+        return
+    opts = voice_options(inter.guild)
+    if len(opts) <= 1:
+        # выбирать не из чего: каналов 0 или 1 — приглашаем сразу
+        voice = f"<#{opts[0].value}>" if opts else voice_channels_text()
+        await inter.response.defer(ephemeral=True)
+        return await do_interview(inter, inter.message, app, voice)
+    await inter.response.send_message("Выберите голосовой канал для обзвона:",
+                                      view=VoicePickView(inter.message, app, inter.author.id, opts),
+                                      ephemeral=True)
 
 
 async def h_accept(inter: disnake.MessageInteraction):
@@ -1205,6 +1319,10 @@ async def h_accept(inter: disnake.MessageInteraction):
                             mention=f"<@{app['user_id']}>", reviewer=inter.author.mention))
         except Exception:
             pass
+        # архив переписки уходит в логи ДО закрытия (иначе при режиме "delete" он был бы потерян)
+        log_err = await archive_thread_to_logs(th, app, inter.author, "принят", cfg_color("success_color", 0x2ECC71))
+        if log_err:
+            warnings.append(log_err)
         # "archive" (по умолчанию) — заблокировать и архивировать, "delete" — удалить ветку
         err = await close_thread(th, app["id"], delete=str(cfg.get("accept_thread_action", "archive")).lower() == "delete",
                                  reason=f"Заявка #{app['id']} принята")
