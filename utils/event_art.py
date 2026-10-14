@@ -4,9 +4,14 @@
 всегда рисуется самим ботом, а нейросеть отвечает только за сцену.
 
 Настройка через переменные окружения (.env):
-  EVENT_ART_PROVIDER   pollinations (по умолчанию, бесплатно, без ключа)
+  EVENT_ART_PROVIDER   gemini       (нужен GEMINI_API_KEY; включается сам, если ключ задан)
+                       pollinations (бесплатно, без ключа; по умолчанию без Gemini-ключа)
                        openai       (нужен OPENAI_API_KEY)
                        none         (без нейросети: ваш баннер размытым фоном)
+                       Если выбранный сервис не ответил, бот пробует Pollinations,
+                       а затем собирает запасную картинку на вашем баннере.
+  GEMINI_API_KEY       ключ Google Gemini (хранить ТОЛЬКО в .env, не в репозитории)
+  GEMINI_IMAGE_MODEL   по умолчанию пробует gemini-2.5-flash-image, затем gemini-3.1-flash-image
   OPENAI_API_KEY       ключ OpenAI (только для provider=openai)
   OPENAI_IMAGE_MODEL   по умолчанию gpt-image-1-mini
   OPENAI_IMAGE_QUALITY по умолчанию medium (low / medium / high)
@@ -151,23 +156,71 @@ async def _fetch_openai(session: aiohttp.ClientSession, prompt: str) -> Optional
     return base64.b64decode(b64) if b64 else None
 
 
-async def _generate_background(title: str, info: str, seed: int) -> Optional[bytes]:
-    provider = os.getenv("EVENT_ART_PROVIDER", "pollinations").strip().lower()
-    if provider in ("none", "off", "0", ""):
+async def _fetch_gemini(session: aiohttp.ClientSession, prompt: str) -> Optional[bytes]:
+    key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not key:
+        _log("provider=gemini, но GEMINI_API_KEY не задан")
         return None
+    env_model = os.getenv("GEMINI_IMAGE_MODEL", "").strip()
+    models = [env_model] if env_model else ["gemini-2.5-flash-image", "gemini-3.1-flash-image"]
+    base = {"contents": [{"parts": [{"text": prompt}]}]}
+    variants = [
+        {**base, "generationConfig": {"responseModalities": ["IMAGE"],
+                                      "imageConfig": {"aspectRatio": "21:9"}}},
+        {**base, "generationConfig": {"responseModalities": ["IMAGE", "TEXT"]}},
+    ]
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        for payload in variants:
+            async with session.post(url, headers={"x-goog-api-key": key}, json=payload) as r:
+                if r.status == 200:
+                    j = await r.json()
+                    for cand in j.get("candidates") or []:
+                        for part in (cand.get("content") or {}).get("parts") or []:
+                            d = part.get("inlineData") or part.get("inline_data")
+                            if d and d.get("data"):
+                                return base64.b64decode(d["data"])
+                    _log(f"gemini ({model}) вернул ответ без картинки")
+                    continue
+                body = (await r.text())[:200]
+                _log(f"gemini ({model}) ответил {r.status}: {body}")
+                if r.status in (401, 403, 429):   # ключ/доступ/лимит: другая модель не поможет
+                    return None
+                if r.status == 404:                # нет такой модели — пробуем следующую
+                    break
+    return None
+
+
+async def _generate_background(title: str, info: str, seed: int) -> Optional[bytes]:
+    default = "gemini" if os.getenv("GEMINI_API_KEY", "").strip() else "pollinations"
+    provider = os.getenv("EVENT_ART_PROVIDER", default).strip().lower() or default
+    if provider in ("none", "off", "0"):
+        return None
+    chain = {"gemini": ["gemini", "pollinations"], "openai": ["openai", "pollinations"]}.get(
+        provider, ["pollinations"])
     prompt = f"{_scene_for(title + ' ' + info)}, {_STYLE}"
     try:
         timeout = aiohttp.ClientTimeout(total=float(os.getenv("EVENT_ART_TIMEOUT", "45")))
     except ValueError:
         timeout = aiohttp.ClientTimeout(total=45)
-    try:
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            if provider == "openai":
-                return await _fetch_openai(session, prompt)
-            return await _fetch_pollinations(session, prompt, seed)
-    except Exception as e:
-        _log(f"нейросеть недоступна: {type(e).__name__}: {e}")
-        return None
+    started = time.time()
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        for name in chain:
+            if time.time() - started > 60:      # общий бюджет ожидания
+                break
+            try:
+                if name == "gemini":
+                    data = await _fetch_gemini(session, prompt)
+                elif name == "openai":
+                    data = await _fetch_openai(session, prompt)
+                else:
+                    data = await _fetch_pollinations(session, prompt, seed)
+            except Exception as e:
+                _log(f"{name} недоступен: {type(e).__name__}: {e}")
+                data = None
+            if data:
+                return data
+    return None
 
 
 # ───────────────────────── сборка картинки ─────────────────────────
