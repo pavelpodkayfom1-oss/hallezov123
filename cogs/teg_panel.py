@@ -626,11 +626,11 @@ class TegPanelView(disnake.ui.View):
                 await inter.edit_original_response(embed=self.render(), view=self)
             except Exception:
                 pass
-            art_bytes = await event_art.make_event_art(
+            art = await event_art.make_event_art(
                 self.title, self.time, self.info, self.guild.name,
                 accent=_accent_rgb(cfg))
-            if art_bytes:
-                event_art.save_art(call_id, art_bytes)
+            if art.data:
+                event_art.save_art(call_id, art.data)
             self.status = "⏳ Отправляю сбор..."
 
             # 1) по желанию — в канал (с живой явкой)
@@ -682,6 +682,13 @@ class TegPanelView(disnake.ui.View):
                 summary += " • ⚠️ в канал отправить не удалось"
             self.status = summary
             await inter.edit_original_response(embed=self.render(), view=self)
+
+            # если нейросеть не сработала, автор панели сразу видит причину
+            if not art.ai_ok:
+                try:
+                    await inter.followup.send(f"⚠️ {art.problem_text()}", ephemeral=True)
+                except Exception:
+                    pass
 
             # отчёт о явке (можно обновлять и напоминать не ответившим)
             report = await build_report(call_id)

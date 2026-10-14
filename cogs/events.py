@@ -1,93 +1,79 @@
+import asyncio
 import io
+from typing import Dict
 
 import disnake
 from disnake.ext import commands
+
+from utils.attendance import ACTIONS, get_votes, render, save_votes, toggle_vote
 from utils.checks import load_config, is_recruiter, get_text
 from utils.embeds import base_embed
-from utils.event_art import make_event_art
+from utils.event_art import make_event_art, normalize_time
 
-class EventAttendanceView(disnake.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.yes_users = set()
-        self.late_users = set()
-        self.no_users = set()
+_locks: Dict[int, asyncio.Lock] = {}
 
-        lbl_yes = get_text("btn_event_yes", "Буду (+)")
-        lbl_late = get_text("btn_event_late", "Опоздаю (+-)")
-        lbl_no = get_text("btn_event_no", "Не смогу (-)")
+_REPLIES = {
+    ("yes", "added"): "✅ Отмечено: вы **будете** на сборе.",
+    ("yes", "changed"): "✅ Изменено: вы **будете** на сборе.",
+    ("late", "added"): "🟡 Отмечено: вы **опоздаете**.",
+    ("late", "changed"): "🟡 Изменено: вы **опоздаете**.",
+    ("no", "added"): "🔴 Отмечено: вы **не сможете** прийти.",
+    ("no", "changed"): "🔴 Изменено: вы **не сможете** прийти.",
+}
 
-        self.yes_btn = disnake.ui.Button(label=lbl_yes[:80], style=disnake.ButtonStyle.success, emoji="🟢", custom_id="codex:event_yes")
-        self.late_btn = disnake.ui.Button(label=lbl_late[:80], style=disnake.ButtonStyle.secondary, emoji="🟡", custom_id="codex:event_late")
-        self.no_btn = disnake.ui.Button(label=lbl_no[:80], style=disnake.ButtonStyle.danger, emoji="🔴", custom_id="codex:event_no")
 
-        self.add_item(self.yes_btn)
-        self.add_item(self.late_btn)
-        self.add_item(self.no_btn)
+async def handle_attendance(inter: disnake.MessageInteraction, action: str):
+    """Записывает выбор, обновляет списки в сообщении. Повторное нажатие снимает отметку."""
+    msg = inter.message
+    if not msg.embeds or len(msg.embeds[0].fields) < len(ACTIONS):
+        return await inter.response.send_message("⚠️ Это сообщение сбора повреждено.", ephemeral=True)
 
-    def update_embed(self, message: disnake.Message, guild: disnake.Guild) -> disnake.Embed:
-        emb = message.embeds[0]
+    if len(_locks) > 500:
+        for k in [k for k, v in _locks.items() if not v.locked()]:
+            _locks.pop(k, None)
+    lock = _locks.setdefault(msg.id, asyncio.Lock())
 
-        def format_users(user_ids):
-            if not user_ids:
-                return "*Никого нет*"
-            mentions = [f"<@{uid}>" for uid in user_ids]
-            return f"**Всего ({len(mentions)}):**\n" + ", ".join(mentions)
+    async with lock:
+        emb = msg.embeds[0]
+        votes = get_votes(msg.id, [f.value for f in emb.fields[: len(ACTIONS)]])
+        result = toggle_vote(votes, inter.author.id, action)
+        save_votes(msg.id, votes)
+        for i, a in enumerate(ACTIONS):
+            emb.set_field_at(i, name=emb.fields[i].name, value=render(votes[a]), inline=True)
+        await inter.response.edit_message(embed=emb)
 
-        lbl_yes = get_text("btn_event_yes", "Буду (+)")
-        lbl_late = get_text("btn_event_late", "Опоздаю (+-)")
-        lbl_no = get_text("btn_event_no", "Не смогу (-)")
-
-        emb.set_field_at(0, name=f"🟢 {lbl_yes}", value=format_users(self.yes_users), inline=True)
-        emb.set_field_at(1, name=f"🟡 {lbl_late}", value=format_users(self.late_users), inline=True)
-        emb.set_field_at(2, name=f"🔴 {lbl_no}", value=format_users(self.no_users), inline=True)
-        return emb
-
-    @commands.Cog.listener()
-    async def on_button_click(self, inter: disnake.MessageInteraction):
+    note = "↩️ Отметка снята." if result == "removed" else _REPLIES[(action, result)]
+    try:
+        await inter.followup.send(note, ephemeral=True)
+    except disnake.HTTPException:
         pass
 
-    async def handle_click(self, inter: disnake.MessageInteraction, action: str):
-        user_id = inter.author.id
-        if action == "yes":
-            self.late_users.discard(user_id)
-            self.no_users.discard(user_id)
-            self.yes_users.add(user_id)
-        elif action == "late":
-            self.yes_users.discard(user_id)
-            self.no_users.discard(user_id)
-            self.late_users.add(user_id)
-        elif action == "no":
-            self.yes_users.discard(user_id)
-            self.late_users.discard(user_id)
-            self.no_users.add(user_id)
 
-        emb = self.update_embed(inter.message, inter.guild)
-        await inter.response.edit_message(embed=emb, view=self)
+class _AttendButton(disnake.ui.Button):
+    def __init__(self, action: str, label: str, style: disnake.ButtonStyle, emoji: str):
+        super().__init__(label=label[:80], style=style, emoji=emoji, custom_id=f"codex:event_{action}")
+        self.action = action
+
+    async def callback(self, inter: disnake.MessageInteraction):
+        await handle_attendance(inter, self.action)
+
+
+class EventAttendanceView(disnake.ui.View):
+    """Постоянное представление: работает и после перезапуска бота (см. main.py)."""
+
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(_AttendButton("yes", get_text("btn_event_yes", "Буду (+)"),
+                                    disnake.ButtonStyle.success, "🟢"))
+        self.add_item(_AttendButton("late", get_text("btn_event_late", "Опоздаю (+-)"),
+                                    disnake.ButtonStyle.secondary, "🟡"))
+        self.add_item(_AttendButton("no", get_text("btn_event_no", "Не смогу (-)"),
+                                    disnake.ButtonStyle.danger, "🔴"))
 
 
 class Events(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    @commands.Cog.listener()
-    async def on_button_click(self, inter: disnake.MessageInteraction):
-        custom_id = inter.component.custom_id
-        if custom_id in ("codex:event_yes", "codex:event_late", "codex:event_no"):
-            action = custom_id.replace("codex:event_", "")
-            view = EventAttendanceView()
-            # Пытаемся восстановить списки пользователей из текущего эмбеда
-            try:
-                emb = inter.message.embeds[0]
-                # Просто обновляем статус пользователя
-                if action == "yes":
-                    await inter.response.send_message("✅ Вы отметились, что **будете** на сборе!", ephemeral=True)
-                elif action == "late":
-                    await inter.response.send_message("🟡 Вы отметились, что **опоздаете**!", ephemeral=True)
-                elif action == "no":
-                    await inter.response.send_message("🔴 Вы отметились, что **не сможете** присутствовать.", ephemeral=True)
-            except Exception:
-                pass
 
     @commands.slash_command(
         name="event",
@@ -98,7 +84,7 @@ class Events(commands.Cog):
         inter: disnake.ApplicationCommandInteraction,
         title: str = commands.Param(description="Название мероприятия (например: Дроп 19:30 / ВЗП)"),
         time_str: str = commands.Param(description="Время сбора (например: 19:15 МСК)"),
-        info: str = commands.Param(description="Снаряжение и место сбора", default="Особняк семьи, 100% бронежилеты, оружие")
+        info: str = commands.Param(description="Снаряжение и место сбора", default="Особняк семьи, 100% бронежилеты, оружие"),
     ):
         if not is_recruiter(inter.author):
             await inter.response.send_message("❌ У вас нет прав для создания сборов семьи!", ephemeral=True)
@@ -111,12 +97,12 @@ class Events(commands.Cog):
         title_tpl = get_text("event_card_title", "⚔️ ОБЩИЙ СБОР СЕМЬИ: {title}")
         desc_tpl = get_text(
             "event_card_desc",
-            "Руководство объявило сбор бойцов **Zakonov FAMQ**!\n\n⏰ **Время сбора:** `{time}`\n📍 **Требования:** {info}\n\nОбязательно прожмите статус присутствия кнопками ниже:"
+            "Руководство объявило сбор бойцов **Hallez FAMQ**!\n\n⏰ **Время сбора:** `{time}`\n📍 **Требования:** {info}\n\nОбязательно прожмите статус присутствия кнопками ниже:"
         )
 
         event_emb = base_embed(
             title_tpl.format(title=title),
-            desc_tpl.format(time=time_str, info=info),
+            desc_tpl.format(time=normalize_time(time_str), info=info),
             guild=inter.guild
         )
 
@@ -128,17 +114,23 @@ class Events(commands.Cog):
         event_emb.add_field(name=f"🟡 {lbl_late}", value="*Пока никто*", inline=True)
         event_emb.add_field(name=f"🔴 {lbl_no}", value="*Пока никто*", inline=True)
 
-        view = EventAttendanceView()
-
-        # Картинка под сбор: нейросеть рисует фон, название/время/место накладывает бот.
-        # Генерация занимает несколько секунд, поэтому сначала «думаем», потом публикуем.
+        # Картинка под каждый сбор: нейросеть рисует новую сцену, название/время/место
+        # накладывает бот. Генерация занимает несколько секунд, поэтому сначала «думаем».
         await inter.response.defer()
         art = await make_event_art(title, time_str, info, inter.guild.name if inter.guild else "Hallez FAMQ")
         extra = {}
-        if art:
+        if art.data:
             event_emb.set_image(url="attachment://sbor.jpg")
-            extra["file"] = disnake.File(io.BytesIO(art), filename="sbor.jpg")
-        await inter.edit_original_response(content=f"📢 {mention_str}", embed=event_emb, view=view, **extra)
+            extra["file"] = disnake.File(io.BytesIO(art.data), filename="sbor.jpg")
+        await inter.edit_original_response(content=f"📢 {mention_str}", embed=event_emb,
+                                           view=EventAttendanceView(), **extra)
+
+        # Если нейросеть не сработала, автор сразу видит почему (остальные этого не видят).
+        if not art.ai_ok:
+            try:
+                await inter.followup.send(f"⚠️ {art.problem_text()}", ephemeral=True)
+            except disnake.HTTPException:
+                pass
 
 
 def setup(bot: commands.Bot):
