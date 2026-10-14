@@ -10,6 +10,7 @@ import disnake
 from disnake.ext import commands
 
 from database import DB_PATH
+from utils import event_art
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
@@ -127,6 +128,15 @@ def voice_url(guild_id: int, voice_id: int) -> Optional[str]:
     return f"https://discord.com/channels/{guild_id}/{voice_id}" if voice_id else None
 
 
+def _accent_rgb(cfg: dict):
+    """Цвет рамки сбора из настроек -> (r, g, b) для акцента на картинке."""
+    try:
+        c = embed_color(cfg)
+        return ((c >> 16) & 255, (c >> 8) & 255, c & 255)
+    except Exception:
+        return None
+
+
 def counts_text(c: dict) -> str:
     total = c["yes"] + c["late"] + c["no"] + c["wait"]
     filled = round(10 * (c["yes"] + c["late"]) / total) if total else 0
@@ -158,6 +168,8 @@ def call_embed(call: dict, cfg: dict, guild: Optional[disnake.Guild],
     footer = cfg.get("texts", {}).get("footer_text", "").format(bot_name=cfg.get("bot_name", "Hallez FAMQ"))
     if footer:
         embed.set_footer(text=footer)
+    if event_art.has_art(call.get("id")):
+        embed.set_image(url=f"attachment://{event_art.art_filename(call['id'])}")
     return embed
 
 
@@ -197,8 +209,12 @@ async def update_scoreboard(bot: commands.Bot, call_id: int):
 
 async def send_call_dm(member: disnake.Member, call: dict, cfg: dict, guild: disnake.Guild, content: str) -> bool:
     try:
+        extra = {}
+        art_file = event_art.art_file(call["id"])
+        if art_file is not None:
+            extra["file"] = art_file
         msg = await member.send(content=content, embed=call_embed(call, cfg, guild),
-                                view=CallResponseView(voice_url(guild.id, call["voice_id"])))
+                                view=CallResponseView(voice_url(guild.id, call["voice_id"])), **extra)
     except (disnake.Forbidden, disnake.HTTPException):
         return False
     async with tdb() as db:
@@ -604,6 +620,19 @@ class TegPanelView(disnake.ui.View):
                 call_id = cur.lastrowid
                 call = await get_call(db, call_id)
 
+            # картинка сбора: нейросеть рисует фон, текст накладывает бот
+            self.status = "🎨 Рисую картинку для сбора..."
+            try:
+                await inter.edit_original_response(embed=self.render(), view=self)
+            except Exception:
+                pass
+            art_bytes = await event_art.make_event_art(
+                self.title, self.time, self.info, self.guild.name,
+                accent=_accent_rgb(cfg))
+            if art_bytes:
+                event_art.save_art(call_id, art_bytes)
+            self.status = "⏳ Отправляю сбор..."
+
             # 1) по желанию — в канал (с живой явкой)
             channel_ok = None
             if channel is not None:
@@ -621,9 +650,13 @@ class TegPanelView(disnake.ui.View):
                                                        url=voice_url(self.guild.id, self.voice_id)))
                 try:
                     counts0 = {"yes": 0, "late": 0, "no": 0, "wait": len(members)}
+                    ch_extra = {}
+                    ch_file = event_art.art_file(call_id)
+                    if ch_file is not None:
+                        ch_extra["file"] = ch_file
                     msg = await channel.send(content=" ".join(mention_parts),
                                              embed=call_embed(call, cfg, self.guild, counts=counts0),
-                                             view=ch_view, allowed_mentions=allowed)
+                                             view=ch_view, allowed_mentions=allowed, **ch_extra)
                     async with tdb() as db:
                         await db.execute("UPDATE teg_calls SET channel_msg_id = ? WHERE id = ?", (msg.id, call_id))
                         await db.commit()

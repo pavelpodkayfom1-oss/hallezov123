@@ -1,7 +1,10 @@
+import io
+
 import disnake
 from disnake.ext import commands
 from utils.checks import load_config, is_recruiter, get_text
 from utils.embeds import base_embed
+from utils.event_art import make_event_art
 
 class EventAttendanceView(disnake.ui.View):
     def __init__(self):
@@ -126,7 +129,16 @@ class Events(commands.Cog):
         event_emb.add_field(name=f"🔴 {lbl_no}", value="*Пока никто*", inline=True)
 
         view = EventAttendanceView()
-        await inter.response.send_message(content=f"📢 {mention_str}", embed=event_emb, view=view)
+
+        # Картинка под сбор: нейросеть рисует фон, название/время/место накладывает бот.
+        # Генерация занимает несколько секунд, поэтому сначала «думаем», потом публикуем.
+        await inter.response.defer()
+        art = await make_event_art(title, time_str, info, inter.guild.name if inter.guild else "Hallez FAMQ")
+        extra = {}
+        if art:
+            event_emb.set_image(url="attachment://sbor.jpg")
+            extra["file"] = disnake.File(io.BytesIO(art), filename="sbor.jpg")
+        await inter.edit_original_response(content=f"📢 {mention_str}", embed=event_emb, view=view, **extra)
 
 
 def setup(bot: commands.Bot):
