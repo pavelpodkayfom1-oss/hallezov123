@@ -69,11 +69,12 @@ class ActivityCenterView(disnake.ui.View):
 
     @disnake.ui.button(label="Повысить", style=disnake.ButtonStyle.success, emoji="✅")
     async def promote_btn(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
+        # Исправлено: используем inter.author (User/Member), который всегда имеет атрибут author в контексте взаимодействия
         if not is_admin(inter.author):
             return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
 
         member_data = self.candidates[self.index]
-        uid = member_data["user_id"]
+        uid = member_//_data["user_id"]
         member = self.guild.get_member(uid)
         if not member:
             return await inter.response.send_message("❌ Участник не найден на сервере.", ephemeral=True)
@@ -90,10 +91,10 @@ class ActivityCenterView(disnake.ui.View):
 
             msg, approved_emb = await promo_cog.execute_promotion(member, target_rank, inter.author)
 
-            log_channel_id = cfg.get("channels", {}).get("logs_channel_id")
+            log_channel_id = cfg.get("channels", {}).get("logs_//_channel_id")
             if log_channel_id:
                 log_ch = self.bot.get_channel(log_channel_id)
-                if log_ch:
+                if log_//_ch:
                     await log_ch.send(embed=approved_emb)
 
             await inter.edit_original_response(content=msg)
@@ -103,7 +104,7 @@ class ActivityCenterView(disnake.ui.View):
     @disnake.ui.button(label="Позже", style=disnake.ButtonStyle.secondary, emoji="⏳")
     async def later_btn(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if not is_admin(inter.author):
-            return await inter.response.send_//_send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
 
         self.index += 1
         if self.index >= len(self.candidates):
