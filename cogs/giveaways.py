@@ -9,6 +9,7 @@
   • На итоговой карточке у руководства есть кнопка «Реролл» (выбрать нового победителя).
 """
 import asyncio
+import io
 import random
 import time
 from typing import Dict, List, Optional, Tuple
@@ -17,6 +18,11 @@ import disnake
 from disnake.ext import commands, tasks
 
 from utils import famq_core as core
+from utils.event_art import make_event_art
+
+BANNER_NAME = "giveaway.jpg"   # баннер от нейросети (Gemini), прикрепляется к карточке
+BAR_WIDTH = 12
+REFRESH_SEC = 90               # как часто обновлять шкалу времени на живой карточке
 
 # ───────── билеты ─────────
 MAX_RANK_BONUS = 3        # +1 билет за каждый ранг выше первого, максимум +3
@@ -82,16 +88,41 @@ async def entry_count(giveaway_id: int) -> int:
 
 # ───────── карточка ─────────
 
+def time_bar(start_ts: Optional[int], end_ts: int, ended: bool = False) -> str:
+    """Шкала времени: ▰▰▰▱▱▱ 42%. Без start_ts (старые розыгрыши) шкалы нет."""
+    if ended:
+        return "▰" * BAR_WIDTH + " 100%"
+    if start_ts is None or end_ts <= start_ts:
+        return ""
+    frac = min(1.0, max(0.0, (core.now_ts() - start_ts) / (end_ts - start_ts)))
+    filled = round(frac * BAR_WIDTH)
+    return "▰" * filled + "▱" * (BAR_WIDTH - filled) + f" {int(frac * 100)}%"
+
+
+def msg_start_ts(msg) -> Optional[int]:
+    """Начало розыгрыша = время отправки карточки."""
+    try:
+        return int(msg.created_at.timestamp())
+    except Exception:
+        return None
+
+
 def gw_embed(row: dict, count: int, winners: Optional[List[int]] = None, ended: bool = False,
-             tickets: Optional[Dict[int, int]] = None) -> disnake.Embed:
+             tickets: Optional[Dict[int, int]] = None, start_ts: Optional[int] = None,
+             banner: bool = False) -> disnake.Embed:
     prize = core.clip(row["prize"], 200)
+    bar = time_bar(start_ts, row["end_ts"], ended)
     if ended:
         e = core.make_embed(f"🎁 {prize}", kind="ok")
-        e.description = f"**Розыгрыш завершён** · <t:{row['end_ts']}:R>"
+        e.description = (f"**Розыгрыш завершён** · <t:{row['end_ts']}:R>\n"
+                         + (f"`{bar}`" if bar else ""))
     else:
         e = core.make_embed(f"🎁 {prize}", kind="main")
-        e.description = (f"**Нажмите «Участвовать», чтобы попасть в розыгрыш.**\n"
-                         f"⏳ Итоги <t:{row['end_ts']}:R> · <t:{row['end_ts']}:f>")
+        e.description = ("**Нажмите «Участвовать», чтобы попасть в розыгрыш.**\n\n"
+                         + (f"⏳ `{bar}`\n" if bar else "⏳ ")
+                         + f"Итоги <t:{row['end_ts']}:R> · <t:{row['end_ts']}:f>")
+    if banner:
+        e.set_image(url=f"attachment://{BANNER_NAME}")
     e.add_field("🏆 Победителей", f"**{row['winners']}**", inline=True)
     e.add_field("👥 Участников", f"**{count}**", inline=True)
     e.add_field("👤 Организатор", f"<@{row['host_id']}>", inline=True)
@@ -162,7 +193,8 @@ class GiveawayView(disnake.ui.View):
                     f"Нажмите «Мои шансы», чтобы узнать подробности, или кнопку ещё раз, чтобы выйти.")
         _weights_cache.pop(row["id"], None)
         cnt = await entry_count(row["id"])
-        await inter.response.edit_message(embed=gw_embed(row, cnt))
+        await inter.response.edit_message(embed=gw_embed(
+            row, cnt, start_ts=msg_start_ts(inter.message), banner=bool(inter.message.attachments)))
         await inter.followup.send(text, ephemeral=True)
 
     @disnake.ui.button(label="Мои шансы", emoji="🎫", style=disnake.ButtonStyle.secondary, custom_id="gw:odds")
@@ -245,7 +277,9 @@ async def do_reroll(guild: disnake.Guild, row: dict) -> Optional[int]:
         cnt = await entry_count(row["id"])
         try:
             msg = await channel.fetch_message(row["message_id"])
-            await msg.edit(embed=gw_embed(row, cnt, everyone, ended=True, tickets=full), view=GiveawayEndedView())
+            await msg.edit(embed=gw_embed(row, cnt, everyone, ended=True, tickets=full,
+                                          start_ts=msg_start_ts(msg), banner=bool(msg.attachments)),
+                           view=GiveawayEndedView())
         except Exception:
             pass
         try:
@@ -260,6 +294,49 @@ class Giveaways(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._view_added = False
+        self._last_refresh: Dict[int, float] = {}
+        self._bg: set = set()
+
+    async def _add_banner(self, msg: disnake.Message, row: dict, guild_name: str, duration_text: str):
+        """Рисует баннер нейросетью (Gemini) и дорисовывает его к уже отправленной карточке."""
+        try:
+            info = f"Победителей: {row['winners']} · праздник семьи"
+            art = await asyncio.wait_for(
+                make_event_art(f"РОЗЫГРЫШ: {row['prize']}", f"Длительность: {duration_text}", info, guild_name),
+                timeout=90)
+        except Exception as ex:
+            print(f"[giveaways] баннер не получился: {ex!r}")
+            return
+        if not art.data:
+            return
+        try:
+            fresh = await core.q_one("SELECT * FROM giveaways WHERE id=?", (row["id"],))
+            if not fresh or fresh["status"] != "active":
+                return
+            cnt = await entry_count(row["id"])
+            await msg.edit(
+                embed=gw_embed(fresh, cnt, start_ts=msg_start_ts(msg), banner=True),
+                file=disnake.File(io.BytesIO(art.data), filename=BANNER_NAME))
+        except Exception as ex:
+            print(f"[giveaways] не удалось прикрепить баннер: {ex!r}")
+
+    async def _refresh_cards(self):
+        """Раз в REFRESH_SEC двигает шкалу времени на живых карточках."""
+        rows = await core.q_all("SELECT * FROM giveaways WHERE status='active' AND end_ts>?", (core.now_ts(),))
+        for row in rows:
+            if time.monotonic() - self._last_refresh.get(row["id"], 0) < REFRESH_SEC:
+                continue
+            self._last_refresh[row["id"]] = time.monotonic()
+            guild = self.bot.get_guild(row["guild_id"])
+            channel = guild.get_channel(row["channel_id"]) if guild else None
+            if channel is None or not row["message_id"]:
+                continue
+            try:
+                msg = await channel.fetch_message(row["message_id"])
+                cnt = await entry_count(row["id"])
+                await msg.edit(embed=gw_embed(row, cnt, start_ts=msg_start_ts(msg), banner=bool(msg.attachments)))
+            except Exception:
+                pass
 
     def cog_unload(self):
         self.check_loop.cancel()
@@ -314,7 +391,8 @@ class Giveaways(commands.Cog):
             if announce:
                 await self._reveal(msg, guild, row, weights)
             try:
-                await msg.edit(embed=gw_embed(row, cnt, winners, ended=True, tickets=weights),
+                await msg.edit(embed=gw_embed(row, cnt, winners, ended=True, tickets=weights,
+                                              start_ts=msg_start_ts(msg), banner=bool(msg.attachments)),
                                view=GiveawayEndedView())
             except Exception:
                 pass
@@ -339,6 +417,10 @@ class Giveaways(commands.Cog):
                 await self.finish(row)
             except Exception:
                 await core.q_exec("UPDATE giveaways SET status='ended' WHERE id=?", (row["id"],))
+        try:
+            await self._refresh_cards()
+        except Exception as ex:
+            print(f"[giveaways] ошибка обновления карточек: {ex!r}")
 
     @check_loop.before_loop
     async def _b(self):
@@ -385,13 +467,17 @@ class Giveaways(commands.Cog):
         try:
             msg = await target.send(
                 content=f"<@&{ping_role}>" if ping_role else None,
-                embed=gw_embed(row, 0), view=GiveawayView(),
+                embed=gw_embed(row, 0, start_ts=core.now_ts()), view=GiveawayView(),
                 allowed_mentions=disnake.AllowedMentions(roles=True))
         except Exception as ex:
             await core.q_exec("DELETE FROM giveaways WHERE id=?", (gid,))
             return await inter.edit_original_response(f"❌ Не удалось отправить в {target.mention}: {ex}")
         await core.q_exec("UPDATE giveaways SET message_id=? WHERE id=?", (msg.id, gid))
-        await inter.edit_original_response(f"✅ Розыгрыш **#{gid}** запущен: {msg.jump_url}")
+        await inter.edit_original_response(
+            f"✅ Розыгрыш **#{gid}** запущен: {msg.jump_url}\n🎨 Баннер рисуется нейросетью, появится на карточке через несколько секунд.")
+        task = asyncio.create_task(self._add_banner(msg, row, inter.guild.name, duration))
+        self._bg.add(task)
+        task.add_done_callback(self._bg.discard)
 
     @giveaway.sub_command(name="завершить", description="Завершить розыгрыш досрочно")
     async def end_now(
