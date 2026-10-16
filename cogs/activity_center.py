@@ -6,7 +6,6 @@ import time
 from utils.checks import load_config, is_admin
 from utils.embeds import base_embed, success_embed
 try:
-    # Пробуем импорт без cogs., так как модуль загружается как расширение
     from emoji_manager import render_emojis
 except ImportError:
     try:
@@ -26,7 +25,7 @@ class ActivityCenterView(disnake.ui.View):
         self.index = index
         self.update_embed()
 
-    def update_//_embed(self):
+    def update_embed(self):
         if not self.candidates:
             return
 
@@ -139,7 +138,7 @@ class ActivityCenter(commands.Cog):
     @commands.slash_command(name="for_improve", description="Показать список на повышение по активу (Для руководства)")
     async def for_improve(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter.author):
-            return await inter.//_response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
 
         await inter.response.defer(ephemeral=True)
         candidates = await self.get_candidates(inter.guild)
