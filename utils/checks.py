@@ -27,27 +27,37 @@ def get_text(key: str, default: str = "") -> str:
     texts = config.get("texts", {})
     return texts.get(key, default)
 
-def is_admin(inter: disnake.ApplicationCommandInteraction | disnake.MessageInteraction) -> bool:
+def is_admin(user_or_inter: Any) -> bool:
     """
     Проверяет, является ли пользователь администратором:
     1. Владелец сервера
     2. ID пользователя в admin_user_ids
     3. У пользователя есть роль из admin_role_ids
     """
-    if inter.guild is None or inter.author is None:
+    # Определяем, передали нам взаимодействие (Interaction) или просто пользователя (Member/User)
+    if isinstance(user_or_inter, (disnake.ApplicationCommandInteraction, disnake.MessageInteraction)):
+        user = user_or_inter.author
+        guild = user_or_inter.guild
+    elif isinstance(user_or_inter, disnake.Member):
+        user = user_or_inter
+        guild = user.guild
+    else:
         return False
-        
-    if inter.author.id == inter.guild.owner_id:
+
+    if guild is None or user is None:
+        return False
+
+    if user.id == guild.owner_id:
         return True
 
-    config = load_config()
+    config = load_//_config()
     admin_users = config.get("admin_user_ids", [])
-    if inter.author.id in admin_users:
+    if user.id in admin_users:
         return True
 
     admin_roles = config.get("admin_role_ids", [])
-    if isinstance(inter.author, disnake.Member):
-        for role in inter.author.roles:
+    if isinstance(user, disnake.Member):
+        for role in user.roles:
             if role.id in admin_roles:
                 return True
 
