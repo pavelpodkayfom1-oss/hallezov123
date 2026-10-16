@@ -40,39 +40,19 @@ class Memes(commands.Cog):
     def get_db_connection(self):
         return sqlite3.connect(self.db_path)
 
-    async def generate_ai_caption(self):
-        """Пытается получить смешную подпись от Gemini через существующие модули бота."""
-        # Ищем любой модуль, который может работать с AI (например, по названию в extensions)
-        ai_cog = None
-        for ext in self.bot.extensions:
-            if "ai" in ext.lower() or "gemini" in ext.lower() or "pishi" in ext.lower():
-                cog = self.bot.get_cog(ext.split('.')[-1].capitalize()) # Попытка найти Cog
-                if cog:
-                    ai_cog = cog
-                    break
-        
-        # Если нашли какой-то AI-модуль, пробуем вызвать у него метод генерации
-        # (Так как мы не знаем точного названия функции, используем общие варианты)
-        if ai_cog:
-            try:
-                # Пробуем самые частые названия функций для ИИ
-                for method_name in ["generate", "ask", "chat", "get_response"]:
-                    method = getattr(ai_cog, method_name, None)
-                    if method:
-                        prompt = "Придумай очень короткий и смешной POV-мем для семьи 'Hallez FAMQ'. Тема: актив, повышения, войсы или приколы в семье. Стиль: ТикТок. Ответ должен быть только одним предложением."
-                        return await method(prompt)
-            except:
-                pass
-        
-        # Запасные варианты, если AI не найден или ошибка (чтобы команда не падала)
-        backups = [
-            "POV: Ты зашел в войс в 3 часа ночи, а там админы всё еще обсуждают повышения 💀",
-            "POV: Когда набил 100 часов актива, но тебя всё равно называют новичком 😂",
-            "POV: Тот самый момент, когда наконец-то получил роль в Hallez FAMQ 👑",
-            "POV: Твоё лицо, когда увидел, сколько часов в войсе у самого активного чела 😱",
-            "POV: Пытаешься объяснить админу, что ты не АФК, а просто задумался о смысле жизни 🗿"
+    def get_fallback_meme(self):
+        """Список запасных мемов и подписей, чтобы команда НИКОГДА не выдавала ошибку."""
+        fallbacks = [
+            ("POV: Когда ты набил 100 часов актива, а админ говорит 'Ну, неплохо для начала' 💀", "https://i.imgflip.com/4t0m_1.jpg"),
+            ("POV: Твоё лицо, когда в войсе начался разбор за ники 🗿", "https://i.imgflip.com/1otk91.jpg"),
+            ("POV: Зашел в семью Hallez FAMQ и понял, что теперь твоя жизнь — это войс 24/7 😂", "https://i.imgflip.com/26am.jpg"),
+            ("POV: Пытаешься объяснить, что ты не АФК, а просто в глубоких раздумьях 🤡", "https://i.imgflip.com/4t0m_1.jpg"),
+            ("POV: Тот самый момент, когда наконец-то получил повышение до 3 ранга 👑", "https://i.imgflip.com/2//_2.jpg"),
+            ("POV: Когда зашел в войс и там тишина, потому что все на сборе 😱", "https://i.imgflip.com/1otk91.jpg"),
+            ("POV: Смотришь на актив самого топового чела в семье и понимаешь, что он не спит 💀", "https://i.imgflip.com/4t0m_1.jpg"),
+            ("POV: Когда админ сказал 'Собрание через 5 минут', а ты только лег спать 😭", "https://i.imgflip.com/26am.jpg"),
         ]
-        return random.choice(backups)
+        return random.choice(fallbacks)
 
     @tasks.loop(hours=24)
     async def daily_meme_loop(self):
@@ -82,31 +62,30 @@ class Memes(commands.Cog):
         channel = self.bot.get_channel(channel_id)
         if not channel: return
 
-        caption = await self.generate_ai_caption()
-        
         conn = self.get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT url FROM family_memes ORDER BY RANDOM() LIMIT 1")
         result = cursor.fetchone()
         conn.close()
 
-        meme_url = result[0] if result else None
-        if not meme_url:
+        caption, meme_url = self.get_fallback_meme()
+        if result:
+            meme_url = result[0]
+        else:
             async with aiohttp.ClientSession() as session:
                 try:
                     async with session.get("https://meme-api.com/meme", timeout=5) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             meme_url = data.get("url")
-                except: meme_url = None
+                except: pass
 
-        if meme_url:
-            title = render_emojis("{e:laugh} МЕМ ДНЯ: Hallez FAMQ")
-            desc = f"**{caption}**\n\nЛовите заряд настроения! 👇"
-            emb = base_embed(title, desc, guild=channel.guild)
-            emb.set_image(url=meme_url)
-            try: await channel.send(embed=emb)
-            except: pass
+        title = render_emojis("{e:laugh} МЕМ ДНЯ: Hallez FAMQ")
+        desc = f"**{caption}**\n\nЛовите заряд настроения! 👇"
+        emb = base_embed(title, desc, guild=channel.guild)
+        emb.set_image(url=meme_url)
+        try: await channel.send(embed=emb)
+        except: pass
 
     @commands.slash_command(name="add_meme", description="Добавить свой мем в базу (Для руководства)")
     async def add_meme(self, inter: disnake.ApplicationCommandInteraction, url: str):
@@ -119,37 +98,41 @@ class Memes(commands.Cog):
         conn.close()
         await inter.response.send_message(render_emojis("{e:check} Мем добавлен!"), ephemeral=True)
 
-    @commands.slash_command(name="meme", description="Получить мем с ИИ-подписью (КД 20 сек)")
+    @commands.slash_command(name="meme", description="Получить мем (КД 20 сек)")
     @commands.cooldown(1, 20, commands.BucketType.user)
     async def meme(self, inter: disnake.ApplicationCommandInteraction):
-        await inter.response.defer() # Чтобы бот не выдал "внутреннюю ошибку" пока ИИ думает
+        await inter.response.defer()
 
-        # 1. Генерируем умную подпись через Gemini
-        caption = await self.generate_ai_caption()
-
-        # 2. Ищем картинку
+        # 1. Сначала берем запасную подпись и картинку (на случай, если всё остальное упадет)
+        fallback_caption, fallback_url = self.get_fallback_meme()
+        
+        # 2. Пытаемся взять локальный мем
         conn = self.get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT url FROM family_memes ORDER BY RANDOM() LIMIT 1")
         result = cursor.fetchone()
         conn.close()
 
-        if not result or random.random() > 0.5:
+        caption = fallback_caption
+        meme_url = None
+
+        if result:
+            meme_url = result[0]
+        else:
+            # Пытаемся взять из сети
             async with aiohttp.ClientSession() as session:
                 try:
                     async with session.get("https://meme-api.com/meme", timeout=5) as resp:
                         if resp.status == 200:
                             data = await resp.json()
                             meme_url = data.get("url")
-                        else: meme_url = None
-                except: meme_url = None
-        else:
-            meme_url = result[0]
+                except: pass
 
+        # Если всё ещё нет картинки -> используем запасную
         if not meme_url:
-            return await inter.edit_original_response("📦 Мемы временно закончились, попробуй чуть позже!")
+            meme_url = fallback_url
 
-        title = render_emojis("{e:laugh} AI-МЕМ: Hallez FAMQ")
+        title = render_emojis("{e:laugh} РАНДОМНЫЙ МЕМ")
         desc = f"**{caption}**\n\nСвежий прикол для семьи 👇"
         emb = base_embed(title, desc, guild=inter.guild)
         emb.set_image(url=meme_url)
