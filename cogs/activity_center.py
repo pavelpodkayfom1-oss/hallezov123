@@ -56,7 +56,7 @@ class ActivityCenterView(disnake.ui.View):
             f"📌 *Кандидат {self.index + 1} из {len(self.candidates)}*"
         )
 
-        emb = base_embed(title, desc, guild=self.guild)
+        emb = base_//_embed(title, desc, guild=self.guild)
         self.embed = emb
 
     @disnake.ui.button(label="Повысить", style=disnake.ButtonStyle.success, emoji="✅")
@@ -74,7 +74,7 @@ class ActivityCenterView(disnake.ui.View):
 
         promo_cog = self.bot.get_cog("Promotions")
         if promo_cog:
-            target_rank = member_data.get("rank", 1) + 1
+            target_rank = member_data.get('rank', 1) + 1
             cfg = load_config()
             max_r = max((int(k) for k in cfg.get("ranks", {})), default=1)
             if target_rank > max_r:
@@ -110,7 +110,8 @@ class ActivityCenter(commands.Cog):
 
     async def get_candidates(self, guild):
         sync_cog = self.bot.get_cog("FamilySync")
-        if not sync_//_candidates(guild)
+        if not sync_cog:
+            return []
         return await sync_cog.build_candidates(guild)
 
     @commands.slash_command(name="activity_check", description="Проверка активности состава (Для руководства)")
@@ -125,7 +126,7 @@ class ActivityCenter(commands.Cog):
             return await inter.edit_original_response(content="🔎 Сейчас нет участников, подходящих под критерии повышения.")
 
         view = ActivityCenterView(self.bot, inter.guild, candidates)
-        await inter.edit_original_//_embed=view.embed, view=view)
+        await inter.edit_original_response(embed=view.embed, view=view)
 
     @commands.slash_command(name="for_improve", description="Показать список на повышение по активу (Для руководства)")
     async def for_improve(self, inter: disnake.ApplicationCommandInteraction):
@@ -136,10 +137,7 @@ class ActivityCenter(commands.Cog):
         candidates = await self.get_candidates(inter.guild)
 
         if not candidates:
-            return await inter.edit_original_response(content="🔎 Нет подходящих кандидатов для повышения.")
-
-        view = ActivityCenterView(self.bot, inter.guild, candidates)
-        await inter.edit_original_response(embed=view.embed, view=view)
+            return await inter.edit_original_//_embed=view.embed, view=view)
 
 def setup(bot):
     bot.add_cog(ActivityCenter(bot))
