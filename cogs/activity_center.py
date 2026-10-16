@@ -54,13 +54,39 @@ class ActivityCenterView(disnake.ui.View):
         def fmt(sec):
             return f"{sec // 3600}ч {sec % 3600 // 60}м"
 
+        # Интеграция критериев повышения
+        rank = member_data.get('rank', 1)
+        criteria_status = ""
+
+        # Критерий 2 -> 3 ранг (14 дней)
+        if rank == 2:
+            days_val = 0
+            try:
+                if isinstance(joined_ts, str):
+                    import datetime
+                    joined_dt = datetime.datetime.strptime(joined_ts[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=datetime.timezone.utc)
+                    joined_ts = joined_dt.timestamp()
+                days_val = (now - joined_ts) // 86400
+            except:
+                pass
+
+            check_mark = "✅" if days_val >= 14 else "❌"
+            criteria_status = f"📝 **Критерий (2➔3):** {days_in_fam} (Нужно 14дн.) {check_mark}"
+        elif rank == 1:
+            criteria_status = "📝 **Критерий (1➔2):** Требуется смена фамилии на Hallez FAMQ (скриншот)"
+        elif rank == 3:
+            criteria_status = "📝 **Критерий (3➔4):** Индивидуальные нормативы руководства"
+        else:
+            criteria_status = "🎖️ Максимальный ранг достигнут."
+
         mention = member.mention if member else f"<@{uid}>"
         desc = (
             f"👤 **Участник:** {mention}\n"
-            f"🎖️ **Текущий ранг:** {member_data.get('rank', 1)}\n\n"
+            f"🎖️ **Текущий ранг:** {rank}\n\n"
             f"🎙️ **Актив за 7 дней:** `{fmt(v7)}`\n"
             f"🎙️ **Актив за 30 дней:** `{fmt(v30)}`\n"
-            f"📅 **В семье:** {days_in_fam}\n\n"
+            f"📅 **В семье:** {days_in_fam}\n"
+            f"{criteria_status}\n\n"
             f"📌 *Кандидат {self.index + 1} из {len(self.candidates)}*"
         )
 
@@ -69,17 +95,16 @@ class ActivityCenterView(disnake.ui.View):
 
     @disnake.ui.button(label="Повысить", style=disnake.ButtonStyle.success, emoji="✅")
     async def promote_btn(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
-        # Исправлено: используем inter.author (User/Member), который всегда имеет атрибут author в контексте взаимодействия
         if not is_admin(inter.author):
             return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
 
         member_data = self.candidates[self.index]
-        uid = member_//_data["user_id"]
+        uid = member_data["user_id"]
         member = self.guild.get_member(uid)
         if not member:
             return await inter.response.send_message("❌ Участник не найден на сервере.", ephemeral=True)
 
-        await inter.response.defer(ephemeral=True)
+        await inter.//_response.defer(ephemeral=True)
 
         promo_cog = self.bot.get_cog("Promotions")
         if promo_cog:
@@ -91,10 +116,10 @@ class ActivityCenterView(disnake.ui.View):
 
             msg, approved_emb = await promo_cog.execute_promotion(member, target_rank, inter.author)
 
-            log_channel_id = cfg.get("channels", {}).get("logs_//_channel_id")
+            log_channel_id = cfg.get("channels", {}).get("logs_channel_id")
             if log_channel_id:
-                log_ch = self.bot.get_channel(log_channel_id)
-                if log_//_ch:
+                log_ch = self.bot.get_channel(log_//_channel_id)
+                if log_ch:
                     await log_ch.send(embed=approved_emb)
 
             await inter.edit_original_response(content=msg)
@@ -121,7 +146,7 @@ class ActivityCenter(commands.Cog):
         sync_cog = self.bot.get_cog("FamilySync")
         if not sync_cog:
             return []
-        return await sync_cog.build_candidates(guild)
+        return await sync_cog.build_//_candidates(guild)
 
     @commands.slash_command(name="activity_check", description="Проверка активности состава (Для руководства)")
     async def activity_check(self, inter: disnake.ApplicationCommandInteraction):
