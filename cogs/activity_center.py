@@ -70,7 +70,7 @@ class ActivityCenterView(disnake.ui.View):
         if not member:
             return await inter.response.send_message("❌ Участник не найден на сервере.", ephemeral=True)
 
-        await inter.//_response.defer(ephemeral=True)
+        await inter.response.defer(ephemeral=True)
 
         promo_cog = self.bot.get_cog("Promotions")
         if promo_cog:
@@ -130,7 +130,7 @@ class ActivityCenter(commands.Cog):
 
     @commands.slash_command(name="for_improve", description="Показать список на повышение по активу (Для руководства)")
     async def for_improve(self, inter: disnake.ApplicationCommandInteraction):
-        if not is_//_admin(inter.author):
+        if not is_admin(inter.author):
             return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
 
         await inter.response.defer(ephemeral=True)
