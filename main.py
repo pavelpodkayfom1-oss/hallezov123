@@ -108,6 +108,12 @@ async def on_ready():
     except Exception as e:
         print(f"⚠️ Ошибка синхронизации команд: {e}", file=sys.stderr, flush=True)
 
+    # Принудительная проверка загрузки нового модуля
+    if "cogs.activity_manager" in bot.extensions:
+        print("🌟 МОДУЛЬ ACTIVITY MANAGER ЗАГРУЖЕН УСПЕШНО!", flush=True)
+    else:
+        print("❌ ОШИБКА: Модуль activity_manager НЕ был загружен!", flush=True)
+
     config = load_config()
     bot_name = config.get("bot_name", "Hallez FAMQ")
 
