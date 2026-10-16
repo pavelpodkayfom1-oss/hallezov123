@@ -30,7 +30,7 @@ from typing import List, Optional
 
 import aiohttp
 import disnake
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageStat
 
 from utils.card_image import _font as _fallback_font
 
@@ -60,49 +60,53 @@ _SCENES = [
     (("праздник", "день рожд", "турнир", "ивент", "вечеринк"),
      "a luxury rooftop celebration above a glittering city"),
 ]
-_DEFAULT_SCENE = ("a crime family gathering in front of a luxury mansion, black SUVs with their "
-                  "headlights on, palm trees")
-
+# Освещение ТОЛЬКО светлое и читаемое: тёмные «полночь/гроза» давали чёрную картинку, где ничего не видно.
 _TIMES = [
-    "golden hour sunset with long warm shadows",
-    "blue hour dusk with glowing city lights",
-    "midnight with neon reflections on wet asphalt",
-    "a stormy night with rain and dramatic backlight",
-    "early morning haze with warm sun rays",
+    "golden hour sunset with warm glowing light",
+    "bright sunny afternoon with a clear blue sky",
+    "vivid sunset with orange and pink sky",
+    "blue hour dusk with bright glowing city lights and a still-visible sky",
+    "clear early morning with soft warm sun rays",
 ]
 _CAMERAS = [
-    "low-angle wide shot", "cinematic over-the-shoulder shot", "aerial drone view",
-    "telephoto street-level shot with compressed perspective", "symmetrical hero shot",
+    "low-angle wide shot", "cinematic shot from slightly above", "aerial drone view",
+    "street-level wide shot", "symmetrical hero shot",
 ]
 _PALETTES = [
-    "warm orange and deep black with crimson accents",
-    "teal shadows and orange highlights with crimson accents",
-    "smoky black and gold with deep red accents",
+    "warm orange and teal with crimson accents",
+    "vibrant saturated colors with crimson accents",
+    "rich gold and deep blue with red accents",
 ]
 
 
 def _scene_for(text: str) -> str:
+    """Подсказка по обстановке, только если в тексте нашлось знакомое слово. Иначе — пусто:
+    раньше подставлялся один и тот же «особняк с чёрными джипами», и картинка не совпадала с темой."""
     low = text.lower()
     for words, scene in _SCENES:
         if any(w in low for w in words):
             return scene
-    return _DEFAULT_SCENE
+    return ""
 
 
 def build_prompt(title: str, info: str) -> str:
-    """Каждый раз новый промпт: смысл сбора + случайные время суток, ракурс и палитра."""
+    """Каждый раз новый промпт: ГЛАВНОЕ — то, что написал руководитель, плюс случайные свет, ракурс, палитра."""
     rnd = random.Random()
     theme = " ".join(x for x in (title.strip(), info.strip()) if x)[:240]
+    hint = _scene_for(theme)
     return (
-        f"Ultra-detailed cinematic key art for a video-game crime-family announcement. "
-        f"Scene: {_scene_for(theme)}. "
-        f"The gathering is described by its organizer (in Russian) as: \"{theme}\" - use it only as "
-        f"inspiration for the scene's mood and setting. "
-        f"Lighting: {rnd.choice(_TIMES)}. Camera: {rnd.choice(_CAMERAS)}. "
+        f"A bright, vivid, well-lit, highly detailed cinematic illustration for a video-game crime-family "
+        f"event announcement. "
+        f"MAIN SUBJECT - it must be instantly recognizable and clearly visible: the organizer wrote "
+        f"(in Russian) \"{theme}\". Translate it and depict exactly what it means, literally and "
+        f"prominently, in the center-right of the frame. "
+        + (f"Setting suggestion: {hint}. " if hint else "")
+        + f"Lighting: {rnd.choice(_TIMES)}. Camera: {rnd.choice(_CAMERAS)}. "
         f"Color grading: {rnd.choice(_PALETTES)}. "
-        f"Ultra-wide 21:9 composition: the main subject sits in the right two thirds, the left third "
-        f"stays calm and darker (empty space reserved for a title). Volumetric light, sharp focus, rich "
-        f"contrast, premium poster quality, faceless silhouettes only. "
+        f"Ultra-wide 21:9 composition: the main subject fills the right two thirds, the left third "
+        f"is less busy (room for a title) but still well lit, never black. "
+        f"Bright exposure, sharp focus, strong contrast, no dark or muddy shadows, premium poster quality, "
+        f"faceless characters only. "
         f"Absolutely no text, letters, numbers, logos, watermarks or interface elements."
     )
 
@@ -476,7 +480,7 @@ def _fallback_background() -> Image.Image:
         if os.path.exists(p):
             try:
                 img = _cover(Image.open(p).convert("RGB"), W, H).filter(ImageFilter.GaussianBlur(7))
-                return Image.blend(img, Image.new("RGB", (W, H), (0, 0, 0)), 0.45)
+                return Image.blend(img, Image.new("RGB", (W, H), (0, 0, 0)), 0.30)
             except Exception:
                 break
     img = Image.new("RGB", (W, H), (20, 8, 10))
@@ -504,21 +508,31 @@ def _compose(bg: Optional[bytes], title: str, time_str: str, place: str,
     if img is None:
         img = _fallback_background()
 
-    # затемнение: слева (под текст), снизу и сверху
+    # если нейросеть выдала тёмный кадр — подсвечиваем, иначе после затемнения под текст ничего не видно
+    if bg and img is not None:
+        try:
+            mean = ImageStat.Stat(img.convert("L")).mean[0]
+            if mean < 105:
+                img = ImageEnhance.Brightness(img).enhance(min(2.2, 120 / max(mean, 12)))
+                img = ImageEnhance.Contrast(img).enhance(1.08)
+        except Exception:
+            pass
+
+    # лёгкое затемнение под текст: слева, снизу и сверху (раньше было вдвое плотнее и «съедало» картинку)
     side = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     sd = ImageDraw.Draw(side)
     for x in range(W):
-        a = int(225 * max(0.0, 1 - x / (W * 0.80)) ** 1.15)
+        a = int(150 * max(0.0, 1 - x / (W * 0.58)) ** 1.4)
         sd.line([(x, 0), (x, H)], fill=(0, 0, 0, a))
     bottom = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     bd = ImageDraw.Draw(bottom)
-    for y in range(int(H * 0.50), H):
-        a = int(165 * ((y - H * 0.50) / (H * 0.50)) ** 1.3)
+    for y in range(int(H * 0.58), H):
+        a = int(125 * max(0.0, (y - H * 0.58) / (H * 0.42)) ** 1.4)
         bd.line([(0, y), (W, y)], fill=(0, 0, 0, a))
     top = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     td = ImageDraw.Draw(top)
-    for y in range(0, 110):
-        td.line([(0, y), (W, y)], fill=(0, 0, 0, int(110 * (1 - y / 110))))
+    for y in range(0, 90):
+        td.line([(0, y), (W, y)], fill=(0, 0, 0, int(65 * (1 - y / 90))))
     img = Image.alpha_composite(img.convert("RGBA"), side)
     img = Image.alpha_composite(img, bottom)
     img = Image.alpha_composite(img, top)
