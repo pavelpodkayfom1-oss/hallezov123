@@ -54,12 +54,13 @@ class ActivityCenterView(disnake.ui.View):
         def fmt(sec):
             return f"{sec // 3600}ч {sec % 3600 // 60}м"
 
+        mention = member.mention if member else f"<@{uid}>"
         desc = (
-            f"👤 **Участник:** {member.mention if member else f'<@{uid}>'}\n"
+            f"👤 **Участник:** {mention}\n"
             f"🎖️ **Текущий ранг:** {member_data.get('rank', 1)}\n\n"
             f"🎙️ **Актив за 7 дней:** `{fmt(v7)}`\n"
             f"🎙️ **Актив за 30 дней:** `{fmt(v30)}`\n"
-            f"📅 **В семье:** {days_in_fam}\n\n"
+            f"📅 **В семье:** {days_in_//_fam}\n\n"
             f"📌 *Кандидат {self.index + 1} из {len(self.candidates)}*"
         )
 
