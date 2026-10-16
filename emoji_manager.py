@@ -54,42 +54,42 @@ EMOJI_RE = re.compile(
 ALIASES = {
     "🎉": ["party", "tada", "confetti", "celebrate", "congrat", "hype"],
     "🎊": ["party", "tada", "confetti", "celebrate"],
-    "✨": ["sparkle", "sparkles", "shine", "glitter", "magic"],
-    "🌟": ["star", "glow", "shine"],
-    "⭐": ["star"],
-    "💎": ["diamond", "gem", "crystal", "jewel"],
-    "👑": ["crown", "king", "owner", "leader"],
-    "📜": ["scroll", "rules", "paper", "document"],
-    "📝": ["note", "form", "write", "pen", "anketa"],
-    "📌": ["pin", "pushpin"],
-    "📍": ["pin", "location", "place", "marker"],
-    "🎖": ["medal", "rank", "award"],
-    "🏆": ["trophy", "win", "cup"],
-    "🎙": ["mic", "microphone", "voice"],
-    "🔎": ["search", "magnify", "find"],
-    "🟡": ["yellow"],
-    "🟢": ["green", "online"],
-    "🔴": ["red", "offline"],
-    "⚜": ["fleur", "lily", "emblem", "family"],
-    "🤝": ["handshake", "deal", "friend"],
-    "👤": ["user", "person", "profile", "member"],
-    "🆔": ["static", "idcard"],
-    "👇": ["down", "point"],
-    "⏳": ["hourglass", "timer", "wait"],
-    "✅": ["check", "yes", "done", "success", "tick"],
-    "❌": ["cross", "reject", "deny", "fail"],
-    "⚠": ["warning", "alert", "warn"],
-    "🔥": ["fire", "flame", "hot"],
-    "❤": ["heart", "love"],
-    "💬": ["chat", "message", "talk"],
-    "🔔": ["bell", "notify", "remind"],
-    "🏠": ["home", "house"],
-    "🔒": ["lock", "closed"],
-    "🔓": ["unlock", "open"],
-    "📢": ["announce", "megaphone", "news"],
-    "🎮": ["game", "gaming", "play"],
-    "⚔": ["sword", "battle", "war"],
-    "🛡": ["shield", "protect"],
+    "✨": ["sparkle", "sparkles", "shine", "glitter", "magic", "premium", "luxury"],
+    "🌟": ["star", "glow", "shine", "top", "vip"],
+    "⭐": ["star", "rank", "level"],
+    "💎": ["diamond", "gem", "crystal", "jewel", "rich", "premium"],
+    "👑": ["crown", "king", "owner", "leader", "boss", "head"],
+    "📜": ["scroll", "rules", "paper", "document", "law", "statute"],
+    "📝": ["note", "form", "write", "pen", "anketa", "application"],
+    "📌": ["pin", "pushpin", "important", "notice"],
+    "📍": ["pin", "location", "place", "marker", "point"],
+    "🎖": ["medal", "rank", "award", "achievement"],
+    "🏆": ["trophy", "win", "cup", "champion"],
+    "🎙": ["mic", "microphone", "voice", "speech", "meeting"],
+    "🔎": ["search", "magnify", "find", "check", "audit"],
+    "🟡": ["yellow", "medium", "wait"],
+    "🟢": ["green", "online", "active", "success"],
+    "🔴": ["red", "offline", "inactive", "error"],
+    "⚜": ["fleur", "lily", "emblem", "family", "clan", "dynasty"],
+    "🤝": ["handshake", "deal", "friend", "alliance", "partnership"],
+    "👤": ["user", "person", "profile", "member", "citizen"],
+    "🆔": ["static", "idcard", "passport", "document"],
+    "👇": ["down", "point", "look", "below"],
+    "⏳": ["hourglass", "timer", "wait", "processing"],
+    "✅": ["check", "yes", "done", "success", "tick", "approved", "confirmed"],
+    "❌": ["cross", "reject", "deny", "fail", "rejected", "forbidden"],
+    "⚠": ["warning", "alert", "warn", "caution", "attention"],
+    "🔥": ["fire", "flame", "hot", "hype", "active"],
+    "❤": ["heart", "love", "loyalty", "passion"],
+    "💬": ["chat", "message", "talk", "comment", "discord"],
+    "🔔": ["bell", "notify", "remind", "alert"],
+    "🏠": ["home", "house", "base", "hq"],
+    "🔒": ["lock", "closed", "private", "secure"],
+    "🔓": ["unlock", "open", "public", "accessible"],
+    "📢": ["announce", "megaphone", "news", "broadcast"],
+    "🎮": ["game", "gaming", "play", "hobby"],
+    "⚔": ["sword", "battle", "war", "fight", "combat"],
+    "🛡": ["shield", "protect", "defense", "security"],
 }
 
 
@@ -233,18 +233,19 @@ def _targets(scope, cfg, hall):
 # ------------------------------------------------------------------ ИИ
 CUSTOM_RE = re.compile(r"<a?:\w+:\d+>")
 AI_SYSTEM = (
-    "Ты оформляешь тексты Discord-бота игровой семьи (Majestic RP). "
-    "Тебе дают кастомные премиум-эмодзи (имя, код, картинка) и JSON с текстами. "
+    "Ты — ведущий UI/UX дизайнер интерфейсов для Discord. Твоя задача: превратить обычные тексты бота в премиальный, дорогой и стильный продукт для влиятельной семьи в Majestic RP.\n"
+    "Тебе дают кастомные премиум-эмодзи (имя, код, картинка) и JSON с текстами.\n"
     "Верни ТОЛЬКО JSON того же вида {id: новый_текст}, без пояснений и без ```.\n"
-    "Правила:\n"
-    "1) Меняй только эмодзи: заменяй обычные юникод-эмодзи на подходящие кастомные и можешь "
-    "добавить кастомные в начало заголовков и пунктов списка там, где это уместно. Не больше одного эмодзи на строку.\n"
-    "2) Весь остальной текст, markdown (**, `, •), переносы строк, плейсхолдеры вида {mention}, {nick}, {server} "
-    "и любые упоминания оставь символ в символ.\n"
-    "3) Используй только коды из списка и копируй их точно.\n"
-    "4) Подбирай по смыслу картинки. Один смысл (принят, отказ, внимание, ранг) всегда одно и то же эмодзи во всех текстах, "
-    "но в целом используй разные эмодзи, а не одно на всё.\n"
-    "5) Если подходящего эмодзи нет, оставь обычное как есть."
+    "ПРАВИЛА ПРЕМИУМ-ОФОРМЛЕНИЯ:\n"
+    "1) ЭСТЕТИКА: Заменяй все стандартные эмодзи на кастомные. Если подходящего кастомного нет, оставь обычный, но старайся найти замену по смыслу.\n"
+    "2) СТРУКТУРА: Используй эмодзи как элементы дизайна. \n"
+    "   - Для заголовков: используй одну статусную иконку в начале (например, корона, алмаз, герб).\n"
+    "   - Для списков: используй однотипные элегантные маркеры (например, золотые точки или галочки).\n"
+    "   - Для важных предупреждений: используй акцентные иконки (внимание, щит).\n"
+    "3) УМЕРЕННОСТЬ: Не перегружай текст. Один заголовок — один эмодзи. Одна строка — максимум один эмодзи. Текст должен «дышать».\n"
+    "4) СОХРАННОСТЬ: Весь остальной текст, markdown (**, `, •), переносы строк, плейсхолдеры ({mention}, {nick}) оставь символ в символ.\n"
+    "5) КОНСИСТЕНТНОСТЬ: Один смысл (например, 'Принято' или 'Отказ') = один и тот же эмодзи во всем проекте.\n"
+    "6) ПРИОРИТЕТ: Если в списке есть анимированные эмодзи (<a:...), используй их для самых важных событий (поздравления, критические ошибки), чтобы добавить динамики."
 )
 
 

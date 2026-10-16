@@ -835,9 +835,40 @@ class AdminCog(commands.Cog):
         await self.admin_command(inter)
 
     @commands.slash_command(
-        name="addadmin",
-        description="Выдать права администратора бота конкретному человеку"
+        name="test_texts",
+        description="Проверка всех оформленных текстов бота (Только для админов)"
     )
+    async def test_texts(self, inter: disnake.ApplicationCommandInteraction):
+        if not is_admin(inter):
+            await inter.response.send_message("❌ Доступ запрещен!", ephemeral=True)
+            return
+
+        await inter.response.defer(ephemeral=True)
+
+        from utils.checks import load_config, get_text
+        config = load_config()
+        texts = config.get("texts", {})
+
+        # Список самых важных текстов для проверки
+        test_cases = [
+            ("Баннер набора", "recruit_panel_title", "recruit_panel_desc"),
+            ("Карточка заявки", "recruit_card_title", "recruit_card_desc"),
+            ("Отказ в заявке", "recruit_rejected_title", "recruit_rejected_desc"),
+            ("Принятие в семью", "recruit_accepted_title", "recruit_accepted_desc"),
+            ("Баннер повышений", "promo_panel_title", "promo_panel_desc"),
+            ("Одобрение повышения", "promo_approved_title", "promo_approved_desc"),
+            ("Отказ в повышении", "promo_rejected_title", "promo_rejected_desc"),
+        ]
+
+        for label, title_key, desc_key in test_cases:
+            title = get_text(title_key, "Без названия")
+            desc = get_text(desc_key, "Без описания")
+
+            emb = base_embed(title, desc, guild=inter.guild)
+            await inter.channel.send(embed=emb)
+
+        await inter.edit_original_response(content="✅ Все основные тексты отправлены в канал для проверки!")
+
     async def add_admin_command(
         self,
         inter: disnake.ApplicationCommandInteraction,
