@@ -135,5 +135,9 @@
     "footer_text": "Majestic RP • {bot_name}"
   },
   "recruit_banner_file": "banner_image.png",
-  "recruit_banner_url": ""
+  "recruit_banner_url": "",
+  "nick_check": {
+    "enabled": true,
+    "tag": "Hallez"
+  }
 }
