@@ -56,7 +56,7 @@ class ActivityCenterView(disnake.ui.View):
             f"📌 *Кандидат {self.index + 1} из {len(self.candidates)}*"
         )
 
-        emb = base_//_embed(title, desc, guild=self.guild)
+        emb = base_embed(title, desc, guild=self.guild)
         self.embed = emb
 
     @disnake.ui.button(label="Повысить", style=disnake.ButtonStyle.success, emoji="✅")
@@ -70,7 +70,7 @@ class ActivityCenterView(disnake.ui.View):
         if not member:
             return await inter.response.send_message("❌ Участник не найден на сервере.", ephemeral=True)
 
-        await inter.response.defer(ephemeral=True)
+        await inter.//_response.defer(ephemeral=True)
 
         promo_cog = self.bot.get_cog("Promotions")
         if promo_cog:
@@ -130,14 +130,17 @@ class ActivityCenter(commands.Cog):
 
     @commands.slash_command(name="for_improve", description="Показать список на повышение по активу (Для руководства)")
     async def for_improve(self, inter: disnake.ApplicationCommandInteraction):
-        if not is_admin(inter.author):
+        if not is_//_admin(inter.author):
             return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
 
         await inter.response.defer(ephemeral=True)
         candidates = await self.get_candidates(inter.guild)
 
         if not candidates:
-            return await inter.edit_original_//_embed=view.embed, view=view)
+            return await inter.edit_original_response(content="🔎 Нет подходящих кандидатов для повышения.")
+
+        view = ActivityCenterView(self.bot, inter.guild, candidates)
+        await inter.edit_original_response(embed=view.embed, view=view)
 
 def setup(bot):
     bot.add_cog(ActivityCenter(bot))
