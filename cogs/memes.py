@@ -17,7 +17,27 @@ class Memes(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db_path = 'database.db'
+        # При запуске модуля автоматически создаем таблицу, если её нет
+        self.init_db()
         self.daily_meme_loop.start()
+
+    def init_db(self):
+        """Создает таблицу для мемов прямо при инициализации Cog."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS family_memes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL,
+                    added_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"❌ Ошибка при создании таблицы family_memes в init: {e}")
 
     def get_db_connection(self):
         return sqlite3.connect(self.db_path)
@@ -34,7 +54,6 @@ class Memes(commands.Cog):
         if not channel:
             return
 
-        # Пытаемся взять из локальной базы, если нет - берем рандомный из сети
         conn = self.get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT url FROM family_memes ORDER BY RANDOM() LIMIT 1")
@@ -44,14 +63,16 @@ class Memes(commands.Cog):
         if result:
             meme_url = result[0]
         else:
-            # Запасной вариант: рандомный мем из открытого API
             async with aiohttp.ClientSession() as session:
-                async with session.get("https://meme-api.com/meme") as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        meme_url = data.get("url")
-                    else:
-                        meme_url = None
+                try:
+                    async with session.get("https://meme-api.com/meme", timeout=5) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            meme_url = data.get("url")
+                        else:
+                            meme_url = None
+                except:
+                    meme_url = None
 
         if meme_url:
             title = render_emojis("{e:laugh} МЕМ ДНЯ: Hallez FAMQ")
@@ -88,18 +109,28 @@ class Memes(commands.Cog):
     )
     @commands.cooldown(1, 20, commands.BucketType.user)
     async def meme(self, inter: disnake.ApplicationCommandInteraction):
-        # Сначала пробуем взять локальный мем (которые загрузили админы)
         conn = self.get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT url FROM family_memes ORDER BY RANDOM() LIMIT 1")
-        result = cursor.fetchone()
+        try:
+            cursor.execute("SELECT url FROM family_memes ORDER BY RANDOM() LIMIT 1")
+            result = cursor.fetchone()
+        except sqlite3.OperationalError:
+            # Если вдруг таблица всё ещё не создалась, создаем её прямо тут
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS family_memes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL,
+                    added_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            conn.commit()
+            result = None
         conn.close()
 
-        # Если локальных нет или с шансом 50% берем из сети (для разнообразия)
         if not result or random.random() > 0.5:
             async with aiohttp.ClientSession() as session:
                 try:
-                    # Используем API с популярными мемами
                     async with session.get("https://meme-api.com/meme", timeout=5) as resp:
                         if resp.status == 200:
                             data = await resp.json()
