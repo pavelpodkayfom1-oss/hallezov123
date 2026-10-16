@@ -125,6 +125,22 @@ SECTIONS = {
         ],
         "actions": [("Активные розыгрыши", "📋", "act_gw_list")],
     },
+    "promo_hint": {
+        "emoji": "🔔", "title": "Подсказки о повышении",
+        "desc": "Раз в сутки бот кладёт руководству карточку «Пора повысить?» с кнопками. "
+                "Участникам ничего не отправляется. Критерии (дни, часы войса, выговоры) — в разделе «Кандидаты».",
+        "params": [
+            param("promo_hint.enabled", "Подсказки включены", "bool"),
+            param("promo_hint.channel_id", "Канал для карточек (пусто — канал кандидатов)", "channel"),
+            param("promo_hint.ping_role_id", "Роль для пинга (пусто — без пингов)", "role"),
+            param("promo_hint.hour", "Час проверки (0–23)", "int", 0, 23),
+            param("promo_hint.max_per_day", "Максимум новых карточек в сутки", "int", 1, 20),
+            param("promo_hint.min_events", "Минимум отметок на сборах за 14 дн.", "int", 0, 100),
+            param("promo_hint.snooze_days", "На сколько дней откладывает «Позже»", "int", 1, 60),
+            param("promo_hint.max_reminders", "Сколько раз всего можно напомнить", "int", 1, 10),
+        ],
+        "actions": [],
+    },
     "general": {
         "emoji": "⚙️", "title": "Общие",
         "desc": "Часовой пояс влияет на время недельных отчётов и подсчёт войса по дням.",
@@ -135,7 +151,8 @@ SECTIONS = {
         "actions": [],
     },
 }
-ORDER = ["logs", "autorole", "vacation", "warn_guard", "ranks", "candidates", "treasury", "giveaway", "general"]
+ORDER = ["logs", "autorole", "vacation", "warn_guard", "ranks", "candidates", "promo_hint", "treasury",
+         "giveaway", "general"]
 
 
 def _id(x: Any) -> int:

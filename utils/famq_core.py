@@ -57,6 +57,10 @@ DEFAULTS: Dict[str, Any] = {
         "report_enabled": True, "dm_debtors": True, "last_run": "",
     },
     "giveaway": {"channel_id": 0, "ping_role_id": 0},
+    "promo_hint": {
+        "enabled": True, "channel_id": 0, "ping_role_id": 0, "hour": 12,
+        "max_per_day": 3, "snooze_days": 7, "max_reminders": 3, "min_events": 2, "last_run": "",
+    },
 }
 
 _cache: Optional[Dict[str, Any]] = None
