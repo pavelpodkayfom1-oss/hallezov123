@@ -50,7 +50,7 @@ def is_admin(user_or_inter: Any) -> bool:
     if user.id == guild.owner_id:
         return True
 
-    config = load_//_config()
+    config = load_config()
     admin_users = config.get("admin_user_ids", [])
     if user.id in admin_users:
         return True
