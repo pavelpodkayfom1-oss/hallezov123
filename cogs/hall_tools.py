@@ -46,7 +46,7 @@ DEFAULTS = {
     "welcome_enabled": True,
     "welcome_channel_id": 0,
     "rules_text": DEFAULT_RULES,
-    "remind_enabled": True,
+    "remind_enabled": False,
     "remind_hours": 336,          # 14 дней
     "remind_mode": "both",        # dm / channel / both
     "remind_channel_id": 0,

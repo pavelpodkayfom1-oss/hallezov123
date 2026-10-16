@@ -29,7 +29,7 @@ DEFAULTS: Dict[str, Any] = {
     "welcome_enabled": True,
     "welcome_channel_id": 0,
     "rules_text": "Привет, {mention}! Добро пожаловать на {server}!",
-    "remind_enabled": True,
+    "remind_enabled": False,
     "remind_hours": 336,
     "remind_channel_id": 0,
     "leave_channel_id": 0,
