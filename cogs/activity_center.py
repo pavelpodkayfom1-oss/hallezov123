@@ -60,7 +60,7 @@ class ActivityCenterView(disnake.ui.View):
             f"🎖️ **Текущий ранг:** {member_data.get('rank', 1)}\n\n"
             f"🎙️ **Актив за 7 дней:** `{fmt(v7)}`\n"
             f"🎙️ **Актив за 30 дней:** `{fmt(v30)}`\n"
-            f"📅 **В семье:** {days_in_//_fam}\n\n"
+            f"📅 **В семье:** {days_in_fam}\n\n"
             f"📌 *Кандидат {self.index + 1} из {len(self.candidates)}*"
         )
 
@@ -103,7 +103,7 @@ class ActivityCenterView(disnake.ui.View):
     @disnake.ui.button(label="Позже", style=disnake.ButtonStyle.secondary, emoji="⏳")
     async def later_btn(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_//_send_message("❌ Нет доступа.", ephemeral=True)
 
         self.index += 1
         if self.index >= len(self.candidates):
