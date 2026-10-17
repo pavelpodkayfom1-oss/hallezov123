@@ -1,7 +1,7 @@
 """
 ⚜️ Центр управления: /центр
 Одна панель для всех новых функций: логи (по каналам), авто-роли при входе, отпуска,
-защита выговоров, ранги и карточка, кандидаты, казна, розыгрыши.
+защита выговоров, ранги и карточка, кандидаты, розыгрыши.
 Навигация: меню разделов -> меню параметров -> выбор канала/роли -> готово (сохраняется сразу).
 Доступ: только администраторы бота (admin_user_ids / admin_role_ids из config.json) и админы Discord.
 """
@@ -40,7 +40,6 @@ SECTIONS = {
             param("logs.commands", "Использование команд бота", "channel"),
             param("logs.bot", "События и ошибки бота", "channel"),
             param("logs.vacation", "Отпуска", "channel"),
-            param("logs.treasury", "Казна", "channel"),
             param("logs.giveaway", "Розыгрыши", "channel"),
         ],
         "actions": [("Тест логов", "🧪", "act_test_logs")],
@@ -102,20 +101,6 @@ SECTIONS = {
         ],
         "actions": [("Показать сейчас", "👁️", "act_cand_show"), ("Опубликовать сейчас", "📨", "act_cand_post")],
     },
-    "treasury": {
-        "emoji": "💰", "title": "Казна",
-        "desc": "Команды: /казна баланс · сдал · потратил · история · долги. "
-                "Должникам бот тихо напоминает в личные сообщения.",
-        "params": [
-            param("treasury.channel_id", "Канал для недельного отчёта", "channel"),
-            param("treasury.weekly_due", "Взнос в неделю с участника (0 — не учитывать)", "int", 0, 10 ** 9),
-            param("treasury.report_enabled", "Недельный отчёт включён", "bool"),
-            param("treasury.dm_debtors", "Напоминать должникам в ЛС", "bool"),
-            param("treasury.weekday", "День недели отчёта (0=пн … 6=вс)", "int", 0, 6),
-            param("treasury.hour", "Час отчёта (0–23)", "int", 0, 23),
-        ],
-        "actions": [("Отчёт сейчас", "📊", "act_treasury_now")],
-    },
     "giveaway": {
         "emoji": "🎁", "title": "Розыгрыши",
         "desc": "Запуск: /розыгрыш создать (приз, длительность, победители, мин. ранг, мин. часы войса).",
@@ -135,7 +120,7 @@ SECTIONS = {
         "actions": [],
     },
 }
-ORDER = ["logs", "autorole", "vacation", "warn_guard", "ranks", "candidates", "treasury", "giveaway", "general"]
+ORDER = ["logs", "autorole", "vacation", "warn_guard", "ranks", "candidates", "giveaway", "general"]
 
 
 def _id(x: Any) -> int:
@@ -336,7 +321,6 @@ class ControlCenter(commands.Cog):
         vac_active = await core.q_one("SELECT COUNT(*) AS c FROM vacations WHERE guild_id=? AND status='active'", (guild.id,))
         vac_pending = await core.q_one("SELECT COUNT(*) AS c FROM vacations WHERE guild_id=? AND status='pending'", (guild.id,))
         gw = await core.q_one("SELECT COUNT(*) AS c FROM giveaways WHERE guild_id=? AND status='active'", (guild.id,))
-        bal = await core.treasury_balance(guild.id)
         stats = await database.get_stats()
         afk = sum(1 for m in humans if core.pause_kind(m) == "afk")
 
@@ -346,7 +330,6 @@ class ControlCenter(commands.Cog):
                     inline=True)
         e.add_field("📋 Заявки", f"На вступление: **{stats['pending_apps']}**\nНа повышение: **{stats['pending_promos']}**\n"
                                  f"Выговоров: **{stats['active_warns']}**", inline=True)
-        e.add_field("💰 Казна", f"**{bal:,}**".replace(",", " "), inline=True)
         e.add_field("🎁 Розыгрыши", f"Активных: **{gw['c']}**", inline=True)
         e.add_field("🎙️ В войсе сейчас", f"**{sum(len(v.members) for v in guild.voice_channels)}**", inline=True)
 
@@ -392,7 +375,7 @@ class ControlCenter(commands.Cog):
 
     # ───── команда ─────
 
-    @commands.slash_command(name="центр", description="⚜️ Центр управления: логи, роли, отпуска, казна, розыгрыши")
+    @commands.slash_command(name="центр", description="⚜️ Центр управления: логи, роли, отпуска, розыгрыши")
     @commands.guild_only()
     async def center(self, inter: disnake.ApplicationCommandInteraction):
         if not core.is_admin(inter.author):
@@ -479,11 +462,6 @@ class ControlCenter(commands.Cog):
         cog = self.bot.get_cog("FamilySync")
         await inter.response.defer(ephemeral=True)
         await inter.followup.send(await cog.post_candidates(inter.guild), ephemeral=True)
-
-    async def act_treasury_now(self, inter: disnake.MessageInteraction):
-        cog = self.bot.get_cog("Treasury")
-        await inter.response.defer(ephemeral=True)
-        await inter.followup.send(await cog.post_report(inter.guild, dm=False), ephemeral=True)
 
     async def act_gw_list(self, inter: disnake.MessageInteraction):
         rows = await core.q_all("SELECT * FROM giveaways WHERE guild_id=? AND status='active' ORDER BY end_ts",
