@@ -27,6 +27,25 @@ YTDL_OPTS = {
 PLAY_COOLDOWN = 20
 SEARCH_RESULTS = 3
 BOT_CHECK_MARK = "not a bot"
+# На слабом хосте поиск на YouTube (с куками) может убивать бота по памяти.
+# SoundCloud лёгкий и не требует входа, поэтому ищем сначала там. Поставьте False, чтобы вернуть YouTube первым.
+PREFER_SOUNDCLOUD = True
+
+
+def _rss_mb() -> int:
+    """Сколько памяти (МБ) занимает бот — для диагностики на слабом хосте."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) // 1024
+    except Exception:
+        pass
+    return -1
+
+
+def _log(msg: str):
+    print(f"[music] {msg} | RSS={_rss_mb()} МБ", flush=True)
 # Необязательно: если рядом с main.py лежит cookies.txt, он используется для YouTube.
 # (раньше путь считался на папку выше и файл никогда не находился)
 COOKIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
@@ -282,53 +301,77 @@ class Music(commands.Cog):
             opts = dict(YTDL_OPTS)
             if os.path.exists(COOKIES_FILE):
                 opts["cookiefile"] = COOKIES_FILE
-
-            if is_url:
-                candidates = [query]
-            else:
-                with yt_dlp.YoutubeDL(dict(opts, extract_flat=True)) as ydl:
-                    res = ydl.extract_info(f"ytsearch{SEARCH_RESULTS}:{query}", download=False)
-                candidates = []
-                for e in (res.get("entries") or []):
-                    if not e:
-                        continue
-                    url = e.get("url") or (f"https://www.youtube.com/watch?v={e['id']}" if e.get("id") else None)
-                    if url:
-                        candidates.append(url)
-                if not candidates:
-                    raise RuntimeError("Ничего не найдено")
-
+            sc_opts = {k: v for k, v in opts.items() if k != "cookiefile"}  # SoundCloud куки YouTube не нужны
             last = None
-            for url in candidates:
+
+            def pick(url, o):
+                with yt_dlp.YoutubeDL(o) as ydl:
+                    data = ydl.extract_info(url, download=False)
+                if "entries" in data:
+                    data = [x for x in data["entries"] if x][0]
+                return data
+
+            def soundcloud():
+                nonlocal last
+                _log("SoundCloud: ищу")
                 try:
-                    with yt_dlp.YoutubeDL(opts) as ydl:
-                        data = ydl.extract_info(url, download=False)
-                    if "entries" in data:
-                        data = [x for x in data["entries"] if x][0]
-                    return data
-                except Exception as e:  # возрастное ограничение, недоступно и т.п. — пробуем следующий
-                    last = e
-                    if BOT_CHECK_MARK in str(e):
-                        break  # YouTube блокирует вход — остальные варианты упадут так же, не тратим ресурсы
-            # Запасной вариант: SoundCloud (не требует входа в аккаунт)
-            if not is_url:
-                try:
-                    with yt_dlp.YoutubeDL(dict(opts, extract_flat=True)) as ydl:
+                    with yt_dlp.YoutubeDL(dict(sc_opts, extract_flat=True)) as ydl:
                         res = ydl.extract_info(f"scsearch{SEARCH_RESULTS}:{query}", download=False)
                     for e in (res.get("entries") or []):
                         url = e.get("url") if e else None
                         if not url:
                             continue
                         try:
-                            with yt_dlp.YoutubeDL(opts) as ydl:
-                                data = ydl.extract_info(url, download=False)
-                            if "entries" in data:
-                                data = [x for x in data["entries"] if x][0]
+                            data = pick(url, sc_opts)
+                            _log("SoundCloud: нашёл")
                             return data
                         except Exception as ex:
                             last = ex
                 except Exception as ex:
                     last = ex
+                _log("SoundCloud: ничего")
+                return None
+
+            # 1) текстовый запрос — сначала лёгкий SoundCloud
+            if not is_url and PREFER_SOUNDCLOUD:
+                data = soundcloud()
+                if data:
+                    return data
+
+            # 2) YouTube (ссылки и запасной вариант)
+            try:
+                if is_url:
+                    candidates = [query]
+                else:
+                    _log("YouTube: ищу")
+                    with yt_dlp.YoutubeDL(dict(opts, extract_flat=True)) as ydl:
+                        res = ydl.extract_info(f"ytsearch{SEARCH_RESULTS}:{query}", download=False)
+                    candidates = []
+                    for e in (res.get("entries") or []):
+                        if not e:
+                            continue
+                        url = e.get("url") or (f"https://www.youtube.com/watch?v={e['id']}" if e.get("id") else None)
+                        if url:
+                            candidates.append(url)
+                for url in candidates:
+                    try:
+                        _log("YouTube: достаю поток")
+                        data = pick(url, opts)
+                        _log("YouTube: готово")
+                        return data
+                    except Exception as e:  # возрастное ограничение, недоступно и т.п. — пробуем следующий
+                        last = e
+                        if BOT_CHECK_MARK in str(e):
+                            break  # YouTube блокирует вход — остальные варианты упадут так же
+            except Exception as e:
+                last = e
+
+            # 3) старый порядок (YouTube первым) — SoundCloud как запасной
+            if not is_url and not PREFER_SOUNDCLOUD:
+                data = soundcloud()
+                if data:
+                    return data
+
             msg = _ANSI.sub("", str(last)) if last else "Ничего не найдено"
             if "confirm you" in msg and "not a bot" in msg:
                 if os.path.exists(COOKIES_FILE):
@@ -340,7 +383,10 @@ class Music(commands.Cog):
             raise RuntimeError(msg[:300])
 
         async with self._extract_lock:
+            _log(f"старт поиска: {query[:50]!r}")
+            t0 = time.time()
             data = await asyncio.get_running_loop().run_in_executor(None, run)
+            _log(f"поиск завершён за {time.time() - t0:.1f} с")
         return {
             "title": data.get("title", "Без названия"),
             "stream_url": data["url"],
