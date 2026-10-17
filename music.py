@@ -18,8 +18,9 @@ YTDL_OPTS = {
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
 }
-# Необязательно: если рядом с main.py лежит cookies.txt, он используется для YouTube
-COOKIES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cookies.txt")
+# Необязательно: если рядом с main.py лежит cookies.txt, он используется для YouTube.
+# (раньше путь считался на папку выше и файл никогда не находился)
+COOKIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 FFMPEG_BEFORE = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
 FFMPEG_OPTS = "-vn"
@@ -315,6 +316,13 @@ class Music(commands.Cog):
                 except Exception as ex:
                     last = ex
             msg = _ANSI.sub("", str(last)) if last else "Ничего не найдено"
+            if "confirm you" in msg and "not a bot" in msg:
+                if os.path.exists(COOKIES_FILE):
+                    msg = ("YouTube не принял cookies.txt (устарел или аккаунт разлогинен). "
+                           "Экспортируйте свежий cookies.txt и положите рядом с main.py.")
+                else:
+                    msg = ("YouTube требует вход. Положите cookies.txt рядом с main.py "
+                           "(экспорт из браузера, формат Netscape) и перезапустите бота.")
             raise RuntimeError(msg[:300])
 
         data = await asyncio.get_running_loop().run_in_executor(None, run)
