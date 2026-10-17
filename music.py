@@ -17,7 +17,16 @@ YTDL_OPTS = {
     "no_warnings": True,
     "default_search": "ytsearch",
     "source_address": "0.0.0.0",
+    # Лёгкий режим для слабых хостов (256 МБ / 0.25 vCPU): не зависаем на долгих повторах
+    "socket_timeout": 15,
+    "retries": 1,
+    "extractor_retries": 1,
+    "cachedir": False,
 }
+# Кулдаун на заказ музыки (секунд на одного пользователя) и число вариантов поиска
+PLAY_COOLDOWN = 20
+SEARCH_RESULTS = 3
+BOT_CHECK_MARK = "not a bot"
 # Необязательно: если рядом с main.py лежит cookies.txt, он используется для YouTube.
 # (раньше путь считался на папку выше и файл никогда не находился)
 COOKIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookies.txt")
@@ -192,6 +201,9 @@ class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.players: dict[int, GuildPlayer] = {}
+        # Только один поиск yt-dlp за раз: иначе на слабом хосте памяти не хватает
+        self._extract_lock = asyncio.Semaphore(1)
+        self._last_play: dict[int, float] = {}
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -275,7 +287,7 @@ class Music(commands.Cog):
                 candidates = [query]
             else:
                 with yt_dlp.YoutubeDL(dict(opts, extract_flat=True)) as ydl:
-                    res = ydl.extract_info(f"ytsearch6:{query}", download=False)
+                    res = ydl.extract_info(f"ytsearch{SEARCH_RESULTS}:{query}", download=False)
                 candidates = []
                 for e in (res.get("entries") or []):
                     if not e:
@@ -296,11 +308,13 @@ class Music(commands.Cog):
                     return data
                 except Exception as e:  # возрастное ограничение, недоступно и т.п. — пробуем следующий
                     last = e
+                    if BOT_CHECK_MARK in str(e):
+                        break  # YouTube блокирует вход — остальные варианты упадут так же, не тратим ресурсы
             # Запасной вариант: SoundCloud (не требует входа в аккаунт)
             if not is_url:
                 try:
                     with yt_dlp.YoutubeDL(dict(opts, extract_flat=True)) as ydl:
-                        res = ydl.extract_info(f"scsearch6:{query}", download=False)
+                        res = ydl.extract_info(f"scsearch{SEARCH_RESULTS}:{query}", download=False)
                     for e in (res.get("entries") or []):
                         url = e.get("url") if e else None
                         if not url:
@@ -325,7 +339,8 @@ class Music(commands.Cog):
                            "(экспорт из браузера, формат Netscape) и перезапустите бота.")
             raise RuntimeError(msg[:300])
 
-        data = await asyncio.get_running_loop().run_in_executor(None, run)
+        async with self._extract_lock:
+            data = await asyncio.get_running_loop().run_in_executor(None, run)
         return {
             "title": data.get("title", "Без названия"),
             "stream_url": data["url"],
@@ -340,6 +355,13 @@ class Music(commands.Cog):
         """inter уже должен быть defer'нут."""
         if not query:
             return await inter.followup.send("❌ Пустой запрос.", ephemeral=True)
+        # кулдаун: не чаще одного заказа в PLAY_COOLDOWN секунд на человека
+        now = time.time()
+        wait = PLAY_COOLDOWN - (now - self._last_play.get(inter.author.id, 0))
+        if wait > 0:
+            return await inter.followup.send(
+                f"⏳ Не так быстро, сэр. Подождите ещё {int(wait) + 1} сек.", ephemeral=True)
+        self._last_play[inter.author.id] = now
         vc = await self.ensure_voice(inter)
         if not vc:
             return
