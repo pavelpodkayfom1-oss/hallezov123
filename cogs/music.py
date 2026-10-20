@@ -9,6 +9,7 @@ import yt_dlp
 from disnake.ext import commands
 
 from utils.checks import load_config
+from utils.embeds import note_embed
 
 YTDL_OPTS = {
     "format": "bestaudio/best",
@@ -122,7 +123,7 @@ class MusicPanelView(disnake.ui.View):
     async def play(self, button, inter: disnake.MessageInteraction):
         if not inter.author.voice or not inter.author.voice.channel:
             return await inter.response.send_message(
-                "❌ Сначала зайдите в голосовой канал, сэр.", ephemeral=True)
+                embed=note_embed("❌ Сначала зайдите в голосовой канал, сэр."), ephemeral=True)
         await inter.response.send_modal(MusicModal())
 
     @disnake.ui.button(label="Позвать в войс", emoji="🎙", style=disnake.ButtonStyle.primary,
@@ -145,7 +146,7 @@ class MusicPanelView(disnake.ui.View):
         if not vc:
             return
         await cog.cleanup(inter.guild)
-        await inter.response.send_message("👋 Отключился от голосового канала.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("👋 Отключился от голосового канала."), ephemeral=True)
 
     # ---------- ряд 2 ----------
     @disnake.ui.button(label="Пауза / Продолжить", emoji="⏯", style=disnake.ButtonStyle.secondary,
@@ -163,7 +164,7 @@ class MusicPanelView(disnake.ui.View):
             msg = "⏸ Пауза."
         else:
             msg = "Сейчас ничего не играет."
-        await inter.response.send_message(msg, ephemeral=True)
+        await inter.response.send_message(embed=note_embed(msg), ephemeral=True)
 
     @disnake.ui.button(label="Скип", emoji="⏭", style=disnake.ButtonStyle.secondary,
                        custom_id="music:skip", row=1)
@@ -174,9 +175,9 @@ class MusicPanelView(disnake.ui.View):
             return
         if vc.is_playing() or vc.is_paused():
             vc.stop()
-            await inter.response.send_message("⏭ Трек пропущен.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("⏭ Трек пропущен."), ephemeral=True)
         else:
-            await inter.response.send_message("Сейчас ничего не играет.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("Сейчас ничего не играет."), ephemeral=True)
 
     @disnake.ui.button(label="Стоп", emoji="⏹", style=disnake.ButtonStyle.secondary,
                        custom_id="music:stop", row=1)
@@ -188,7 +189,7 @@ class MusicPanelView(disnake.ui.View):
         cog.get_player(inter.guild).queue.clear()
         if vc.is_playing() or vc.is_paused():
             vc.stop()
-        await inter.response.send_message("⏹ Остановлено, очередь очищена.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("⏹ Остановлено, очередь очищена."), ephemeral=True)
 
     @disnake.ui.button(label="Очередь", emoji="📜", style=disnake.ButtonStyle.secondary,
                        custom_id="music:queue", row=1)
@@ -202,7 +203,7 @@ class MusicPanelView(disnake.ui.View):
             lines.append(f"`{i}.` {t['title']} `{_fmt_duration(t['duration'])}`")
         if len(p.queue) > 10:
             lines.append(f"…и ещё {len(p.queue) - 10}")
-        await inter.response.send_message("\n".join(lines) or "Очередь пуста.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("\n".join(lines) or "Очередь пуста."), ephemeral=True)
 
     # ---------- ряд 3 ----------
     @disnake.ui.button(label="Тише", emoji="🔉", style=disnake.ButtonStyle.secondary,
@@ -247,9 +248,9 @@ class Music(commands.Cog):
 
     async def _reply(self, inter, text: str):
         if inter.response.is_done():
-            await inter.followup.send(text, ephemeral=True)
+            await inter.followup.send(embed=note_embed(text), ephemeral=True)
         else:
-            await inter.response.send_message(text, ephemeral=True)
+            await inter.response.send_message(embed=note_embed(text), ephemeral=True)
 
     async def ensure_voice(self, inter):
         """Заходит в канал пользователя (или переезжает). Возвращает VoiceClient."""
@@ -292,7 +293,7 @@ class Music(commands.Cog):
         p.volume = max(0.05, min(1.0, round(p.volume + delta, 2)))
         if p.source:
             p.source.volume = p.volume
-        await inter.response.send_message(f"🔊 Громкость: **{int(p.volume * 100)}%**", ephemeral=True)
+        await inter.response.send_message(embed=note_embed(f"🔊 Громкость: **{int(p.volume * 100)}%**"), ephemeral=True)
 
     async def _extract(self, query: str) -> dict:
         is_url = query.startswith(("http://", "https://"))
@@ -400,13 +401,13 @@ class Music(commands.Cog):
     async def handle_play(self, inter, query: str):
         """inter уже должен быть defer'нут."""
         if not query:
-            return await inter.followup.send("❌ Пустой запрос.", ephemeral=True)
+            return await inter.followup.send(embed=note_embed("❌ Пустой запрос."), ephemeral=True)
         # кулдаун: не чаще одного заказа в PLAY_COOLDOWN секунд на человека
         now = time.time()
         wait = PLAY_COOLDOWN - (now - self._last_play.get(inter.author.id, 0))
         if wait > 0:
             return await inter.followup.send(
-                f"⏳ Не так быстро, сэр. Подождите ещё {int(wait) + 1} сек.", ephemeral=True)
+                embed=note_embed(f"⏳ Не так быстро, сэр. Подождите ещё {int(wait) + 1} сек."), ephemeral=True)
         self._last_play[inter.author.id] = now
         vc = await self.ensure_voice(inter)
         if not vc:
@@ -416,14 +417,14 @@ class Music(commands.Cog):
         try:
             track = await self._extract(query)
         except Exception as e:
-            return await inter.followup.send(f"❌ Не удалось найти/загрузить: `{e}`", ephemeral=True)
+            return await inter.followup.send(embed=note_embed(f"❌ Не удалось найти/загрузить: `{e}`"), ephemeral=True)
         track["requester"] = inter.author.mention
         p.queue.append(track)
 
         if vc.is_playing() or vc.is_paused():
-            await inter.followup.send(f"➕ Добавлено в очередь: **{track['title']}**", ephemeral=True)
+            await inter.followup.send(embed=note_embed(f"➕ Добавлено в очередь: **{track['title']}**"), ephemeral=True)
         else:
-            await inter.followup.send(f"🎶 Включаю: **{track['title']}**", ephemeral=True)
+            await inter.followup.send(embed=note_embed(f"🎶 Включаю: **{track['title']}**"), ephemeral=True)
             await self._play_next(inter.guild)
 
     async def _play_next(self, guild: disnake.Guild):
@@ -495,7 +496,7 @@ class Music(commands.Cog):
             color=_color(),
         )
         await inter.channel.send(embed=embed, view=MusicPanelView())
-        await inter.response.send_message("✅ Панель отправлена.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ Панель отправлена."), ephemeral=True)
 
     @commands.slash_command(name="play", description="Включить музыку (название или ссылка)")
     async def play_cmd(self, inter: disnake.ApplicationCommandInteraction, запрос: str):
