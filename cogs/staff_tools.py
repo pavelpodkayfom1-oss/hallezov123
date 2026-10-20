@@ -25,6 +25,7 @@ import disnake
 from disnake.ext import commands, tasks
 
 from database import DB_PATH, add_warn, get_active_warns, get_member, remove_warn, upsert_member
+from utils.embeds import note_embed
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
@@ -361,10 +362,10 @@ class StaffTools(commands.Cog):
         _, action, uid_s = cid.split(":")
         uid = int(uid_s)
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         row = await get_member(uid)
         if not row:
-            return await inter.response.send_message("❌ Участник уже не числится в семье.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Участник уже не числится в семье."), ephemeral=True)
 
         if action in ("warn", "fire"):
             title = "Выдать выговор" if action == "warn" else "Уволить из семьи"
@@ -376,7 +377,7 @@ class StaffTools(commands.Cog):
 
         new_rank = row["rank"] + (1 if action == "promote" else -1)
         if not 1 <= new_rank <= max_rank():
-            return await inter.response.send_message("❌ Это крайний ранг, дальше менять нельзя.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Это крайний ранг, дальше менять нельзя."), ephemeral=True)
         await inter.response.defer()
         note = await self.apply_rank(inter.guild, row, new_rank)
         await self.log("🎖️ Смена ранга",
@@ -385,7 +386,7 @@ class StaffTools(commands.Cog):
         row = await get_member(uid)
         await inter.edit_original_message(embed=await self.card_embed(inter.guild, row),
                                           components=self.card_components(uid, True))
-        await inter.followup.send(f"✅ Ранг изменён на **{rank_name(new_rank)}** — {note}.", ephemeral=True)
+        await inter.followup.send(embed=note_embed(f"✅ Ранг изменён на **{rank_name(new_rank)}** — {note}."), ephemeral=True)
 
     @commands.Cog.listener()
     async def on_modal_submit(self, inter: disnake.ModalInteraction):
@@ -395,11 +396,11 @@ class StaffTools(commands.Cog):
         action, uid_s = cid.split(":")
         uid = int(uid_s)
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         reason = inter.text_values["reason"].strip()
         row = await get_member(uid)
         if not row:
-            return await inter.response.send_message("❌ Участник уже не числится в семье.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Участник уже не числится в семье."), ephemeral=True)
 
         if action == "staff_warn":
             text = "✅ " + await self.issue_warn(inter.guild, uid, inter.author.id, reason)
@@ -415,10 +416,10 @@ class StaffTools(commands.Cog):
             comps = []
         try:
             await inter.response.edit_message(embed=embed, components=comps)
-            await inter.followup.send(text, ephemeral=True)
+            await inter.followup.send(embed=note_embed(text), ephemeral=True)
         except Exception:
             if not inter.response.is_done():
-                await inter.response.send_message(text, ephemeral=True)
+                await inter.response.send_message(embed=note_embed(text), ephemeral=True)
 
     # ───────────── КОМАНДЫ ─────────────
     @commands.slash_command(name="staff", description="Инструменты руководства Hall FAMQ")
@@ -431,14 +432,14 @@ class StaffTools(commands.Cog):
     async def card(self, inter: disnake.ApplicationCommandInteraction,
                    user: Optional[disnake.Member] = None, query: Optional[str] = None):
         if not is_staff(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нет доступа."), ephemeral=True)
         if not user and not query:
-            return await inter.response.send_message("Укажите участника или введите ник/статик в `query`.",
+            return await inter.response.send_message(embed=note_embed("Укажите участника или введите ник/статик в `query`."),
                                                      ephemeral=True)
         rows = [await get_member(user.id)] if user else await find_members(query)
         rows = [r for r in rows if r]
         if not rows:
-            return await inter.response.send_message("🔍 В базе семьи такого участника нет.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("🔍 В базе семьи такого участника нет."), ephemeral=True)
         if len(rows) > 1:
             lst = "\n".join(f"• `{r['nick']}` — статик `{r['static_id']}` — <@{r['user_id']}>" for r in rows)
             return await inter.response.send_message(f"Найдено несколько, уточните запрос:\n{lst}",
@@ -451,29 +452,29 @@ class StaffTools(commands.Cog):
     @staff.sub_command(name="warn", description="Выдать выговор")
     async def warn(self, inter: disnake.ApplicationCommandInteraction, user: disnake.Member, reason: str):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         if not await get_member(user.id):
-            return await inter.response.send_message("❌ Этого человека нет в базе семьи.", ephemeral=True)
-        await inter.response.send_message("✅ " + await self.issue_warn(inter.guild, user.id, inter.author.id, reason),
+            return await inter.response.send_message(embed=note_embed("❌ Этого человека нет в базе семьи."), ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ " + await self.issue_warn(inter.guild, user.id, inter.author.id, reason)),
                                           ephemeral=True)
 
     @staff.sub_command(name="unwarn", description="Снять выговор по номеру")
     async def unwarn(self, inter: disnake.ApplicationCommandInteraction, warn_id: int):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         if await remove_warn(warn_id):
             await self.log("✅ Выговор снят", f"**Выговор:** `#{warn_id}`\n**Снял:** {inter.author.mention}", 0x2ECC71)
-            await inter.response.send_message(f"✅ Выговор `#{warn_id}` снят.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed(f"✅ Выговор `#{warn_id}` снят."), ephemeral=True)
         else:
-            await inter.response.send_message("❌ Выговор с таким номером не найден.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Выговор с таким номером не найден."), ephemeral=True)
 
     @staff.sub_command(name="warns", description="Список выговоров участника")
     async def warns(self, inter: disnake.ApplicationCommandInteraction, user: disnake.Member):
         if not is_staff(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нет доступа."), ephemeral=True)
         rows = await q_all("SELECT * FROM warns WHERE user_id=? ORDER BY id DESC LIMIT 15", (user.id,))
         if not rows:
-            return await inter.response.send_message("У участника выговоров не было.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("У участника выговоров не было."), ephemeral=True)
         lines = []
         for w in rows:
             ts = to_ts(w["created_at"])
@@ -492,34 +493,34 @@ class StaffTools(commands.Cog):
     async def bl_add(self, inter: disnake.ApplicationCommandInteraction, static: str, reason: str,
                      user: Optional[disnake.User] = None, nick: Optional[str] = None):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         static = static.strip()
         entry_id = await q_exec("INSERT INTO blacklist (user_id,static_id,nick,reason,admin_id) VALUES (?,?,?,?,?)",
                                 (user.id if user else None, static, nick, reason, inter.author.id))
         await self.log("⛔ Чёрный список: добавлен",
                        f"**Статик:** `{static}`\n**Ник:** {nick or '—'}\n**Причина:** {reason}\n"
                        f"**Добавил:** {inter.author.mention} · `#{entry_id}`", 0xE74C3C)
-        await inter.response.send_message(f"⛔ Статик `{static}` добавлен в чёрный список (`#{entry_id}`).",
+        await inter.response.send_message(embed=note_embed(f"⛔ Статик `{static}` добавлен в чёрный список (`#{entry_id}`)."),
                                           ephemeral=True)
 
     @blacklist.sub_command(name="remove", description="Убрать запись из чёрного списка по номеру")
     async def bl_remove(self, inter: disnake.ApplicationCommandInteraction, entry_id: int):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         async with aiosqlite.connect(DB_PATH) as db:
             cur = await db.execute("DELETE FROM blacklist WHERE id=?", (entry_id,))
             await db.commit()
         if cur.rowcount:
             await self.log("✅ Чёрный список: запись удалена", f"`#{entry_id}` · {inter.author.mention}", 0x2ECC71)
-            await inter.response.send_message("✅ Запись удалена.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("✅ Запись удалена."), ephemeral=True)
         else:
-            await inter.response.send_message("❌ Запись не найдена. Записи об увольнениях "
-                                              "удаляются только вручную из базы.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Запись не найдена. Записи об увольнениях "
+                                                                "удаляются только вручную из базы."), ephemeral=True)
 
     @blacklist.sub_command(name="list", description="Показать чёрный список и уволенных")
     async def bl_list(self, inter: disnake.ApplicationCommandInteraction):
         if not is_staff(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нет доступа."), ephemeral=True)
         bl = await q_all("SELECT id, nick, static_id, reason FROM blacklist ORDER BY id DESC LIMIT 15")
         fr = await q_all("SELECT nick, static_id, reason, kind FROM fired_members ORDER BY id DESC LIMIT 15")
         e = disnake.Embed(title="⛔ Чёрный список", color=0xE74C3C)
@@ -534,10 +535,10 @@ class StaffTools(commands.Cog):
     @blacklist.sub_command(name="check", description="Проверить статик")
     async def bl_check(self, inter: disnake.ApplicationCommandInteraction, static: str):
         if not is_staff(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нет доступа."), ephemeral=True)
         hits = await blacklist_hits(static)
         if not hits:
-            return await inter.response.send_message(f"✅ Статик `{static}` чист.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed(f"✅ Статик `{static}` чист."), ephemeral=True)
         await inter.response.send_message(
             embed=disnake.Embed(title=f"Статик {static}: есть записи", description="\n\n".join(map(hit_line, hits)),
                                 color=0xE74C3C), ephemeral=True)
@@ -546,7 +547,7 @@ class StaffTools(commands.Cog):
     @staff.sub_command(name="voice", description="Голосовой онлайн участника")
     async def voice(self, inter: disnake.ApplicationCommandInteraction, user: Optional[disnake.Member] = None):
         if not is_staff(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нет доступа."), ephemeral=True)
         user = user or inter.author
         v7, v30, vall = (await voice_seconds(user.id, p) for p in ("week", "month", "all"))
         e = disnake.Embed(title=f"🎙️ Голосовой онлайн: {user.display_name}", color=embed_color())
@@ -558,7 +559,7 @@ class StaffTools(commands.Cog):
                        period: str = commands.Param(default="week",
                                                     choices={"Неделя": "week", "Месяц": "month", "Всё время": "all"})):
         if not is_staff(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нет доступа."), ephemeral=True)
         rows = await q_all(
             "SELECT user_id, SUM(seconds) s FROM voice_daily WHERE day>=date('now',?) "
             "GROUP BY user_id ORDER BY s DESC LIMIT 10", (PERIODS[period][0],))
@@ -575,7 +576,7 @@ class StaffTools(commands.Cog):
                          period: str = commands.Param(default="week",
                                                       choices={"Неделя": "week", "Месяц": "month", "Всё время": "all"})):
         if not is_staff(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нет доступа."), ephemeral=True)
         rows = await q_all(
             "SELECT reviewer_id, SUM(status='accepted') acc, SUM(status='rejected') rej FROM applications "
             "WHERE reviewer_id IS NOT NULL AND status IN ('accepted','rejected') AND closed_at>=datetime('now',?) "
@@ -592,7 +593,7 @@ class StaffTools(commands.Cog):
     @staff.sub_command(name="board", description="Создать самообновляющееся сообщение со статистикой")
     async def board(self, inter: disnake.ApplicationCommandInteraction, channel: disnake.TextChannel):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
         msg = await channel.send(embed=await self.build_board())
         s = load_settings()
