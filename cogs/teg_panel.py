@@ -11,6 +11,7 @@ from disnake.ext import commands
 
 from database import DB_PATH
 from utils import event_art
+from utils.embeds import note_embed
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
@@ -115,7 +116,7 @@ def has_access(member: disnake.Member) -> bool:
 
 
 async def deny(inter: disnake.Interaction):
-    await inter.response.send_message("❌ У вас нет доступа к этой панели.", ephemeral=True)
+    await inter.response.send_message(embed=note_embed("❌ У вас нет доступа к этой панели."), ephemeral=True)
 
 
 def ids_of(values) -> List[int]:
@@ -231,7 +232,7 @@ async def handle_response(inter: disnake.MessageInteraction, status: str):
         async with db.execute("SELECT call_id FROM teg_dms WHERE message_id = ?", (inter.message.id,)) as cur:
             row = await cur.fetchone()
         if not row:
-            return await inter.response.send_message("⚠️ Этот сбор уже недоступен.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⚠️ Этот сбор уже недоступен."), ephemeral=True)
         call_id = row["call_id"]
         await db.execute(
             "INSERT INTO teg_responses (call_id, user_id, status, updated_at) VALUES (?, ?, ?, ?) "
@@ -337,7 +338,7 @@ class ReportView(disnake.ui.View):
         if not has_access(inter.author):
             return await deny(inter)
         if self.call_id in _reminding:
-            return await inter.response.send_message("⏳ Напоминание уже рассылается.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⏳ Напоминание уже рассылается."), ephemeral=True)
         async with tdb() as db:
             call = await get_call(db, self.call_id)
             async with db.execute(
@@ -345,7 +346,7 @@ class ReportView(disnake.ui.View):
                 "(SELECT user_id FROM teg_responses WHERE call_id = ?)", (self.call_id, self.call_id)) as cur:
                 silent = [r["user_id"] for r in await cur.fetchall()]
         if not silent:
-            return await inter.response.send_message("✅ Все уже ответили.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("✅ Все уже ответили."), ephemeral=True)
 
         _reminding.add(self.call_id)
         await inter.response.defer(ephemeral=True)
@@ -359,8 +360,8 @@ class ReportView(disnake.ui.View):
                 else:
                     failed += 1
                 await asyncio.sleep(DM_DELAY)
-            await inter.followup.send(f"🔔 Напоминание отправлено: **{sent}**" +
-                                      (f" • не доставлено: **{failed}**" if failed else ""), ephemeral=True)
+            await inter.followup.send(embed=note_embed(f"🔔 Напоминание отправлено: **{sent}**" +
+                                      (f" • не доставлено: **{failed}**" if failed else "")), ephemeral=True)
         finally:
             _reminding.discard(self.call_id)
 
@@ -576,17 +577,17 @@ class TegPanelView(disnake.ui.View):
         if not has_access(inter.author):
             return await deny(inter)
         if self.sending:
-            return await inter.response.send_message("⏳ Отправка уже идёт, подождите.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⏳ Отправка уже идёт, подождите."), ephemeral=True)
         if not (self.everyone or self.role_ids or self.user_ids):
-            return await inter.response.send_message("❌ Сначала выберите, кого тегнуть.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Сначала выберите, кого тегнуть."), ephemeral=True)
         if not self.title:
-            return await inter.response.send_message("❌ Сначала настройте текст сбора.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Сначала настройте текст сбора."), ephemeral=True)
 
         channel = None
         if self.channel_on:
             channel = self.guild.get_channel(self.channel_id)
             if channel is None:
-                return await inter.response.send_message("❌ Канал не найден.", ephemeral=True)
+                return await inter.response.send_message(embed=note_embed("❌ Канал не найден."), ephemeral=True)
             perms = channel.permissions_for(self.guild.me)
             if not perms.send_messages:
                 return await inter.response.send_message(
@@ -686,7 +687,7 @@ class TegPanelView(disnake.ui.View):
             # если нейросеть не сработала, автор панели сразу видит причину
             if not art.ai_ok:
                 try:
-                    await inter.followup.send(f"⚠️ {art.problem_text()}", ephemeral=True)
+                    await inter.followup.send(embed=note_embed(f"⚠️ {art.problem_text()}"), ephemeral=True)
                 except Exception:
                     pass
 
@@ -712,7 +713,7 @@ class TegPanelView(disnake.ui.View):
         if not has_access(inter.author):
             return await deny(inter)
         if self.sending:
-            return await inter.response.send_message("⏳ Отправка ещё идёт.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⏳ Отправка ещё идёт."), ephemeral=True)
         self.everyone, self.channel_on = False, False
         self.role_ids, self.user_ids = [], []
         self.title = self.time = self.info = self.status = ""
@@ -796,7 +797,7 @@ class TegPanelView(disnake.ui.View):
 
     async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
         if inter.author.id != self.author.id:
-            await inter.response.send_message("❌ Это чужая панель. Откройте свою: `/teg`", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Это чужая панель. Откройте свою: `/teg`"), ephemeral=True)
             return False
         return True
 
@@ -864,9 +865,9 @@ class TegPanel(commands.Cog):
                     row = await cur.fetchone()
                 call = dict(row) if row else None
         if not call:
-            return await inter.response.send_message("❌ Сбор не найден.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Сбор не найден."), ephemeral=True)
         if call["author_id"] != inter.author.id and not is_admin(inter.author):
-            return await inter.response.send_message("❌ Это сбор другого человека.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Это сбор другого человека."), ephemeral=True)
         await inter.response.send_message(embed=await build_report(call["id"]),
                                           view=ReportView(call["id"]), ephemeral=True)
 
@@ -875,7 +876,7 @@ class TegPanel(commands.Cog):
         if not is_admin(inter.author):
             return await deny(inter)
         await inter.channel.send(embed=launch_embed(), view=TegLaunchView(self.bot))
-        await inter.response.send_message("✅ Кнопка опубликована.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ Кнопка опубликована."), ephemeral=True)
 
     @commands.slash_command(name="teg_access", description="Кто может пользоваться Teg panel (админы)")
     async def teg_access(self, inter: disnake.ApplicationCommandInteraction):
