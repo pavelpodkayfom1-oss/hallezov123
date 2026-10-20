@@ -9,6 +9,8 @@ import disnake
 import edge_tts
 from disnake.ext import commands
 
+from utils.embeds import get_color
+
 # Отдельный ког: режим «всегда в войсе» + приветствие зашедших.
 # Не трогает /govorit и /golos. Голос берёт из тех же настроек (golos_settings.json).
 
@@ -160,7 +162,7 @@ class GuildPanelView(disnake.ui.View):
         self.visit_btn.style = disnake.ButtonStyle.success if self.g["visit"] else disnake.ButtonStyle.secondary
 
     def make_embed(self) -> disnake.Embed:
-        e = disnake.Embed(title="🎛️ Голос бота на сервере", color=0x2B2D31)
+        e = disnake.Embed(title="🎛️ Голос бота на сервере", color=get_color())
         ch = f"<#{self.g['channel_id']}>" if self.g["channel_id"] else "не выбран"
         e.add_field(name="Канал", value=ch, inline=True)
         e.add_field(name="Всегда в войсе", value="включено" if self.g["stay"] else "выключено", inline=True)
