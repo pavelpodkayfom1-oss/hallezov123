@@ -12,6 +12,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 _REGULAR = [
     os.path.join(BASE_DIR, "assets", "font.ttf"),
+    os.path.join(BASE_DIR, "assets", "fonts", "Montserrat-Regular.ttf"),
     "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/arial.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
@@ -19,6 +20,7 @@ _REGULAR = [
 ]
 _BOLD = [
     os.path.join(BASE_DIR, "assets", "font_bold.ttf"),
+    os.path.join(BASE_DIR, "assets", "fonts", "Montserrat-Bold.ttf"),
     "C:/Windows/Fonts/segoeuib.ttf", "C:/Windows/Fonts/arialbd.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
