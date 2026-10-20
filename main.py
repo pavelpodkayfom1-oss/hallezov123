@@ -34,6 +34,7 @@ logging.getLogger("disnake.gateway").setLevel(logging.INFO)
 logging.getLogger("disnake.client").setLevel(logging.INFO)
 
 from database import init_db
+from utils import state_backup
 from utils.checks import load_config
 from cogs.recruitment import RecruitLaunchView
 from cogs.promotions import PromotionLaunchView
@@ -87,16 +88,19 @@ if _DISABLED_COGS:
     print(f"⏸️ Отключены в панели: {', '.join(sorted(_DISABLED_COGS))}", flush=True)
 
 _ready_once = False
+_backup_task = None
 
 
 # ───────────────────────── Events ─────────────────────────
 @bot.event
 async def on_ready():
-    global _ready_once
+    global _ready_once, _backup_task
     # on_ready может вызываться повторно при переподключении — выполняем один раз
     if _ready_once:
         return
     _ready_once = True
+
+    _backup_task = asyncio.create_task(state_backup.run())
 
     bot.add_view(RecruitLaunchView())
     bot.add_view(PromotionLaunchView())
