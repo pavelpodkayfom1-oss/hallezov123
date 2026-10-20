@@ -18,6 +18,7 @@ import disnake
 from disnake.ext import commands, tasks
 
 from utils import famq_core as core
+from utils.embeds import note_embed
 from utils.event_art import make_event_art
 
 BANNER_NAME = "giveaway.jpg"   # баннер от нейросети (Gemini), прикрепляется к карточке
@@ -166,19 +167,19 @@ class GiveawayView(disnake.ui.View):
     async def join(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         row = await get_row(inter)
         if not row or row["status"] != "active" or row["end_ts"] <= core.now_ts():
-            return await inter.response.send_message("⏰ Этот розыгрыш уже завершён.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⏰ Этот розыгрыш уже завершён."), ephemeral=True)
         if row["min_rank"]:
             rank = core.member_rank(inter.author)
             if rank < row["min_rank"]:
                 return await inter.response.send_message(
-                    f"❌ Нужен ранг **{row['min_rank']}** ({core.rank_name(row['min_rank'])}) или выше. "
-                    f"Ваш ранг: **{rank}**.", ephemeral=True)
+                    embed=note_embed(f"❌ Нужен ранг **{row['min_rank']}** ({core.rank_name(row['min_rank'])}) или выше. "
+                                     f"Ваш ранг: **{rank}**."), ephemeral=True)
         if row["min_voice_hours"]:
             hours = await core.voice_seconds(inter.author.id) / 3600
             if hours < row["min_voice_hours"]:
                 return await inter.response.send_message(
-                    f"❌ Нужно минимум **{row['min_voice_hours']} ч.** в голосовых каналах. "
-                    f"У вас: **{hours:.1f} ч.**", ephemeral=True)
+                    embed=note_embed(f"❌ Нужно минимум **{row['min_voice_hours']} ч.** в голосовых каналах. "
+                                     f"У вас: **{hours:.1f} ч.**"), ephemeral=True)
         exists = await core.q_one(
             "SELECT 1 AS x FROM giveaway_entries WHERE giveaway_id=? AND user_id=?", (row["id"], inter.author.id))
         if exists:
@@ -195,13 +196,13 @@ class GiveawayView(disnake.ui.View):
         cnt = await entry_count(row["id"])
         await inter.response.edit_message(embed=gw_embed(
             row, cnt, start_ts=msg_start_ts(inter.message), banner=bool(inter.message.attachments)))
-        await inter.followup.send(text, ephemeral=True)
+        await inter.followup.send(embed=note_embed(text), ephemeral=True)
 
     @disnake.ui.button(label="Мои шансы", emoji="🎫", style=disnake.ButtonStyle.secondary, custom_id="gw:odds")
     async def odds(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         row = await get_row(inter)
         if not row or row["status"] != "active":
-            return await inter.response.send_message("⏰ Этот розыгрыш уже завершён.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⏰ Этот розыгрыш уже завершён."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
         t = await calc_tickets(inter.author)
         joined = await core.q_one(
@@ -227,7 +228,7 @@ class GiveawayView(disnake.ui.View):
     async def entrants(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         row = await get_row(inter)
         if not row:
-            return await inter.response.send_message("ℹ️ Розыгрыш не найден.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("ℹ️ Розыгрыш не найден."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
         weights = await entry_weights(inter.guild, row["id"], use_cache=True)
         e = core.make_embed(f"👥 Участники · {len(weights)}", kind="main")
@@ -251,10 +252,10 @@ class GiveawayEndedView(disnake.ui.View):
                        custom_id="gw:reroll")
     async def reroll(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if not core.is_staff(inter.author):
-            return await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         row = await get_row(inter)
         if not row or row["status"] != "ended":
-            return await inter.response.send_message("ℹ️ Завершённый розыгрыш не найден.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("ℹ️ Завершённый розыгрыш не найден."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
         new = await do_reroll(inter.guild, row)
         if new is None:
@@ -448,11 +449,11 @@ class Giveaways(commands.Cog):
                                                                 default=None),
     ):
         if not core.is_staff(inter.author):
-            return await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         secs = core.parse_duration(duration)
         if not secs or secs < 30 or secs > 60 * 86400:
             return await inter.response.send_message(
-                "❌ Неверная длительность. Примеры: `30m`, `2h`, `1d`, `1d12h` (от 30 сек до 60 дней).",
+                embed=note_embed("❌ Неверная длительность. Примеры: `30m`, `2h`, `1d`, `1d12h` (от 30 сек до 60 дней)."),
                 ephemeral=True)
         cid = int(core.get("giveaway.channel_id", 0) or 0)
         target = channel or (inter.guild.get_channel(cid) if cid else None) or inter.channel
@@ -485,10 +486,10 @@ class Giveaways(commands.Cog):
         gid: int = commands.Param(name="номер", description="Номер розыгрыша (#)", ge=1),
     ):
         if not core.is_staff(inter.author):
-            return await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         row = await core.q_one("SELECT * FROM giveaways WHERE id=? AND guild_id=?", (gid, inter.guild.id))
         if not row or row["status"] != "active":
-            return await inter.response.send_message("ℹ️ Активный розыгрыш с таким номером не найден.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("ℹ️ Активный розыгрыш с таким номером не найден."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
         row["end_ts"] = core.now_ts()
         await core.q_exec("UPDATE giveaways SET end_ts=? WHERE id=?", (row["end_ts"], gid))
@@ -501,10 +502,10 @@ class Giveaways(commands.Cog):
         gid: int = commands.Param(name="номер", description="Номер завершённого розыгрыша", ge=1),
     ):
         if not core.is_staff(inter.author):
-            return await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         row = await core.q_one("SELECT * FROM giveaways WHERE id=? AND guild_id=?", (gid, inter.guild.id))
         if not row or row["status"] != "ended":
-            return await inter.response.send_message("ℹ️ Завершённый розыгрыш не найден.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("ℹ️ Завершённый розыгрыш не найден."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
         new = await do_reroll(inter.guild, row)
         if new is None:
