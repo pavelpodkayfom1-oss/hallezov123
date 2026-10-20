@@ -4,7 +4,7 @@ from typing import Optional, List, Dict, Any
 import time
 
 from utils.checks import load_config, is_admin
-from utils.embeds import base_embed, success_embed
+from utils.embeds import base_embed, note_embed, success_embed
 try:
     from emoji_manager import render_emojis
 except ImportError:
@@ -96,15 +96,15 @@ class ActivityCenterView(disnake.ui.View):
     @disnake.ui.button(label="Повысить", style=disnake.ButtonStyle.success, emoji="✅")
     async def promote_btn(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нет доступа."), ephemeral=True)
 
         member_data = self.candidates[self.index]
         uid = member_data["user_id"]
         member = self.guild.get_member(uid)
         if not member:
-            return await inter.response.send_message("❌ Участник не найден на сервере.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Участник не найден на сервере."), ephemeral=True)
 
-        await inter.//_response.defer(ephemeral=True)
+        await inter.response.defer(ephemeral=True)
 
         promo_cog = self.bot.get_cog("Promotions")
         if promo_cog:
@@ -118,7 +118,7 @@ class ActivityCenterView(disnake.ui.View):
 
             log_channel_id = cfg.get("channels", {}).get("logs_channel_id")
             if log_channel_id:
-                log_ch = self.bot.get_channel(log_//_channel_id)
+                log_ch = self.bot.get_channel(log_channel_id)
                 if log_ch:
                     await log_ch.send(embed=approved_emb)
 
@@ -129,7 +129,7 @@ class ActivityCenterView(disnake.ui.View):
     @disnake.ui.button(label="Позже", style=disnake.ButtonStyle.secondary, emoji="⏳")
     async def later_btn(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нет доступа."), ephemeral=True)
 
         self.index += 1
         if self.index >= len(self.candidates):
@@ -146,12 +146,12 @@ class ActivityCenter(commands.Cog):
         sync_cog = self.bot.get_cog("FamilySync")
         if not sync_cog:
             return []
-        return await sync_cog.build_//_candidates(guild)
+        return await sync_cog.build_candidates(guild)
 
     @commands.slash_command(name="activity_check", description="Проверка активности состава (Для руководства)")
     async def activity_check(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нет доступа."), ephemeral=True)
 
         await inter.response.defer(ephemeral=True)
         candidates = await self.get_candidates(inter.guild)
@@ -165,7 +165,7 @@ class ActivityCenter(commands.Cog):
     @commands.slash_command(name="for_improve", description="Показать список на повышение по активу (Для руководства)")
     async def for_improve(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Нет доступа.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нет доступа."), ephemeral=True)
 
         await inter.response.defer(ephemeral=True)
         candidates = await self.get_candidates(inter.guild)
