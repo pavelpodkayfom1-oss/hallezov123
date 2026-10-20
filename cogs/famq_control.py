@@ -24,6 +24,7 @@ from disnake.ext import commands, tasks
 
 from database import DB_PATH, get_member, remove_warn, upsert_member
 from utils.checks import load_config
+from utils.embeds import note_embed
 
 # ───────────────────────── Настройки ─────────────────────────
 WARN_LIMIT = 3              # при стольких активных выговорах уведомляем руководство
@@ -112,9 +113,9 @@ def is_staff(member) -> bool:
 async def deny(inter: disnake.Interaction):
     msg = "❌ Недостаточно прав для этого действия."
     if inter.response.is_done():
-        await inter.followup.send(msg, ephemeral=True)
+        await inter.followup.send(embed=note_embed(msg), ephemeral=True)
     else:
-        await inter.response.send_message(msg, ephemeral=True)
+        await inter.response.send_message(embed=note_embed(msg), ephemeral=True)
 
 
 # ───────────────────────── БД ─────────────────────────
@@ -277,10 +278,10 @@ class WarnModal(disnake.ui.Modal):
         reason = inter.text_values["reason"].strip()
         days_raw = inter.text_values["days"].strip()
         if not days_raw.isdigit():
-            await inter.followup.send("❌ Срок должен быть числом (0 — бессрочно).", ephemeral=True)
+            await inter.followup.send(embed=note_embed("❌ Срок должен быть числом (0 — бессрочно)."), ephemeral=True)
             return
         count = await self.cog.issue_warn(inter.guild, self.view.target_id, inter.author, reason, int(days_raw))
-        await inter.followup.send(f"✅ Выговор выдан. Активных выговоров: **{count}/{WARN_LIMIT}**.", ephemeral=True)
+        await inter.followup.send(embed=note_embed(f"✅ Выговор выдан. Активных выговоров: **{count}/{WARN_LIMIT}**."), ephemeral=True)
         await self.view.refresh()
 
 
@@ -300,9 +301,9 @@ class FireModal(disnake.ui.Modal):
         await inter.response.defer(ephemeral=True)
         ok = await self.cog.fire_member(inter.guild, self.view.target_id, inter.author, inter.text_values["reason"].strip())
         if not ok:
-            await inter.followup.send("❌ Участник уже не числится в составе.", ephemeral=True)
+            await inter.followup.send(embed=note_embed("❌ Участник уже не числится в составе."), ephemeral=True)
         else:
-            await inter.followup.send("✅ Участник уволен и добавлен в чёрный список.", ephemeral=True)
+            await inter.followup.send(embed=note_embed("✅ Участник уволен и добавлен в чёрный список."), ephemeral=True)
         await self.view.refresh()
 
 
@@ -334,14 +335,14 @@ class CardView(disnake.ui.View):
     async def promote(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         await inter.response.defer()
         msg = await self.cog.change_rank(inter.guild, self.target_id, inter.author, +1)
-        await inter.followup.send(msg, ephemeral=True)
+        await inter.followup.send(embed=note_embed(msg), ephemeral=True)
         await self.refresh()
 
     @disnake.ui.button(label="Понизить", emoji="⬇️", style=disnake.ButtonStyle.secondary)
     async def demote(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         await inter.response.defer()
         msg = await self.cog.change_rank(inter.guild, self.target_id, inter.author, -1)
-        await inter.followup.send(msg, ephemeral=True)
+        await inter.followup.send(embed=note_embed(msg), ephemeral=True)
         await self.refresh()
 
     @disnake.ui.button(label="Выговор", emoji="⚠️", style=disnake.ButtonStyle.primary)
@@ -488,7 +489,7 @@ class FamqControl(commands.Cog):
                 return await deny(inter)
             found = await self.search_members(query)
             if not found:
-                return await inter.response.send_message("🔎 Никого не нашёл по этому запросу.", ephemeral=True)
+                return await inter.response.send_message(embed=note_embed("🔎 Никого не нашёл по этому запросу."), ephemeral=True)
             if len(found) > 1:
                 lines = "\n".join(f"• **{r['nick']}** — статик `{r['static_id']}` — <@{r['user_id']}>" for r in found)
                 return await inter.response.send_message(
@@ -501,7 +502,7 @@ class FamqControl(commands.Cog):
 
         row = await get_member(target_id)
         if row is None:
-            return await inter.response.send_message("🔎 Этот человек не числится в составе семьи.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("🔎 Этот человек не числится в составе семьи."), ephemeral=True)
 
         await inter.response.defer(ephemeral=True)
         emb = await self.build_card(inter.guild, row)
@@ -664,9 +665,9 @@ class FamqControl(commands.Cog):
             await self.log_event(disnake.Embed(title=f"✅ Выговор #{warn_id} снят",
                                                description=f"Снял: {inter.author.mention}",
                                                color=_color(load_config(), "success_color", 0x2ECC71)))
-            await inter.response.send_message(f"✅ Выговор #{warn_id} снят.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed(f"✅ Выговор #{warn_id} снят."), ephemeral=True)
         else:
-            await inter.response.send_message("❌ Выговор с таким номером не найден.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Выговор с таким номером не найден."), ephemeral=True)
 
     # ═════════════════════ Чёрный список ═════════════════════
     @commands.slash_command(name="famq-blacklist", description="Чёрный список (ушедшие и уволенные)")
@@ -680,7 +681,7 @@ class FamqControl(commands.Cog):
         rows = await q_all("SELECT * FROM fired_members ORDER BY id DESC LIMIT 20")
         total = (await q_one("SELECT COUNT(*) AS c FROM fired_members"))["c"]
         if not rows:
-            return await inter.response.send_message("Чёрный список пуст ✅", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("Чёрный список пуст ✅"), ephemeral=True)
         lines = []
         for r in rows:
             when = parse_db_ts(r["fired_at"])
@@ -699,7 +700,7 @@ class FamqControl(commands.Cog):
             return await deny(inter)
         hits = await db_blacklist_find(static_id)
         if not hits:
-            return await inter.response.send_message(f"✅ Статик `{static_id}` в чёрном списке не найден.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed(f"✅ Статик `{static_id}` в чёрном списке не найден."), ephemeral=True)
         lines = [f"`#{h['id']}` **{h['nick'] or '—'}** • {KIND_LABEL.get(h['kind'], h['kind'])}\n└ {h['reason'] or 'без причины'}"
                  for h in hits]
         emb = disnake.Embed(title=f"⛔ Статик {static_id} найден в списке", description="\n".join(lines)[:4000],
@@ -717,7 +718,7 @@ class FamqControl(commands.Cog):
         if not is_admin(inter.author):
             return await deny(inter)
         if await db_blacklist_find(static_id):
-            return await inter.response.send_message("ℹ️ Такой статик уже есть в списке (`/famq-blacklist check`).", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("ℹ️ Такой статик уже есть в списке (`/famq-blacklist check`)."), ephemeral=True)
         entry = await q_exec(
             "INSERT INTO fired_members (user_id, nick, static_id, kind, reason, admin_id) VALUES (?, ?, ?, 'blacklist', ?, ?)",
             (member.id if member else 0, nick, static_id.strip(), reason, inter.author.id))
@@ -725,7 +726,7 @@ class FamqControl(commands.Cog):
             title=f"⛔ Добавлен в ЧС: {nick or static_id}",
             description=f"Статик `{static_id}`\n📝 {reason}\n👮 {inter.author.mention}",
             color=_color(load_config(), "error_color", 0xE74C3C)))
-        await inter.response.send_message(f"✅ Запись `#{entry}` добавлена в чёрный список.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed(f"✅ Запись `#{entry}` добавлена в чёрный список."), ephemeral=True)
 
     @blacklist.sub_command(name="remove", description="Убрать запись из чёрного списка")
     async def bl_remove(self, inter: disnake.ApplicationCommandInteraction,
@@ -734,13 +735,13 @@ class FamqControl(commands.Cog):
             return await deny(inter)
         row = await q_one("SELECT * FROM fired_members WHERE id = ?", (entry_id,))
         if not row:
-            return await inter.response.send_message("❌ Запись не найдена.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Запись не найдена."), ephemeral=True)
         await q_exec("DELETE FROM fired_members WHERE id = ?", (entry_id,))
         await self.log_event(disnake.Embed(
             title=f"✅ Убрано из ЧС: {row['nick'] or row['static_id']}",
             description=f"Запись `#{entry_id}` удалена: {inter.author.mention}",
             color=_color(load_config(), "success_color", 0x2ECC71)))
-        await inter.response.send_message(f"✅ Запись `#{entry_id}` удалена.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed(f"✅ Запись `#{entry_id}` удалена."), ephemeral=True)
 
     @tasks.loop(seconds=BLACKLIST_POLL_SEC)
     async def blacklist_loop(self):
@@ -849,7 +850,7 @@ class FamqControl(commands.Cog):
                             period: str = commands.Param(default="week", choices=PERIODS, description="Период")):
         top = await self.voice_top(period_since(period), 10)
         if not top:
-            return await inter.response.send_message("За этот период данных пока нет.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("За этот период данных пока нет."), ephemeral=True)
         lines = [f"{MEDALS[i] if i < 3 else f'`{i + 1}.`'} <@{uid}> — **{fmt_duration(sec)}**" for i, (uid, sec) in enumerate(top)]
         emb = disnake.Embed(title=f"🎙️ Топ голосового онлайна {PERIOD_LABEL[period]}", description="\n".join(lines),
                             color=_color(load_config(), "embed_color", 0x990000))
@@ -878,7 +879,7 @@ class FamqControl(commands.Cog):
             return await deny(inter)
         rows = await db_recruiter_rows(period_since(period))
         if not rows:
-            return await inter.response.send_message("За этот период решений по заявкам нет.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("За этот период решений по заявкам нет."), ephemeral=True)
         lines = []
         for i, r in enumerate(rows[:15]):
             total = r["accepted"] + r["rejected"]
@@ -1004,7 +1005,7 @@ class FamqControl(commands.Cog):
         if not is_admin(inter.author):
             return await deny(inter)
         if not await kv_get("stats_channel_id"):
-            return await inter.response.send_message("Сначала настройте: `/famq-livestats setup`.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("Сначала настройте: `/famq-livestats setup`."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
         await self.refresh_live_stats()
         await inter.edit_original_response("✅ Обновлено.")
@@ -1015,7 +1016,7 @@ class FamqControl(commands.Cog):
             return await deny(inter)
         await kv_del("stats_channel_id")
         await kv_del("stats_message_id")
-        await inter.response.send_message("✅ Автообновление отключено (само сообщение можно удалить вручную).", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ Автообновление отключено (само сообщение можно удалить вручную)."), ephemeral=True)
 
 
 def setup(bot: commands.Bot):
