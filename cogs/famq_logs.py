@@ -23,6 +23,8 @@ from pathlib import Path
 import disnake
 from disnake.ext import commands
 
+from utils.embeds import get_color, note_embed
+
 BASE = Path(__file__).resolve().parent.parent
 CFG_PATH = BASE / "logs_settings.json"
 
@@ -507,7 +509,7 @@ class FamLogs(commands.Cog):
     async def logs_set(self, inter, category: str = commands.Param(choices=CHOICES, description="Категория"),
                        channel: disnake.TextChannel = commands.Param(description="Канал для логов")):
         if not self._allowed(inter):
-            return await inter.response.send_message("⛔ Недостаточно прав.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⛔ Недостаточно прав."), ephemeral=True)
         self.cfg["channels"][category] = channel.id
         self._write()
         await inter.response.send_message(f"✅ Категория **{category}** → {channel.mention}", ephemeral=True)
@@ -515,15 +517,15 @@ class FamLogs(commands.Cog):
     @logs.sub_command(name="clear", description="Отвязать канал от категории")
     async def logs_clear(self, inter, category: str = commands.Param(choices=CHOICES, description="Категория")):
         if not self._allowed(inter):
-            return await inter.response.send_message("⛔ Недостаточно прав.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⛔ Недостаточно прав."), ephemeral=True)
         self.cfg["channels"].pop(category, None)
         self._write()
-        await inter.response.send_message(f"🗑️ Канал для **{category}** отвязан.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed(f"🗑️ Канал для **{category}** отвязан."), ephemeral=True)
 
     @logs.sub_command(name="toggle", description="Включить / выключить категорию")
     async def logs_toggle(self, inter, category: str = commands.Param(choices=CHOICES_NO_DEFAULT, description="Категория")):
         if not self._allowed(inter):
-            return await inter.response.send_message("⛔ Недостаточно прав.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⛔ Недостаточно прав."), ephemeral=True)
         if category in self.cfg["disabled"]:
             self.cfg["disabled"].remove(category)
             state = "включена ✅"
@@ -531,12 +533,12 @@ class FamLogs(commands.Cog):
             self.cfg["disabled"].append(category)
             state = "выключена ⛔"
         self._write()
-        await inter.response.send_message(f"Категория **{category}** {state}", ephemeral=True)
+        await inter.response.send_message(embed=note_embed(f"Категория **{category}** {state}"), ephemeral=True)
 
     @logs.sub_command(name="view", description="Показать настройки логов")
     async def logs_view(self, inter):
         if not self._allowed(inter):
-            return await inter.response.send_message("⛔ Недостаточно прав.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⛔ Недостаточно прав."), ephemeral=True)
         lines = []
         for key, (name, icon, _) in CATS.items():
             cid = self.cfg["channels"].get(key)
@@ -544,14 +546,14 @@ class FamLogs(commands.Cog):
             lines.append(f"{icon} **{name}** — {f'<#{cid}>' if cid else '*не задан (идёт в запасной)*'}{off}")
         d = self.cfg["channels"].get("default")
         lines.append(f"📦 **Запасной** — {f'<#{d}>' if d else '*не задан*'}")
-        await inter.response.send_message(embed=disnake.Embed(title="Настройки логов", description="\n".join(lines), color=0x990000), ephemeral=True)
+        await inter.response.send_message(embed=disnake.Embed(title="Настройки логов", description="\n".join(lines), color=get_color()), ephemeral=True)
 
     @logs.sub_command(name="test", description="Отправить тестовую запись в категорию")
     async def logs_test(self, inter, category: str = commands.Param(choices=CHOICES_NO_DEFAULT, description="Категория")):
         if not self._allowed(inter):
-            return await inter.response.send_message("⛔ Недостаточно прав.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⛔ Недостаточно прав."), ephemeral=True)
         await self.send(inter.guild, category, self.make(category, "Тестовая запись", f"Проверка от {inter.author.mention}"))
-        await inter.response.send_message("📨 Отправлено (если канал задан и бот имеет доступ).", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("📨 Отправлено (если канал задан и бот имеет доступ)."), ephemeral=True)
 
     async def auto_create(self, guild):
         ow = {guild.default_role: disnake.PermissionOverwrite(view_channel=False),
@@ -571,7 +573,7 @@ class FamLogs(commands.Cog):
     @logs.sub_command(name="auto", description="Создать приватную категорию с каналами под все логи")
     async def logs_auto(self, inter):
         if not self._allowed(inter):
-            return await inter.response.send_message("⛔ Недостаточно прав.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⛔ Недостаточно прав."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
         try:
             made = await self.auto_create(inter.guild)
@@ -604,7 +606,7 @@ class FamLogs(commands.Cog):
                 "🟢 свой канал  ·  🟡 запасной  ·  ⚪ нет канала  ·  🔴 выключено\n"
                 "✦ ━━━━━━━━━━━━━━━━━━ ✦\n\n" + "\n".join(lines)
             ),
-            color=0x990000, timestamp=disnake.utils.utcnow())
+            color=get_color(), timestamp=disnake.utils.utcnow())
         name, icon, _ = self.meta(sel)
         cid = self.cfg["channels"].get(sel)
         last = self.last.get(sel)
@@ -626,7 +628,7 @@ class FamLogs(commands.Cog):
     @logs.sub_command(name="panel", description="Открыть панель управления логами")
     async def logs_panel(self, inter):
         if not self._allowed(inter):
-            return await inter.response.send_message("⛔ Недостаточно прав.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⛔ Недостаточно прав."), ephemeral=True)
         view = LogPanel(self, inter.author.id, inter.guild, "applications", inter)
         kw = {}
         bp = BASE / "banner_image.png"
@@ -684,7 +686,7 @@ class LogPanel(disnake.ui.View):
 
     async def interaction_check(self, inter):
         if inter.author.id != self.author_id:
-            await inter.response.send_message("⛔ Это не твоя панель — открой свою: `/logs panel`.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("⛔ Это не твоя панель — открой свою: `/logs panel`."), ephemeral=True)
             return False
         return True
 
@@ -725,7 +727,7 @@ class LogPanel(disnake.ui.View):
     @disnake.ui.button(label="Вкл / Выкл", emoji="🔄", style=disnake.ButtonStyle.secondary, row=1)
     async def toggle_btn(self, button, inter):
         if self.sel == "default":
-            return await inter.response.send_message("ℹ️ Запасной канал нельзя выключить — только отвязать.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("ℹ️ Запасной канал нельзя выключить — только отвязать."), ephemeral=True)
         d = self.cog.cfg["disabled"]
         d.remove(self.sel) if self.sel in d else d.append(self.sel)
         self.cog._write()
@@ -735,13 +737,13 @@ class LogPanel(disnake.ui.View):
     async def test_btn(self, button, inter):
         ch = self.cog.cfg["channels"]
         if not (ch.get(self.sel) or ch.get("default")):
-            return await inter.response.send_message("⚠️ Для этой категории не задан канал (и нет запасного).", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⚠️ Для этой категории не задан канал (и нет запасного)."), ephemeral=True)
         if self.sel in self.cog.cfg["disabled"]:
-            return await inter.response.send_message("⚠️ Категория выключена.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⚠️ Категория выключена."), ephemeral=True)
         cat = self.sel if self.sel in CATS else "bot"
         e = self.cog.make(cat, "Тестовая запись", f"Проверка из панели от {inter.author.mention}")
         await self.cog.send(inter.guild, self.sel, e)
-        await inter.response.send_message("📨 Тестовая запись отправлена.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("📨 Тестовая запись отправлена."), ephemeral=True)
 
     @disnake.ui.button(label="Авто-создание", emoji="⚡", style=disnake.ButtonStyle.success, row=2)
     async def auto_btn(self, button, inter):
@@ -749,9 +751,9 @@ class LogPanel(disnake.ui.View):
         try:
             made = await self.cog.auto_create(self.guild)
         except disnake.Forbidden:
-            return await inter.followup.send("❌ У бота нет права «Управление каналами».", ephemeral=True)
+            return await inter.followup.send(embed=note_embed("❌ У бота нет права «Управление каналами»."), ephemeral=True)
         await self.redraw(inter, deferred=True)
-        await inter.followup.send(f"✅ Создано каналов: {len(made)}" if made else "ℹ️ Все категории уже имеют каналы.", ephemeral=True)
+        await inter.followup.send(embed=note_embed(f"✅ Создано каналов: {len(made)}" if made else "ℹ️ Все категории уже имеют каналы."), ephemeral=True)
 
     @disnake.ui.button(label="Боты", emoji="🤖", style=disnake.ButtonStyle.secondary, row=2)
     async def bots_btn(self, button, inter):
@@ -768,7 +770,7 @@ class LogPanel(disnake.ui.View):
             n, icon, _ = self.cog.meta(key)
             filled = round(cnt / top * 10)
             rows.append(f"{icon} **{n}**\n`{'█' * filled}{'░' * (10 - filled)}` {cnt}")
-        e = disnake.Embed(title="📊 Статистика логов", description="\n".join(rows) + f"\n\n**Всего:** `{sum(st.values())}`", color=0x990000)
+        e = disnake.Embed(title="📊 Статистика логов", description="\n".join(rows) + f"\n\n**Всего:** `{sum(st.values())}`", color=get_color())
         await inter.response.send_message(embed=e, ephemeral=True)
 
     @disnake.ui.button(label="Обновить", emoji="♻️", style=disnake.ButtonStyle.secondary, row=2)
