@@ -8,7 +8,7 @@ alpha_composite: PIL не смешивает RGBA-заливку с RGBA-изо�
 import io
 from typing import Dict, List, Optional
 
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 
 from utils.card_image import _fit, _font, _mix, _rounded_mask
 
@@ -36,6 +36,24 @@ def _placeholder(accent) -> Image.Image:
     glow = Image.new("RGB", (W, H), (0, 0, 0))
     ImageDraw.Draw(glow).ellipse((-260, H - 560, 720, H + 320), fill=_mix((0, 0, 0), accent, 0.55))
     return Image.blend(img, glow.filter(ImageFilter.GaussianBlur(90)), 0.5)
+
+
+def _backdrop(accent, avatar_bytes: Optional[bytes]) -> Image.Image:
+    """Когда превью нет, фон собираем из аватара канала — как делает сам Twitch на офлайне."""
+    if not avatar_bytes:
+        return _placeholder(accent)
+    try:
+        blur = _cover(Image.open(io.BytesIO(avatar_bytes)).convert("RGB")).filter(
+            ImageFilter.GaussianBlur(42)
+        )
+    except Exception:
+        return _placeholder(accent)
+    blur = ImageEnhance.Brightness(blur).enhance(0.62)
+    blur = ImageEnhance.Color(blur).enhance(1.25)
+    top = Image.new("RGB", (W, H), _mix(DARK, accent, 0.16))
+    veil = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(veil).rectangle((0, 0, W, int(H * 0.45)), fill=255)
+    return Image.composite(top, blur, veil.filter(ImageFilter.GaussianBlur(120)))
 
 
 def _wrap(d: ImageDraw.ImageDraw, text: str, font, max_w: int, max_lines: int = 2) -> List[str]:
@@ -73,7 +91,7 @@ def render_cover(data: Dict, preview_bytes: Optional[bytes] = None,
             base = _cover(Image.open(io.BytesIO(preview_bytes)).convert("RGB"))
         except Exception:
             base = None
-    canvas = (base or _placeholder(accent)).convert("RGBA")
+    canvas = (base or _backdrop(accent, avatar_bytes)).convert("RGBA")
 
     layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
