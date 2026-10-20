@@ -107,7 +107,18 @@ async def on_ready():
     bot.add_view(EventAttendanceView())
 
     try:
-        await bot._sync_application_commands()
+        if test_guilds:
+            await bot._sync_application_commands()
+        else:
+            # Без GUILD_ID disnake регистрирует команды глобально, а Discord кэширует это до часа.
+            # Пишем список команд сразу в каждый сервер — на сервере они появляются мгновенно.
+            for g in bot.guilds:
+                cmds = [
+                    c.body for c in bot.application_commands
+                    if not getattr(c, "guild_ids", None) or g.id in c.guild_ids
+                ]
+                await bot.bulk_overwrite_guild_commands(g.id, cmds)
+                print(f"⚡ {len(cmds)} команд синхронизированы с сервером «{g.name}»", flush=True)
         print("⚡ Слеш-команды успешно синхронизированы с Discord API!", flush=True)
     except Exception as e:
         print(f"⚠️ Ошибка синхронизации команд: {e}", file=sys.stderr, flush=True)
