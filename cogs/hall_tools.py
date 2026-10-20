@@ -12,9 +12,12 @@ Hall FAMQ: дополнительные функции бота.
 import os
 import re
 import sys
+import io
 import json
 import time
+import asyncio
 from datetime import datetime, timezone
+from typing import List, Optional, Tuple
 
 import aiosqlite
 import disnake
@@ -22,6 +25,10 @@ from disnake.ext import commands, tasks
 
 from database import DB_PATH
 from utils.checks import load_config
+from utils.embeds import note_embed
+from utils.roster_card import render_roster
+
+ROSTER_ROWS_PER_ROLE = 18
 
 SETTINGS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hall_settings.json"
@@ -337,7 +344,7 @@ class LeaveRejectModal(disnake.ui.Modal):
             "error_color",
         )
         await dm_user(inter.bot, row["user_id"], dm)
-        await inter.response.send_message("✅ Заявка отклонена.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ Заявка отклонена."), ephemeral=True)
 
 
 class LeaveReviewView(disnake.ui.View):
@@ -346,11 +353,11 @@ class LeaveReviewView(disnake.ui.View):
 
     async def _get_pending(self, inter):
         if not can_manage(inter.author):
-            await inter.response.send_message("❌ У вас нет прав рассматривать заявки.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ У вас нет прав рассматривать заявки."), ephemeral=True)
             return None
         row = await run("SELECT * FROM leaves WHERE message_id = ?", (inter.message.id,), "one")
         if not row or row["status"] != "pending":
-            await inter.response.send_message("⚠️ Эта заявка уже обработана.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("⚠️ Эта заявка уже обработана."), ephemeral=True)
             return None
         return row
 
@@ -398,14 +405,16 @@ class AfkPanelView(disnake.ui.View):
     async def start(self, button, inter: disnake.MessageInteraction):
         s = get_settings()
         if not s["afk_enabled"]:
-            await inter.response.send_message("❌ Функция АФК сейчас выключена администрацией.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Функция АФК сейчас выключена администрацией."), ephemeral=True)
             return
 
         existing = await run("SELECT * FROM afk_sessions WHERE user_id = ?", (inter.author.id,), "one")
         if existing:
             until_ts = existing["started_at"] + existing["duration_hours"] * 3600
             await inter.response.send_message(
-                f"⚠️ Вы уже в статусе АФК. Истекает <t:{until_ts}:R>.\nНажмите «Прекратить», если уже вернулись.",
+                embed=note_embed(
+                    f"⚠️ Вы уже в статусе АФК. Истекает <t:{until_ts}:R>.\nНажмите «Прекратить», если уже вернулись."
+                ),
                 ephemeral=True,
             )
             return
@@ -418,9 +427,11 @@ class AfkPanelView(disnake.ui.View):
         )
         until_ts = now + hours * 3600
         await inter.response.send_message(
-            f"✅ Вы взяли АФК на **{human_hours(hours)}**.\n"
-            f"Истекает <t:{until_ts}:R> (<t:{until_ts}:f>).\n"
-            "Когда вернётесь — нажмите «Прекратить» на этой же панели.",
+            embed=note_embed(
+                f"✅ Вы взяли АФК на **{human_hours(hours)}**.\n"
+                f"Истекает <t:{until_ts}:R> (<t:{until_ts}:f>).\n"
+                "Когда вернётесь — нажмите «Прекратить» на этой же панели."
+            ),
             ephemeral=True,
         )
         log = make_embed(
@@ -435,13 +446,13 @@ class AfkPanelView(disnake.ui.View):
     async def stop(self, button, inter: disnake.MessageInteraction):
         existing = await run("SELECT * FROM afk_sessions WHERE user_id = ?", (inter.author.id,), "one")
         if not existing:
-            await inter.response.send_message("ℹ️ У вас сейчас нет активного статуса АФК.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("ℹ️ У вас сейчас нет активного статуса АФК."), ephemeral=True)
             return
         await run("DELETE FROM afk_sessions WHERE user_id = ?", (inter.author.id,))
         spent = int(time.time()) - existing["started_at"]
         spent_h, spent_m = spent // 3600, (spent % 3600) // 60
         await inter.response.send_message(
-            f"✅ АФК завершён. Вы отсутствовали **{spent_h}ч {spent_m}м**. С возвращением! ☀️", ephemeral=True
+            embed=note_embed(f"✅ АФК завершён. Вы отсутствовали **{spent_h}ч {spent_m}м**. С возвращением! ☀️"), ephemeral=True
         )
 
 
@@ -472,14 +483,16 @@ class AfkHoursModal(disnake.ui.Modal):
             default_h = int(inter.text_values["default_hours"].strip())
             reminder_h = int(inter.text_values["reminder_hours"].strip())
         except ValueError:
-            await inter.response.send_message("❌ Оба поля должны быть целыми числами (часы).", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Оба поля должны быть целыми числами (часы)."), ephemeral=True)
             return
         if default_h <= 0 or reminder_h <= 0:
-            await inter.response.send_message("❌ Значения должны быть больше нуля.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Значения должны быть больше нуля."), ephemeral=True)
             return
         if reminder_h >= default_h:
             await inter.response.send_message(
-                "❌ Напоминание должно приходить раньше, чем истекает АФК (меньше, чем длительность).", ephemeral=True
+                embed=note_embed(
+                    "❌ Напоминание должно приходить раньше, чем истекает АФК (меньше, чем длительность)."
+                ), ephemeral=True
             )
             return
         s = get_settings()
@@ -487,7 +500,9 @@ class AfkHoursModal(disnake.ui.Modal):
         s["afk_reminder_hours"] = reminder_h
         save_settings(s)
         await inter.response.send_message(
-            f"✅ Сохранено: по умолчанию **{human_hours(default_h)}**, напоминание через **{human_hours(reminder_h)}**.",
+            embed=note_embed(
+                f"✅ Сохранено: по умолчанию **{human_hours(default_h)}**, напоминание через **{human_hours(reminder_h)}**."
+            ),
             ephemeral=True,
         )
 
@@ -510,7 +525,7 @@ class AfkTextModal(disnake.ui.Modal):
 
     async def callback(self, inter: disnake.ModalInteraction):
         set_setting("afk_panel_text", inter.text_values["text"])
-        await inter.response.send_message("✅ Текст АФК-панели сохранён.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ Текст АФК-панели сохранён."), ephemeral=True)
 
 
 # ───────────────────────── Панель /hall ─────────────────────────
@@ -635,7 +650,7 @@ class RulesModal(disnake.ui.Modal):
 
     async def callback(self, inter: disnake.ModalInteraction):
         set_setting("rules_text", inter.text_values["text"])
-        await inter.response.send_message("✅ Текст приветствия сохранён.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ Текст приветствия сохранён."), ephemeral=True)
 
 
 class TimeModal(disnake.ui.Modal):
@@ -657,10 +672,10 @@ class TimeModal(disnake.ui.Modal):
     async def callback(self, inter: disnake.ModalInteraction):
         hours = parse_duration(inter.text_values["time"])
         if hours is None:
-            await inter.response.send_message("❌ Не понял формат. Пишите так: `14 д` или `36 ч`.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Не понял формат. Пишите так: `14 д` или `36 ч`."), ephemeral=True)
             return
         set_setting("remind_hours", hours)
-        await inter.response.send_message(f"✅ Напоминание через **{human_hours(hours)}** после вступления.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed(f"✅ Напоминание через **{human_hours(hours)}** после вступления."), ephemeral=True)
 
 
 class HallPanel(disnake.ui.View):
@@ -670,7 +685,7 @@ class HallPanel(disnake.ui.View):
 
     async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
         if inter.author.id != self.author_id or not is_admin(inter.author):
-            await inter.response.send_message("❌ Это не ваша панель.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Это не ваша панель."), ephemeral=True)
             return False
         return True
 
@@ -689,7 +704,7 @@ class HallPanel(disnake.ui.View):
 
     @disnake.ui.button(label="Резервный канал", emoji="📢", style=disnake.ButtonStyle.secondary, row=0)
     async def welcome_channel(self, button, inter):
-        await inter.response.send_message("Выберите канал для приветствий:", view=ChannelPicker("welcome_channel_id"), ephemeral=True)
+        await inter.response.send_message(embed=note_embed("Выберите канал для приветствий:"), view=ChannelPicker("welcome_channel_id"), ephemeral=True)
 
     # Напоминания
     @disnake.ui.button(label="Напоминания вкл/выкл", emoji="⏰", style=disnake.ButtonStyle.primary, row=1)
@@ -710,17 +725,17 @@ class HallPanel(disnake.ui.View):
 
     @disnake.ui.button(label="Канал напоминаний", emoji="📌", style=disnake.ButtonStyle.secondary, row=2)
     async def remind_channel(self, button, inter):
-        await inter.response.send_message("Выберите канал для руководства:", view=ChannelPicker("remind_channel_id"), ephemeral=True)
+        await inter.response.send_message(embed=note_embed("Выберите канал для руководства:"), view=ChannelPicker("remind_channel_id"), ephemeral=True)
 
     # Отпуска
     @disnake.ui.button(label="Канал заявок на отпуск", emoji="🌴", style=disnake.ButtonStyle.secondary, row=2)
     async def leave_channel(self, button, inter):
-        await inter.response.send_message("Выберите канал для заявок на отпуск:", view=ChannelPicker("leave_channel_id"), ephemeral=True)
+        await inter.response.send_message(embed=note_embed("Выберите канал для заявок на отпуск:"), view=ChannelPicker("leave_channel_id"), ephemeral=True)
 
     # Состав
     @disnake.ui.button(label="Канал состава", emoji="👥", style=disnake.ButtonStyle.secondary, row=3)
     async def roster_channel(self, button, inter):
-        await inter.response.send_message("Выберите канал для списка состава:", view=ChannelPicker("roster_channel_id"), ephemeral=True)
+        await inter.response.send_message(embed=note_embed("Выберите канал для списка состава:"), view=ChannelPicker("roster_channel_id"), ephemeral=True)
 
     @disnake.ui.button(label="Добавить роль", emoji="➕", style=disnake.ButtonStyle.success, row=3)
     async def roster_add(self, button, inter):
@@ -753,11 +768,11 @@ class HallPanel(disnake.ui.View):
     async def afk_publish(self, button, inter):
         s = get_settings()
         if not s["afk_panel_channel_id"]:
-            await inter.response.send_message("❌ Сначала выберите канал («Канал АФК-панели»).", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Сначала выберите канал («Канал АФК-панели»)."), ephemeral=True)
             return
         channel = inter.guild.get_channel(s["afk_panel_channel_id"])
         if channel is None:
-            await inter.response.send_message("❌ Канал не найден (возможно, был удалён).", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Канал не найден (возможно, был удалён)."), ephemeral=True)
             return
         msg = await channel.send(embed=afk_panel_embed(), view=AfkPanelView())
         set_setting("afk_panel_message_id", msg.id)
@@ -767,12 +782,12 @@ class HallPanel(disnake.ui.View):
     async def roster_remove(self, button, inter):
         roles = get_settings()["roster_roles"]
         if not roles:
-            await inter.response.send_message("Список ролей пуст.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("Список ролей пуст."), ephemeral=True)
             return
         options = [disnake.SelectOption(label=r["title"][:100], value=str(r["role_id"])) for r in roles]
         view = disnake.ui.View(timeout=120)
         view.add_item(RoleRemoveSelect(options))
-        await inter.response.send_message("Какую роль убрать?", view=view, ephemeral=True)
+        await inter.response.send_message(embed=note_embed("Какую роль убрать?"), view=view, ephemeral=True)
 
     @disnake.ui.button(label="Обновить список сейчас", emoji="🔁", style=disnake.ButtonStyle.secondary, row=4)
     async def roster_refresh(self, button, inter):
@@ -865,10 +880,10 @@ class HallTools(commands.Cog):
         reason: str = commands.Param(name="причина", description="Причина увольнения", max_length=300),
     ):
         if not is_admin(inter.author):
-            await inter.response.send_message("❌ Эта команда только для администрации.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Эта команда только для администрации."), ephemeral=True)
             return
         if member.bot or member.id == inter.author.id:
-            await inter.response.send_message("❌ Нельзя уволить этого пользователя.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Нельзя уволить этого пользователя."), ephemeral=True)
             return
         await inter.response.defer(ephemeral=True)
 
@@ -935,27 +950,27 @@ class HallTools(commands.Cog):
     ):
         member_row = await run("SELECT 1 AS x FROM family_members WHERE user_id = ?", (inter.author.id,), "one")
         if not member_row:
-            await inter.response.send_message("❌ Заявка на отпуск доступна только участникам семьи.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Заявка на отпуск доступна только участникам семьи."), ephemeral=True)
             return
         try:
             d = datetime.strptime(until.strip().replace("/", ".").replace("-", "."), "%d.%m.%Y")
         except ValueError:
-            await inter.response.send_message("❌ Неверная дата. Пишите так: `25.10.2026`.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Неверная дата. Пишите так: `25.10.2026`."), ephemeral=True)
             return
         until_ts = int(d.replace(hour=23, minute=59, second=59, tzinfo=timezone.utc).timestamp())
         now = int(time.time())
         if until_ts <= now:
-            await inter.response.send_message("❌ Дата должна быть в будущем.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Дата должна быть в будущем."), ephemeral=True)
             return
         if until_ts - now > 365 * 86400:
-            await inter.response.send_message("❌ Слишком далёкая дата (максимум год).", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Слишком далёкая дата (максимум год)."), ephemeral=True)
             return
         existing = await run(
             "SELECT id FROM leaves WHERE user_id = ? AND (status = 'pending' OR (status = 'approved' AND until_ts > ?))",
             (inter.author.id, now), "one",
         )
         if existing:
-            await inter.response.send_message("⚠️ У вас уже есть активная или ожидающая заявка на отпуск.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("⚠️ У вас уже есть активная или ожидающая заявка на отпуск."), ephemeral=True)
             return
 
         s = get_settings()
@@ -964,7 +979,7 @@ class HallTools(commands.Cog):
         cid = s["leave_channel_id"] or channels.get("promotion_review_channel_id", 0) or channels.get("logs_channel_id", 0)
         channel = self.bot.get_channel(cid) if cid else None
         if channel is None:
-            await inter.response.send_message("❌ Канал для заявок не настроен. Сообщите администрации (/hall).", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Канал для заявок не настроен. Сообщите администрации (/hall)."), ephemeral=True)
             return
 
         leave_id = await run(
@@ -975,23 +990,23 @@ class HallTools(commands.Cog):
             msg = await channel.send(embed=await leave_embed(row), view=LeaveReviewView())
         except disnake.HTTPException:
             await run("DELETE FROM leaves WHERE id = ?", (leave_id,))
-            await inter.response.send_message("❌ Не удалось отправить заявку в канал руководства.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Не удалось отправить заявку в канал руководства."), ephemeral=True)
             return
         await run("UPDATE leaves SET message_id = ? WHERE id = ?", (msg.id, leave_id))
         await inter.response.send_message(
-            f"✅ Заявка #{leave_id} отправлена руководству. Ответ придёт в личные сообщения 🌴", ephemeral=True
+            embed=note_embed(f"✅ Заявка #{leave_id} отправлена руководству. Ответ придёт в личные сообщения 🌴"), ephemeral=True
         )
 
     @commands.slash_command(name="отпуск-список", description="Кто сейчас в отпуске", dm_permission=False)
     async def leave_list(self, inter: disnake.ApplicationCommandInteraction):
         if not can_manage(inter.author):
-            await inter.response.send_message("❌ Нет прав.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Нет прав."), ephemeral=True)
             return
         rows = await run(
             "SELECT * FROM leaves WHERE status = 'approved' AND until_ts > ? ORDER BY until_ts", (int(time.time()),), "all"
         )
         if not rows:
-            await inter.response.send_message("🌴 Сейчас никто не в отпуске.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("🌴 Сейчас никто не в отпуске."), ephemeral=True)
             return
         lines = [f"• <@{r['user_id']}>: до <t:{r['until_ts']}:D> — {r['reason']}" for r in rows]
         e = make_embed("🌴 Сейчас в отпуске", "\n".join(lines)[:4000])
@@ -1000,11 +1015,11 @@ class HallTools(commands.Cog):
     @commands.slash_command(name="афк-список", description="Кто сейчас в статусе АФК", dm_permission=False)
     async def afk_list(self, inter: disnake.ApplicationCommandInteraction):
         if not can_manage(inter.author):
-            await inter.response.send_message("❌ Нет прав.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Нет прав."), ephemeral=True)
             return
         rows = await run("SELECT * FROM afk_sessions ORDER BY started_at", fetch="all")
         if not rows:
-            await inter.response.send_message("🌴 Сейчас никто не в АФК.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("🌴 Сейчас никто не в АФК."), ephemeral=True)
             return
         now = int(time.time())
         lines = []
@@ -1025,17 +1040,17 @@ class HallTools(commands.Cog):
     @commands.slash_command(name="hall", description="Панель настроек Hall FAMQ", dm_permission=False)
     async def hall(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter.author):
-            await inter.response.send_message("❌ Только для администрации.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
             return
         await inter.response.send_message(
             embed=panel_embed(inter.guild), view=HallPanel(inter.author.id), ephemeral=True
         )
 
     # ── Состав ──
-    def build_roster_embed(self, guild: disnake.Guild, s) -> disnake.Embed:
-        name = load_config().get("bot_name", "Hall FAMQ")
-        e = make_embed(f"👥 Состав руководства {name}", "Актуальный список по должностям. Обновляется автоматически.")
-        seen = set()
+    def roster_sections(self, guild: disnake.Guild, s) -> List[Tuple[str, List[disnake.Member]]]:
+        """Роли по порядку; участник показывается только в первой из его ролей."""
+        seen: set = set()
+        sections: List[Tuple[str, List[disnake.Member]]] = []
         for item in s["roster_roles"]:
             role = guild.get_role(item["role_id"])
             if role is None:
@@ -1045,6 +1060,37 @@ class HallTools(commands.Cog):
                 key=lambda m: m.display_name.lower(),
             )
             seen.update(m.id for m in members)
+            sections.append((item["title"], members))
+        return sections
+
+    async def roster_poster(self, guild: disnake.Guild, s) -> Optional[bytes]:
+        """Картинка состава. Аватары тянем только когда постер реально нужен."""
+        sections, total = [], 0
+        for title, members in self.roster_sections(guild, s):
+            rows = []
+            for m in members[:ROSTER_ROWS_PER_ROLE]:
+                avatar = await m.avatar.read() if m.avatar else None
+                rows.append((m.display_name, avatar))
+            if len(members) > ROSTER_ROWS_PER_ROLE:
+                rows.append((f"и ещё {len(members) - ROSTER_ROWS_PER_ROLE}…", None))
+            sections.append((title, rows))
+            total += len(members)
+        if not total:
+            return None
+        name = load_config().get("bot_name", "Hallez FAMQ")
+        stamp = datetime.now(timezone.utc).strftime("%d.%m.%Y")
+        return await asyncio.to_thread(
+            render_roster,
+            f"Состав семьи {name}",
+            "Список по должностям, обновляется автоматически",
+            sections,
+            f"Всего участников: {total}  ·  {stamp}",
+        )
+
+    def build_roster_embed(self, guild: disnake.Guild, s) -> disnake.Embed:
+        name = load_config().get("bot_name", "Hall FAMQ")
+        e = make_embed(f"👥 Состав руководства {name}", "Актуальный список по должностям. Обновляется автоматически.")
+        for title, members in self.roster_sections(guild, s):
             lines = [f"• {m.mention}" for m in members] or ["— пока никого —"]
             chunks, cur = [], ""
             for line in lines:
@@ -1057,8 +1103,8 @@ class HallTools(commands.Cog):
             for i, chunk in enumerate(chunks):
                 if len(e.fields) >= 24:
                     break
-                title = f"⚜️ {item['title']} • {len(members)}" if i == 0 else "\u200b"
-                e.add_field(name=title[:256], value=chunk.strip(), inline=False)
+                head = f"⚜️ {title} • {len(members)}" if i == 0 else "\u200b"
+                e.add_field(name=head[:256], value=chunk.strip(), inline=False)
         return e
 
     async def update_roster(self, guild: disnake.Guild, force: bool = False) -> bool:
@@ -1069,7 +1115,10 @@ class HallTools(commands.Cog):
         if channel is None:
             return False
         embed = self.build_roster_embed(guild, s)
-        digest = json.dumps(embed.to_dict(), sort_keys=True, ensure_ascii=False)
+        poster = await self.roster_poster(guild, s)
+        if poster:
+            embed.set_image(url="attachment://roster.jpg")
+        digest = json.dumps(embed.to_dict(), sort_keys=True, ensure_ascii=False) + f"#{hash(poster or b'')}"
         msg = None
         if s["roster_message_id"]:
             try:
@@ -1078,13 +1127,14 @@ class HallTools(commands.Cog):
                 msg = None
             except disnake.HTTPException:
                 return False
+        file = disnake.File(io.BytesIO(poster), filename="roster.jpg") if poster else None
         try:
             if msg is None:
-                msg = await channel.send(embed=embed)
+                msg = await channel.send(embed=embed, file=file)
                 set_setting("roster_message_id", msg.id)
                 self._roster_hash = digest
             elif force or digest != self._roster_hash:
-                await msg.edit(embed=embed)
+                await msg.edit(embed=embed, file=file, attachments=[])
                 self._roster_hash = digest
         except disnake.HTTPException:
             return False
