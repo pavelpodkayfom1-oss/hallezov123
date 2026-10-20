@@ -13,17 +13,19 @@ from utils.embeds import base_embed
 from utils.stream_cover import render_cover
 
 TWITCH_COLOR = 0x9146FF
-PREVIEW_URL = "https://static-cdn.jtvnw.net/previews-ttv/live_user_{login}-1280x720.jpg"
+PREVIEW_URL = "https://static-cdn.jtvnw.net/previews-ttv/live_user_{login}-{width}x{height}.jpg"
 USER_AGENT = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
               "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")
 
 TWITCH_URL_RE = re.compile(r"^(?:https?://)?(?:www\.|m\.)?twitch\.tv/(?P<login>[^\s/?#]+)", re.IGNORECASE)
 META_RE = re.compile(r'<meta\b[^>]*?(?:property|name)="([^"]+)"[^>]*?content="([^"]*)"', re.IGNORECASE)
-# «RERUN: Играем! | Streaming GTA V for 301 viewers.» — так Twitch отдаёт живой стрим
+# «Название стрима | Streaming irl.» — «for N viewers» бывает не всегда
 LIVE_DESC_RE = re.compile(
-    r"^\s*(?P<title>.*?)\s*\|\s*Streaming (?P<game>.{1,80}?) for (?P<viewers>[\d.,]+) viewers?\.?\s*$",
-    re.IGNORECASE | re.DOTALL,
+    r"^\s*(?P<title>.*?)\s*\|\s*Streaming\s+(?P<game>.+?)\s*$", re.IGNORECASE | re.DOTALL
 )
+VIEWERS_RE = re.compile(r"\s+for\s+(?P<viewers>[\d.,]+)\s+viewers?\.?\s*$", re.IGNORECASE)
+TITLE_SUFFIX_RE = re.compile(r"\s+-\s+(?:Live on Twitch|Twitch)\s*$", re.IGNORECASE)
+PREVIEW_RE = re.compile(r"https://static-cdn\.jtvnw\.net/previews-ttv/live_user_[^\s\"']*?-(\d+)x(\d+)\.jpg", re.IGNORECASE)
 
 
 def _can_post(member: disnake.Member) -> bool:
@@ -48,6 +50,16 @@ class Media(commands.Cog):
         except aiohttp.ClientError:
             return None
 
+    async def _preview(self, session: aiohttp.ClientSession, page: str, login: str) -> Optional[bytes]:
+        """Twitch отдаёт превью только в тех размерах, которые сам же перечислил на странице."""
+        sizes = {(int(w), int(h)) for w, h in PREVIEW_RE.findall(page)}
+        sizes |= {(1280, 720), (800, 450), (640, 360)}
+        for width, height in sorted(sizes, key=lambda s: s[0] * s[1], reverse=True):
+            image = await self._bytes(session, PREVIEW_URL.format(login=login, width=width, height=height))
+            if image is not None:
+                return image
+        return None
+
     async def _gather(self, url: str, login: str) -> Tuple[dict, Optional[bytes], Optional[bytes]]:
         """Тянет название, категорию и зрителей со страницы канала + превью и аватар."""
         data = {"login": login, "status": "offline", "title": "", "game": "", "viewers": None}
@@ -57,23 +69,29 @@ class Media(commands.Cog):
             if page is None:
                 return data, None, None
 
-            meta = {k.lower(): html.unescape(v) for k, v in META_RE.findall(page.decode("utf-8", "replace"))}
+            text = page.decode("utf-8", "replace")
+            meta = {k.lower(): html.unescape(v) for k, v in META_RE.findall(text)}
+            channel_name = TITLE_SUFFIX_RE.sub("", meta.get("og:title", "")).strip()
             avatar = await self._bytes(session, meta.get("og:image", ""))
-            data["title"] = meta.get("og:title", "").removesuffix(" - Twitch").strip()
+            data["title"] = channel_name
 
             live = LIVE_DESC_RE.match(meta.get("og:description", ""))
-            if live is None:
+            if live is None and "live on twitch" not in meta.get("og:title", "").lower():
                 return data, None, avatar
 
-            preview = await self._bytes(session, PREVIEW_URL.format(login=login))
-            if preview is None:
-                return data, None, avatar
+            game = live.group("game").strip().rstrip(". ") if live else ""
+            viewers = None
+            if live:
+                if count := VIEWERS_RE.search(game):
+                    viewers = int(re.sub(r"[^\d]", "", count.group("viewers")) or 0)
+                    game = game[: count.start()].rstrip(". ")
 
+            preview = await self._preview(session, text, login)
             data.update(
                 status="live",
-                title=live.group("title").strip() or data["title"],
-                game=live.group("game").strip(),
-                viewers=int(re.sub(r"[^\d]", "", live.group("viewers")) or 0),
+                title=(live.group("title").strip() if live else "") or channel_name,
+                game=game,
+                viewers=viewers,
             )
             return data, preview, avatar
 
