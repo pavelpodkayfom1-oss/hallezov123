@@ -27,6 +27,7 @@ import disnake
 from disnake.ext import commands
 
 import database as db
+from utils.embeds import note_embed
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SETTINGS_PATH = os.path.join(BASE_DIR, "recruit_plus.json")
@@ -325,9 +326,9 @@ async def start_upload(inter, worker=None, what: str = "эмодзи") -> None:
     import asyncio
     global _UPLOADING
     if _UPLOADING:
-        return await inter.followup.send("⏳ Загрузка уже идёт — дождитесь итога.", ephemeral=True)
+        return await inter.followup.send(embed=note_embed("⏳ Загрузка уже идёт — дождитесь итога."), ephemeral=True)
     _UPLOADING = True
-    await inter.followup.send(f"📥 Загрузка ({what}) запущена в фоне. Итог пришлю сюда — панель можно закрыть.", ephemeral=True)
+    await inter.followup.send(embed=note_embed(f"📥 Загрузка ({what}) запущена в фоне. Итог пришлю сюда — панель можно закрыть."), ephemeral=True)
 
     async def runner():
         global _UPLOADING
@@ -896,7 +897,7 @@ class ApplyView(disnake.ui.View):
 async def h_apply(inter: disnake.MessageInteraction):
     cfg = get_cfg()
     if not cfg.get("recruitment_open", True):
-        return await inter.response.send_message(X("closed"), ephemeral=True)
+        return await inter.response.send_message(embed=note_embed(X("closed")), ephemeral=True)
     await inter.response.send_modal(ApplyModal())
 
 
@@ -947,20 +948,20 @@ async def submit_application(inter: disnake.ModalInteraction):
     nick = d.get("nick") or inter.author.display_name
     static = d.get("static", "")
     if not re.fullmatch(r"\d{1,9}", static):
-        return await inter.response.send_message("❌ Статик должен состоять только из цифр (например, `12345`).", ephemeral=True)
+        return await inter.response.send_message(embed=note_embed("❌ Статик должен состоять только из цифр (например, `12345`)."), ephemeral=True)
     if await db.find_member_by_static(static):
-        return await inter.response.send_message("ℹ️ Игрок с таким статиком уже состоит в семье.", ephemeral=True)
+        return await inter.response.send_message(embed=note_embed("ℹ️ Игрок с таким статиком уже состоит в семье."), ephemeral=True)
 
     age = 0
     if d.get("age"):
         if not d["age"].isdigit() or not (10 <= int(d["age"]) <= 80):
-            return await inter.response.send_message("❌ Возраст укажите числом, например `18`.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Возраст укажите числом, например `18`."), ephemeral=True)
         age = int(d["age"])
 
     ch = await get_channel(chan_id("review"))
     if not isinstance(ch, disnake.TextChannel):
         return await inter.response.send_message(
-            "❌ Канал для заявок не настроен. Администратору: `/hr` → «Каналы и роли».", ephemeral=True)
+            embed=note_embed("❌ Канал для заявок не настроен. Администратору: `/hr` → «Каналы и роли»."), ephemeral=True)
 
     await inter.response.defer(ephemeral=True)
     emb = card_embed(nick, inter.author, answers, f"🟡 **Новая заявка**", cfg_color("warning_color", 0xF39C12))
@@ -1005,7 +1006,7 @@ async def submit_application(inter: disnake.ModalInteraction):
             await thread.delete()
         except Exception:
             pass
-        return await inter.followup.send("❌ Не удалось отправить анкету в ветку. Проверьте права бота.", ephemeral=True)
+        return await inter.followup.send(embed=note_embed("❌ Не удалось отправить анкету в ветку. Проверьте права бота."), ephemeral=True)
 
     # thread_id = id приватной ветки (кнопки находят заявку по ветке)
     app_id = await db.create_application(
@@ -1044,16 +1045,16 @@ class CardView(disnake.ui.View):
 
 async def _load_card(inter: disnake.MessageInteraction):
     if not is_staff(inter.author):
-        await inter.response.send_message("❌ Эти кнопки доступны только рекрутерам.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("❌ Эти кнопки доступны только рекрутерам."), ephemeral=True)
         return None
     app = await db.get_application_by_thread(inter.message.id)   # старые заявки: id сообщения в канале
     if not app and isinstance(inter.channel, disnake.Thread):
         app = await db.get_application_by_thread(inter.channel.id)   # новые заявки: id приватной ветки
     if not app:
-        await inter.response.send_message("❌ Заявка не найдена в базе.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("❌ Заявка не найдена в базе."), ephemeral=True)
         return None
     if app["status"] in ("accepted", "rejected"):
-        await inter.response.send_message("ℹ️ Эта заявка уже обработана.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("ℹ️ Эта заявка уже обработана."), ephemeral=True)
         return None
     return app
 
@@ -1206,7 +1207,7 @@ class VoicePickView(disnake.ui.View):
 
     async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
         if inter.author.id != self.recruiter_id:
-            await inter.response.send_message("❌ Это меню открыл другой рекрутер.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Это меню открыл другой рекрутер."), ephemeral=True)
             return False
         return True
 
@@ -1272,7 +1273,7 @@ async def h_accept(inter: disnake.MessageInteraction):
         except Exception:
             member = None
     if member is None:
-        return await inter.followup.send("❌ Кандидат уже не на сервере — принять нельзя.", ephemeral=True)
+        return await inter.followup.send(embed=note_embed("❌ Кандидат уже не на сервере — принять нельзя."), ephemeral=True)
 
     cfg = get_cfg()
     warnings = []
@@ -1337,7 +1338,7 @@ async def h_accept(inter: disnake.MessageInteraction):
     note = "✅ Кандидат принят."
     if warnings:
         note += "\n⚠️ " + "; ".join(warnings)
-    await inter.followup.send(note, ephemeral=True)
+    await inter.followup.send(embed=note_embed(note), ephemeral=True)
 
 
 class RejectModal(disnake.ui.Modal):
@@ -1372,7 +1373,7 @@ class RejectModal(disnake.ui.Modal):
         text = T("recruit_rejected_dm", "К сожалению, заявка отклонена.\n📝 Причина: {reason}",
                  nick=app["nick"], reason=reason)
         await dm(app["user_id"], "Решение по вашей заявке", text, color=cfg_color("error_color", 0xE74C3C))
-        await inter.followup.send("✅ Отказ оформлен.", ephemeral=True)
+        await inter.followup.send(embed=note_embed("✅ Отказ оформлен."), ephemeral=True)
 
 
 async def h_reject(inter: disnake.MessageInteraction):
@@ -1422,7 +1423,7 @@ async def h_top(inter: disnake.MessageInteraction):
 async def h_ref(inter: disnake.MessageInteraction):
     m = await db.get_member(inter.author.id)
     if not m and not is_staff(inter.author):
-        return await inter.response.send_message("ℹ️ Подавать приглашённых могут только участники семьи.", ephemeral=True)
+        return await inter.response.send_message(embed=note_embed("ℹ️ Подавать приглашённых могут только участники семьи."), ephemeral=True)
     await inter.response.send_modal(ReferralModal(m))
 
 
@@ -1441,16 +1442,16 @@ class ReferralModal(disnake.ui.Modal):
     async def callback(self, inter: disnake.ModalInteraction):
         v = {k: x.strip() for k, x in inter.text_values.items()}
         if not (v["my_static"].isdigit() and v["inv_static"].isdigit()):
-            return await inter.response.send_message("❌ Статики — только цифры.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Статики — только цифры."), ephemeral=True)
         if v["my_static"] == v["inv_static"]:
-            return await inter.response.send_message("❌ Нельзя пригласить самого себя.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нельзя пригласить самого себя."), ephemeral=True)
         if await db.find_member_by_static(v["inv_static"]):
-            return await inter.response.send_message("ℹ️ Этот игрок уже в семье — приглашение не засчитывается.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("ℹ️ Этот игрок уже в семье — приглашение не засчитывается."), ephemeral=True)
         if await db.find_active_referral_by_static(v["inv_static"]):
-            return await inter.response.send_message("ℹ️ На этого игрока уже подана заявка о приглашении.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("ℹ️ На этого игрока уже подана заявка о приглашении."), ephemeral=True)
         ch = await get_channel(chan_id("orders"))
         if not isinstance(ch, disnake.TextChannel):
-            return await inter.response.send_message("❌ Канал для приглашений не настроен (`/hr` → «Каналы и роли»).", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Канал для приглашений не настроен (`/hr` → «Каналы и роли»)."), ephemeral=True)
 
         await inter.response.defer(ephemeral=True)
         ref_id = await db.create_referral(inter.author.id, v["my_nick"], v["my_static"], v["inv_nick"], v["inv_static"], v["proof"])
@@ -1462,7 +1463,7 @@ class ReferralModal(disnake.ui.Modal):
         emb.set_footer(text=f"Баллы: +{S['points']['referral']} после подтверждения и принятия кандидата")
         msg = await ch.send(embed=emb, view=RefView())
         await db.set_referral_message(ref_id, ch.id, msg.id)
-        await inter.followup.send(X("ref_sent", ref_id=ref_id, inv_nick=v['inv_nick'], pts=S['points']['referral']), ephemeral=True)
+        await inter.followup.send(embed=note_embed(X("ref_sent", ref_id=ref_id, inv_nick=v['inv_nick'], pts=S['points']['referral'])), ephemeral=True)
 
 
 class RefView(disnake.ui.View):
@@ -1474,14 +1475,14 @@ class RefView(disnake.ui.View):
 
 async def _load_ref(inter):
     if not is_staff(inter.author):
-        await inter.response.send_message("❌ Только для рекрутеров.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("❌ Только для рекрутеров."), ephemeral=True)
         return None
     ref = await db.get_referral_by_message(inter.message.id)
     if not ref:
-        await inter.response.send_message("❌ Приглашение не найдено.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("❌ Приглашение не найдено."), ephemeral=True)
         return None
     if ref["status"] not in ("pending",):
-        await inter.response.send_message("ℹ️ Уже обработано.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("ℹ️ Уже обработано."), ephemeral=True)
         return None
     return ref
 
@@ -1523,12 +1524,12 @@ async def h_ref_ok(inter: disnake.MessageInteraction):
     app = await db.get_accepted_application_by_static(ref["invitee_static"])
     if app:
         await pay_referral(ref, app)
-        return await inter.followup.send("✅ Подтверждено — приглашённый уже принят, баллы начислены.", ephemeral=True)
+        return await inter.followup.send(embed=note_embed("✅ Подтверждено — приглашённый уже принят, баллы начислены."), ephemeral=True)
     await _edit_ref_card(ref, f"{em('review')} **Подтверждено, ждём принятия кандидата**", main_color(), False)
     await dm(ref["inviter_id"], f"{em('referral')} Приглашение подтверждено",
              f"Доказательства по **{ref['invitee_nick']}** приняты. Баллы придут автоматически, "
              f"как только кандидата примут в семью.", banner=False)
-    await inter.followup.send("✅ Подтверждено. Баллы начислятся при принятии кандидата.", ephemeral=True)
+    await inter.followup.send(embed=note_embed("✅ Подтверждено. Баллы начислятся при принятии кандидата."), ephemeral=True)
 
 
 async def h_ref_no(inter: disnake.MessageInteraction):
@@ -1541,7 +1542,7 @@ async def h_ref_no(inter: disnake.MessageInteraction):
     await dm(ref["inviter_id"], "Приглашение отклонено",
              f"Приглашение игрока **{ref['invitee_nick']}** не засчитано (недостаточно доказательств). "
              f"Вы можете подать его заново с понятными скринами.", color=cfg_color("error_color", 0xE74C3C), banner=False)
-    await inter.followup.send("✅ Отклонено.", ephemeral=True)
+    await inter.followup.send(embed=note_embed("✅ Отклонено."), ephemeral=True)
 
 
 # ───── Магазин ─────
@@ -1553,7 +1554,7 @@ def find_item(key: str) -> Optional[Dict[str, Any]]:
 async def h_shop(inter: disnake.MessageInteraction):
     items = [i for i in S["shop"] if i.get("enabled")]
     if not items:
-        return await inter.response.send_message("🛒 Магазин пока пуст.", ephemeral=True)
+        return await inter.response.send_message(embed=note_embed("🛒 Магазин пока пуст."), ephemeral=True)
     pts = await db.get_points(inter.author.id)
     lines = []
     for i in items:
@@ -1578,7 +1579,7 @@ async def h_shop(inter: disnake.MessageInteraction):
 async def _shop_pick(inter: disnake.MessageInteraction, values: List[str]):
     item = find_item(values[0])
     if not item or not item.get("enabled"):
-        return await inter.response.send_message("❌ Этот приз недоступен.", ephemeral=True)
+        return await inter.response.send_message(embed=note_embed("❌ Этот приз недоступен."), ephemeral=True)
     pts = await db.get_points(inter.author.id)
     emb = disnake.Embed(title=f"{em('shop')} Подтверждение покупки", color=main_color(),
                         description=E(f"{item.get('emoji') or em('gift')} **{item['name']}**\n"
@@ -1635,14 +1636,14 @@ class OrderView(disnake.ui.View):
 
 async def _load_order(inter):
     if not is_admin(inter.author) and not is_staff(inter.author):
-        await inter.response.send_message("❌ Только для руководства.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("❌ Только для руководства."), ephemeral=True)
         return None
     o = await db.get_order_by_message(inter.message.id)
     if not o:
-        await inter.response.send_message("❌ Заказ не найден.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("❌ Заказ не найден."), ephemeral=True)
         return None
     if o["status"] != "pending":
-        await inter.response.send_message("ℹ️ Заказ уже обработан.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("ℹ️ Заказ уже обработан."), ephemeral=True)
         return None
     return o
 
@@ -1718,7 +1719,7 @@ class AdminView(disnake.ui.View):
 
     async def interaction_check(self, inter: disnake.Interaction) -> bool:
         if inter.author.id != self.author_id:
-            await inter.response.send_message("Это не ваша панель.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("Это не ваша панель."), ephemeral=True)
             return False
         return True
 
@@ -1797,7 +1798,7 @@ class DashView(AdminView):
         try:
             cfg_update(lambda c: c.__setitem__("recruitment_open", not c.get("recruitment_open", True)))
         except Exception as e:
-            return await inter.response.send_message(f"❌ Не удалось изменить config.json: {e}", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed(f"❌ Не удалось изменить config.json: {e}"), ephemeral=True)
         await inter.response.edit_message(embed=dash_embed(), view=DashView(inter.author.id))
 
     async def d_publish(self, inter):
@@ -1894,7 +1895,7 @@ class ButtonModal(disnake.ui.Modal):
             raw = v["emoji"]
             val = E(raw)
             if raw not in ("", "-") and not (_CUSTOM_RE.match(val) or (not val.startswith(":") and any(ord(c) > 127 for c in val))):
-                return await inter.response.send_message(f"❌ `{raw}` не похоже на эмодзи (или такого нет на сервере).", ephemeral=True)
+                return await inter.response.send_message(embed=note_embed(f"❌ `{raw}` не похоже на эмодзи (или такого нет на сервере)."), ephemeral=True)
             S["buttons"][self.key] = {
                 "label": "" if v["label"] == _base_label(self.key) else v["label"],
                 "emoji": "" if raw in ("", em(slot)) else raw,
@@ -1904,7 +1905,7 @@ class ButtonModal(disnake.ui.Modal):
                 S["buttons"].pop(self.key)
         save_settings()
         await _refresh(inter, buttons_embed(), ButtonsView(inter.author.id))
-        await inter.followup.send("✅ Сохранено. Чтобы обновить панели в каналах — «Назад» → «Опубликовать».", ephemeral=True)
+        await inter.followup.send(embed=note_embed("✅ Сохранено. Чтобы обновить панели в каналах — «Назад» → «Опубликовать»."), ephemeral=True)
 
 
 # ───── Тексты ─────
@@ -2019,10 +2020,10 @@ class EditTextModal(disnake.ui.Modal):
             try:
                 cfg_update(lambda c: c.setdefault("texts", {}).__setitem__(self.key, val))
             except Exception as e:
-                return await inter.response.send_message(f"❌ Не удалось записать config.json: {e}", ephemeral=True)
+                return await inter.response.send_message(embed=note_embed(f"❌ Не удалось записать config.json: {e}"), ephemeral=True)
         self.tview._build()
         await inter.response.edit_message(embed=texts_embed(self.tview.group), view=self.tview)
-        await inter.followup.send("✅ Сохранено. Новые сообщения будут с этим текстом (панели в каналах — после «Опубликовать»).", ephemeral=True)
+        await inter.followup.send(embed=note_embed("✅ Сохранено. Новые сообщения будут с этим текстом (панели в каналах — после «Опубликовать»)."), ephemeral=True)
 
 
 # ───── Оформление ─────
@@ -2049,7 +2050,7 @@ class DesignModal(disnake.ui.Modal):
                             "footer": v["footer"].strip(), "steps": (v["steps"].strip() or "-"), "color": "0x" + v["color"].strip().replace("#", "").replace("0x", "")})
         save_settings()
         await _refresh(inter, dash_embed(), DashView(inter.author.id))
-        await inter.followup.send("✅ Оформление сохранено. Нажмите «Опубликовать», чтобы обновить панель в канале.", ephemeral=True)
+        await inter.followup.send(embed=note_embed("✅ Оформление сохранено. Нажмите «Опубликовать», чтобы обновить панель в канале."), ephemeral=True)
 
 
 class PointsModal(disnake.ui.Modal):
@@ -2067,7 +2068,7 @@ class PointsModal(disnake.ui.Modal):
             a, r = int(v["accept"]), int(v["referral"])
             assert 0 <= a <= 10000 and 0 <= r <= 10000
         except Exception:
-            return await inter.response.send_message("❌ Нужны целые числа от 0 до 10000.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нужны целые числа от 0 до 10000."), ephemeral=True)
         S["points"].update({"accept": a, "referral": r})
         save_settings()
         await _refresh(inter, dash_embed(), DashView(inter.author.id))
@@ -2107,7 +2108,7 @@ class FormView(AdminView):
 
     async def add(self, inter):
         if len(S["form"]) >= 12:
-            return await inter.response.send_message("❌ Максимум 12 вопросов в списке — удалите ненужный.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Максимум 12 вопросов в списке — удалите ненужный."), ephemeral=True)
         await inter.response.send_modal(AddFieldModal())
 
     async def reset(self, inter):
@@ -2134,14 +2135,14 @@ class FieldModal(disnake.ui.Modal):
         v = {k: x.strip() for k, x in inter.text_values.items()}
         idx = next((i for i, x in enumerate(S["form"]) if x["key"] == self.key), None)
         if idx is None:
-            return await inter.response.send_message("❌ Поле не найдено.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Поле не найдено."), ephemeral=True)
         f = S["form"][idx]
         protected = f["key"] in ("nick", "static")
         act = v["action"].lower()
 
         if act.startswith("удал"):
             if protected:
-                return await inter.response.send_message("❌ Ник и статик удалять нельзя.", ephemeral=True)
+                return await inter.response.send_message(embed=note_embed("❌ Ник и статик удалять нельзя."), ephemeral=True)
             S["form"].pop(idx)
             save_settings()
             return await _refresh(inter, form_embed(), FormView(inter.author.id))
@@ -2157,11 +2158,11 @@ class FieldModal(disnake.ui.Modal):
             S["form"][idx + 1], S["form"][idx] = S["form"][idx], S["form"][idx + 1]
         elif act.startswith(("выкл", "off", "нет")):
             if protected:
-                return await inter.response.send_message("❌ Ник и статик отключать нельзя.", ephemeral=True)
+                return await inter.response.send_message(embed=note_embed("❌ Ник и статик отключать нельзя."), ephemeral=True)
             f["enabled"] = False
         elif act.startswith(("вкл", "on", "да")):
             if not f.get("enabled") and len(enabled_fields()) >= 5:
-                return await inter.response.send_message("❌ Уже включено 5 полей — выключите другое.", ephemeral=True)
+                return await inter.response.send_message(embed=note_embed("❌ Уже включено 5 полей — выключите другое."), ephemeral=True)
             f["enabled"] = True
         save_settings()
         await _refresh(inter, form_embed(), FormView(inter.author.id))
@@ -2187,7 +2188,7 @@ class AddFieldModal(disnake.ui.Modal):
         save_settings()
         await _refresh(inter, form_embed(), FormView(inter.author.id))
         if not enable:
-            await inter.followup.send("ℹ️ Вопрос добавлен **выключенным**: в окне уже 5 полей. Выключите другое и включите этот.", ephemeral=True)
+            await inter.followup.send(embed=note_embed("ℹ️ Вопрос добавлен **выключенным**: в окне уже 5 полей. Выключите другое и включите этот."), ephemeral=True)
 
 
 # ───── Магазин (админ) ─────
@@ -2218,7 +2219,7 @@ class ShopAdminView(AdminView):
 
     async def add(self, inter):
         if len(S["shop"]) >= 20:
-            return await inter.response.send_message("❌ Максимум 20 призов.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Максимум 20 призов."), ephemeral=True)
         await inter.response.send_modal(ItemModal(None))
 
 
@@ -2245,7 +2246,7 @@ class ItemModal(disnake.ui.Modal):
             stock = int(v["stock"])
             assert 1 <= cost <= 1000000 and stock >= -1
         except Exception:
-            return await inter.response.send_message("❌ Цена — целое число ≥ 1, остаток — целое ≥ -1.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Цена — целое число ≥ 1, остаток — целое ≥ -1."), ephemeral=True)
         item = find_item(self.key) if self.key else None
         act = v["action"].lower()
         if item and act.startswith("удал"):
@@ -2350,7 +2351,7 @@ class EmojiView(AdminView):
     async def show(self, inter):
         items = [f"{e} `:{e.name}:`" for e in (_BOT.emojis if _BOT else [])]
         if not items:
-            return await inter.response.send_message("У бота нет доступных эмодзи. Загрузите их на сервер.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("У бота нет доступных эмодзи. Загрузите их на сервер."), ephemeral=True)
         chunks, cur = [], ""
         for it in items:          # лимит Discord — 2000 символов на сообщение
             if len(cur) + len(it) + 2 > 1900:
@@ -2359,9 +2360,9 @@ class EmojiView(AdminView):
             cur += it + "  "
         if cur:
             chunks.append(cur)
-        await inter.response.send_message(chunks[0], ephemeral=True)
+        await inter.response.send_message(embed=note_embed(chunks[0]), ephemeral=True)
         for c in chunks[1:6]:
-            await inter.followup.send(c, ephemeral=True)
+            await inter.followup.send(embed=note_embed(c), ephemeral=True)
 
     async def reset(self, inter):
         S["emoji"] = {}
@@ -2380,9 +2381,9 @@ class EmojiModal(disnake.ui.Modal):
         raw = inter.text_values["emoji"].strip()
         val = E(raw)
         if _EMOJI_RE.fullmatch(val):
-            return await inter.response.send_message(f"❌ Эмодзи `{raw}` не найдено среди эмодзи сервера.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed(f"❌ Эмодзи `{raw}` не найдено среди эмодзи сервера."), ephemeral=True)
         if not (_CUSTOM_RE.match(val) or (val and not val.startswith(":"))):
-            return await inter.response.send_message("❌ Не похоже на эмодзи.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Не похоже на эмодзи."), ephemeral=True)
         S["emoji"][self.slot] = val
         save_settings()
         await _refresh(inter, emoji_embed(), EmojiView(inter.author.id))
@@ -2511,19 +2512,19 @@ class HallRecruit(commands.Cog):
     @commands.slash_command(name="hr", description="Рекрут-центр: настройки анкеты, баллов, магазина и эмодзи")
     async def hr(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для администрации.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
         await inter.response.send_message(embed=dash_embed(), view=DashView(inter.author.id), ephemeral=True)
 
     @commands.slash_command(name="hr_banner", description="Загрузить баннер для панелей (картинка)")
     async def hr_banner(self, inter: disnake.ApplicationCommandInteraction,
                         image: disnake.Attachment = commands.Param(description="Картинка баннера (PNG/JPG)")):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для администрации.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
         if not (image.content_type or "").startswith("image/"):
-            return await inter.response.send_message("❌ Нужна картинка (PNG/JPG).", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Нужна картинка (PNG/JPG)."), ephemeral=True)
         os.makedirs(ASSETS_DIR, exist_ok=True)
         await image.save(BANNER_PATH)
-        await inter.response.send_message("✅ Баннер сохранён. В `/hr` → «Опубликовать» обновите панели.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ Баннер сохранён. В `/hr` → «Опубликовать» обновите панели."), ephemeral=True)
 
     @commands.slash_command(name="hr_video", description="Видео/GIF под текстом панели заявки")
     async def hr_video(self, inter: disnake.ApplicationCommandInteraction,
@@ -2531,7 +2532,7 @@ class HallRecruit(commands.Cog):
                        link: Optional[str] = commands.Param(default=None, description="Или ссылка на видео (YouTube и т.п.)"),
                        remove: bool = commands.Param(default=False, description="Убрать видео")):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для администрации.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
         d = S["design"]
         if remove:
@@ -2539,16 +2540,16 @@ class HallRecruit(commands.Cog):
             d["video_file"] = ""
             d["video_url"] = ""
             save_settings()
-            return await inter.followup.send("✅ Видео убрано. Обновите панель: `/hr` → «Опубликовать».", ephemeral=True)
+            return await inter.followup.send(embed=note_embed("✅ Видео убрано. Обновите панель: `/hr` → «Опубликовать»."), ephemeral=True)
         if video:
             ext = os.path.splitext(video.filename or "")[1].lower()
             ctype = video.content_type or ""
             if ext not in VIDEO_EXTS or not (ctype.startswith("video/") or ctype == "image/gif"):
-                return await inter.followup.send("❌ Нужен файл: gif, mp4, mov или webm.", ephemeral=True)
+                return await inter.followup.send(embed=note_embed("❌ Нужен файл: gif, mp4, mov или webm."), ephemeral=True)
             limit = inter.guild.filesize_limit if inter.guild else 25 * 1024 * 1024
             if video.size > limit:
                 return await inter.followup.send(
-                    f"❌ Файл {video.size // 1048576} МБ, а лимит сервера {limit // 1048576} МБ. Сожмите видео или дайте ссылку (`link`).",
+                    embed=note_embed(f"❌ Файл {video.size // 1048576} МБ, а лимит сервера {limit // 1048576} МБ. Сожмите видео или дайте ссылку (`link`)."),
                     ephemeral=True)
             os.makedirs(ASSETS_DIR, exist_ok=True)
             _clear_video_files()
@@ -2556,21 +2557,21 @@ class HallRecruit(commands.Cog):
             d["video_file"] = "video" + ext
             d["video_url"] = ""
             save_settings()
-            return await inter.followup.send("✅ Видео сохранено — оно появится под заявкой. `/hr` → «Опубликовать» → «Панель заявки».", ephemeral=True)
+            return await inter.followup.send(embed=note_embed("✅ Видео сохранено — оно появится под заявкой. `/hr` → «Опубликовать» → «Панель заявки»."), ephemeral=True)
         if link:
             if not link.startswith(("http://", "https://")):
-                return await inter.followup.send("❌ Ссылка должна начинаться с https://", ephemeral=True)
+                return await inter.followup.send(embed=note_embed("❌ Ссылка должна начинаться с https://"), ephemeral=True)
             _clear_video_files()
             d["video_file"] = ""
             d["video_url"] = link.strip()
             save_settings()
-            return await inter.followup.send("✅ Ссылка на видео сохранена. Обновите панель: `/hr` → «Опубликовать».", ephemeral=True)
-        await inter.followup.send("ℹ️ Прикрепите видеофайл (`video`), укажите `link` или поставьте `remove`.", ephemeral=True)
+            return await inter.followup.send(embed=note_embed("✅ Ссылка на видео сохранена. Обновите панель: `/hr` → «Опубликовать»."), ephemeral=True)
+        await inter.followup.send(embed=note_embed("ℹ️ Прикрепите видеофайл (`video`), укажите `link` или поставьте `remove`."), ephemeral=True)
 
     @commands.slash_command(name="hr_emoji_upload", description="Загрузить эмодзи из папки emojis на сервер")
     async def hr_emoji_upload(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для администрации.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
         await start_upload(inter)
 
@@ -2578,7 +2579,7 @@ class HallRecruit(commands.Cog):
     async def hr_sticker_upload(self, inter: disnake.ApplicationCommandInteraction,
                                 emoji: str = commands.Param(default="⭐", description="Эмодзи-ярлык стикеров (для поиска)")):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для администрации.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
         await start_upload(inter, lambda g, p: upload_stickers(g, p, emoji), "стикеры")
 
@@ -2597,15 +2598,15 @@ class HallRecruit(commands.Cog):
                           amount: int = commands.Param(description="Сколько (минус — снять)", ge=-10000, le=10000),
                           reason: str = commands.Param(default="Корректировка руководства", description="Причина")):
         if not is_admin(inter.author):
-            return await inter.response.send_message("❌ Только для администрации.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
         if amount == 0:
-            return await inter.response.send_message("❌ Укажите ненулевое число.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Укажите ненулевое число."), ephemeral=True)
         if amount > 0:
             bal = await db.add_points(user.id, amount, f"{reason} ({inter.author.display_name})")
         else:
             bal = await db.spend_points(user.id, -amount, f"{reason} ({inter.author.display_name})")
             if bal is None:
-                return await inter.response.send_message("❌ У игрока недостаточно баллов.", ephemeral=True)
+                return await inter.response.send_message(embed=note_embed("❌ У игрока недостаточно баллов."), ephemeral=True)
         await inter.response.send_message(f"✅ {user.mention}: {amount:+d} б. Баланс: **{bal}**", ephemeral=True)
         if amount > 0:
             await dm(user.id, f"{em('points')} Вам начислены баллы", f"**+{amount}** б. — {reason}\nБаланс: **{bal}** б.", banner=False)
