@@ -56,6 +56,27 @@ def _rounded_mask(size, radius):
     return m
 
 
+PLATE_PATH = os.path.join(BASE_DIR, "assets", "stream_bg.jpg")
+
+
+def _plate(size):
+    """Фирменная подложка семьи, размытая и затемнённая, чтобы не спорить с текстом."""
+    try:
+        with open(PLATE_PATH, "rb") as f:
+            plate = Image.open(io.BytesIO(f.read())).convert("RGB")
+    except Exception:
+        return None
+    w, h = size
+    scale = max(w / plate.width, h / plate.height)
+    plate = plate.resize((round(plate.width * scale), round(plate.height * scale)), Image.LANCZOS)
+    left, top = (plate.width - w) // 2, (plate.height - h) // 2
+    plate = plate.crop((left, top, left + w, top + h))
+    from PIL import ImageEnhance
+
+    plate = ImageEnhance.Brightness(plate).enhance(0.55)
+    return plate.filter(ImageFilter.GaussianBlur(3))
+
+
 def render_card(data: Dict, avatar_bytes: Optional[bytes] = None) -> bytes:
     """
     data: name, subtitle, rank, max_rank, rank_name, static, status (None|'vacation'|'afk'),
@@ -69,6 +90,9 @@ def render_card(data: Dict, avatar_bytes: Optional[bytes] = None) -> bytes:
     px = ImageDraw.Draw(img)
     for y in range(H):
         px.line([(0, y), (W, y)], fill=_mix(bg_top, bg_bot, y / H))
+    plate = _plate((W, H))
+    if plate:
+        img = Image.blend(img, plate, 0.20)
 
     # мягкое свечение за аватаром
     glow = Image.new("RGB", (W, H), (0, 0, 0))
