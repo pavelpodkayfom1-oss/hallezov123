@@ -11,6 +11,7 @@ import disnake
 from disnake.ext import commands, tasks
 
 from utils import famq_core as core
+from utils.embeds import note_embed
 from utils.famq_core import WarnGuardBlocked
 
 
@@ -55,16 +56,16 @@ class VacationPanelView(disnake.ui.View):
                        style=disnake.ButtonStyle.green, custom_id="vac:apply")
     async def apply(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if core.rank_roles_map() and any(core.rank_roles_map().values()) and core.member_rank(inter.author) < 1:
-            return await inter.response.send_message("❌ Отпуск доступен только участникам семьи.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ Отпуск доступен только участникам семьи."), ephemeral=True)
         if not int(core.get("vacation.review_channel_id", 0) or 0):
             return await inter.response.send_message(
-                "⚠️ Канал рассмотрения заявок не настроен. Сообщите руководству.", ephemeral=True)
+                embed=note_embed("⚠️ Канал рассмотрения заявок не настроен. Сообщите руководству."), ephemeral=True)
         row = await core.q_one(
             "SELECT id, status FROM vacations WHERE user_id=? AND guild_id=? AND status IN ('pending','active')",
             (inter.author.id, inter.guild.id))
         if row:
             txt = "ожидает рассмотрения" if row["status"] == "pending" else "уже идёт"
-            return await inter.response.send_message(f"ℹ️ У вас уже есть заявка/отпуск, он {txt}.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed(f"ℹ️ У вас уже есть заявка/отпуск, он {txt}."), ephemeral=True)
         await inter.response.send_modal(VacationModal())
 
     @disnake.ui.button(label="Мой отпуск", emoji="📋",
@@ -74,7 +75,7 @@ class VacationPanelView(disnake.ui.View):
             "SELECT * FROM vacations WHERE user_id=? AND guild_id=? ORDER BY id DESC LIMIT 1",
             (inter.author.id, inter.guild.id))
         if not row:
-            return await inter.response.send_message("📭 У вас ещё не было заявок на отпуск.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("📭 У вас ещё не было заявок на отпуск."), ephemeral=True)
         names = {"pending": "🟡 ожидает рассмотрения", "active": "🟢 идёт", "rejected": "🔴 отклонена",
                  "ended": "⚪ завершён", "cancelled": "⚪ отменена"}
         text = f"**Статус:** {names.get(row['status'], row['status'])}\n**Срок:** {row['days']} дн."
@@ -82,7 +83,7 @@ class VacationPanelView(disnake.ui.View):
             text += f"\n**Закончится:** <t:{row['end_ts']}:F> (<t:{row['end_ts']}:R>)"
         if row["status"] == "rejected" and row["reject_reason"]:
             text += f"\n**Причина отказа:** {row['reject_reason']}"
-        await inter.response.send_message(text, ephemeral=True)
+        await inter.response.send_message(embed=note_embed(text), ephemeral=True)
 
     @disnake.ui.button(label="Вернуться из отпуска", emoji="🔙",
                        style=disnake.ButtonStyle.danger, custom_id="vac:return")
@@ -92,9 +93,9 @@ class VacationPanelView(disnake.ui.View):
             "SELECT * FROM vacations WHERE user_id=? AND guild_id=? AND status IN ('active','pending') "
             "ORDER BY id DESC LIMIT 1", (inter.author.id, inter.guild.id))
         if not row:
-            return await inter.response.send_message("ℹ️ У вас нет активного отпуска.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("ℹ️ У вас нет активного отпуска."), ephemeral=True)
         await cog.finish(row, reason="Досрочное возвращение", by=inter.author)
-        await inter.response.send_message("✅ С возвращением! Роль отпуска снята.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ С возвращением! Роль отпуска снята."), ephemeral=True)
 
 
 # ───────────────────────── РАССМОТРЕНИЕ (постоянная) ─────────────────────────
@@ -121,13 +122,13 @@ class VacationReviewView(disnake.ui.View):
     @disnake.ui.button(label="Одобрить", emoji="✅", style=disnake.ButtonStyle.green, custom_id="vac:approve")
     async def approve(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if not core.is_staff(inter.author):
-            return await inter.response.send_message("❌ У вас нет прав рассматривать заявки.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ У вас нет прав рассматривать заявки."), ephemeral=True)
         await inter.bot.get_cog("Vacation").approve(inter)
 
     @disnake.ui.button(label="Отклонить", emoji="⛔", style=disnake.ButtonStyle.danger, custom_id="vac:reject")
     async def reject(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if not core.is_staff(inter.author):
-            return await inter.response.send_message("❌ У вас нет прав рассматривать заявки.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("❌ У вас нет прав рассматривать заявки."), ephemeral=True)
         await inter.response.send_modal(RejectModal(inter.message.id))
 
 
@@ -140,7 +141,7 @@ class WarnConfirmView(disnake.ui.View):
 
     async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
         if inter.author.id != self.issuer_id:
-            await inter.response.send_message("Это не ваше подтверждение.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("Это не ваше подтверждение."), ephemeral=True)
             return False
         return True
 
@@ -232,14 +233,14 @@ class Vacation(commands.Cog):
         hi = int(core.get("vacation.max_days", 30) or 30)
         raw = (values.get("days") or "").strip()
         if not raw.isdigit() or not (lo <= int(raw) <= hi):
-            return await inter.response.send_message(f"❌ Срок должен быть числом от {lo} до {hi}.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed(f"❌ Срок должен быть числом от {lo} до {hi}."), ephemeral=True)
         days = int(raw)
         reason = (values.get("reason") or "").strip()
         contact = (values.get("contact") or "").strip()
         review_id = int(core.get("vacation.review_channel_id", 0) or 0)
         channel = inter.guild.get_channel(review_id) if review_id else None
         if channel is None:
-            return await inter.response.send_message("⚠️ Канал рассмотрения не настроен.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⚠️ Канал рассмотрения не настроен."), ephemeral=True)
 
         vid = await core.q_exec(
             "INSERT INTO vacations (guild_id, user_id, days, reason, contact, status, created_ts) "
@@ -263,9 +264,9 @@ class Vacation(commands.Cog):
                                      allowed_mentions=disnake.AllowedMentions(roles=True))
         except Exception as ex:
             await core.q_exec("DELETE FROM vacations WHERE id=?", (vid,))
-            return await inter.response.send_message(f"❌ Не удалось отправить заявку: {ex}", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed(f"❌ Не удалось отправить заявку: {ex}"), ephemeral=True)
         await core.q_exec("UPDATE vacations SET message_id=?, channel_id=? WHERE id=?", (msg.id, channel.id, vid))
-        await inter.response.send_message("✅ Заявка отправлена руководству. Решение придёт в личные сообщения.",
+        await inter.response.send_message(embed=note_embed("✅ Заявка отправлена руководству. Решение придёт в личные сообщения."),
                                           ephemeral=True)
 
     async def _row_by_message(self, message_id: int):
@@ -274,12 +275,12 @@ class Vacation(commands.Cog):
     async def approve(self, inter: disnake.MessageInteraction):
         row = await self._row_by_message(inter.message.id)
         if not row or row["status"] != "pending":
-            return await inter.response.send_message("ℹ️ Эта заявка уже обработана.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("ℹ️ Эта заявка уже обработана."), ephemeral=True)
         member = inter.guild.get_member(row["user_id"])
         role_id = int(core.get("vacation.role_id", 0) or 0)
         role = inter.guild.get_role(role_id) if role_id else None
         if role is None:
-            return await inter.response.send_message("⚠️ Не настроена **роль отпуска** (/центр → Отпуск).", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("⚠️ Не настроена **роль отпуска** (/центр → Отпуск)."), ephemeral=True)
         start = core.now_ts()
         end = start + row["days"] * 86400
         await core.q_exec(
@@ -300,7 +301,7 @@ class Vacation(commands.Cog):
         emb.add_field("До", f"<t:{end}:F> (<t:{end}:R>)", inline=False)
         await inter.response.edit_message(content=None, embed=emb, view=None)
         if note:
-            await inter.followup.send(note.strip(), ephemeral=True)
+            await inter.followup.send(embed=note_embed(note.strip()), ephemeral=True)
         await self._dm(row["user_id"], core.make_embed(
             "🌴 Отпуск одобрен",
             f"Руководитель {inter.author.mention} одобрил ваш отпуск на **{row['days']} дн.**\n"
@@ -311,7 +312,7 @@ class Vacation(commands.Cog):
     async def reject(self, inter: disnake.ModalInteraction, message_id: int, reason: str):
         row = await self._row_by_message(message_id)
         if not row or row["status"] != "pending":
-            return await inter.response.send_message("ℹ️ Эта заявка уже обработана.", ephemeral=True)
+            return await inter.response.send_message(embed=note_embed("ℹ️ Эта заявка уже обработана."), ephemeral=True)
         await core.q_exec(
             "UPDATE vacations SET status='rejected', reviewer_id=?, reject_reason=? WHERE id=?",
             (inter.author.id, reason, row["id"]))
@@ -325,7 +326,7 @@ class Vacation(commands.Cog):
             await msg.edit(content=None, embed=emb, view=None)
         except Exception:
             pass
-        await inter.response.send_message("✅ Заявка отклонена, участнику отправлено уведомление.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ Заявка отклонена, участнику отправлено уведомление."), ephemeral=True)
         await self._dm(row["user_id"], core.make_embed(
             "🌴 Заявка на отпуск отклонена",
             f"Руководитель {inter.author.mention} отклонил заявку.\n📝 **Причина:** {reason}\n\n"
