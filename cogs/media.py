@@ -1,13 +1,25 @@
+import asyncio
+import functools
+import io
+import os
 import re
+import sys
+import time
+from typing import Optional
 
+import aiohttp
 import disnake
 from disnake.ext import commands
 
 from utils.checks import is_admin, load_config, save_config
-from utils.embeds import base_embed
+from utils.media_card import render_media_card
 
-TWITCH_COLOR = 0x9146FF
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+CARD_COLOR = 0xC4161C  # фирменный красный Hallez
 TWITCH_URL_RE = re.compile(r"^(?:https?://)?(?:www\.|m\.)?twitch\.tv/(?P<login>[^\s/?#]+)", re.IGNORECASE)
+TWITCH_LOGIN_RE = re.compile(r"^\w{3,25}$")
+PREVIEW_URL = "https://static-cdn.jtvnw.net/previews-ttv/live_user_{login}-640x360.jpg?t={ts}"
 
 
 def _can_post(member: disnake.Member) -> bool:
@@ -15,6 +27,27 @@ def _can_post(member: disnake.Member) -> bool:
         return True
     allowed = set(load_config().get("media_role_ids", []))
     return any(role.id in allowed for role in member.roles)
+
+
+async def _fetch_preview(login: str) -> Optional[bytes]:
+    """Живое превью стрима. Если канал оффлайн, Twitch отвечает редиректом на заглушку - тогда None."""
+    url = PREVIEW_URL.format(login=login.lower(), ts=int(time.time()))
+    try:
+        timeout = aiohttp.ClientTimeout(total=6)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.get(url, allow_redirects=False) as resp:
+                if resp.status != 200 or not resp.content_type.startswith("image/"):
+                    return None
+                return await resp.read()
+    except Exception:
+        return None
+
+
+async def _fetch_avatar(member: disnake.abc.User) -> Optional[bytes]:
+    try:
+        return await member.display_avatar.with_size(128).read()
+    except Exception:
+        return None
 
 
 class Media(commands.Cog):
@@ -36,7 +69,7 @@ class Media(commands.Cog):
                 ephemeral=True,
             )
         match = TWITCH_URL_RE.match(url.strip())
-        if not match:
+        if not match or not TWITCH_LOGIN_RE.match(match.group("login")):
             return await inter.response.send_message(
                 "❌ Нужна ссылка вида `https://twitch.tv/kanald`.", ephemeral=True
             )
@@ -49,25 +82,72 @@ class Media(commands.Cog):
                 ephemeral=True,
             )
 
+        # рисуем карточку и тянем превью - это дольше 3 секунд, поэтому откладываем ответ
+        await inter.response.defer(ephemeral=True)
+
         login = match.group("login")
         link = f"https://twitch.tv/{login}"
-        emb = base_embed("🔴 Стрим на Twitch", f"[**{link.removeprefix('https://')}**]({link})", guild=inter.guild)
-        emb.color = disnake.Color(TWITCH_COLOR)
-        if note:
-            emb.add_field(name="📝 От автора", value=note[:600], inline=False)
-        emb.add_field(name="👤 Анонсировал", value=inter.author.mention, inline=False)
+        note = " ".join(note.split())[:600]
+
+        preview, avatar = await asyncio.gather(_fetch_preview(login), _fetch_avatar(inter.author))
+        live = preview is not None
+
+        banner_name = load_config().get("recruit_banner_file") or "banner_image.png"
+        card_bytes = None
+        try:
+            card_bytes = await asyncio.get_running_loop().run_in_executor(
+                None,
+                functools.partial(
+                    render_media_card,
+                    login=login,
+                    note=note,
+                    announcer=inter.author.display_name,
+                    avatar_bytes=avatar,
+                    preview_bytes=preview,
+                    banner_path=os.path.join(BASE_DIR, banner_name),
+                    live=live,
+                ),
+            )
+        except Exception as exc:  # карточка не должна ломать анонс
+            print(f"🎬 media: не удалось нарисовать карточку: {exc!r}", file=sys.stderr, flush=True)
+
+        config = load_config()
+        bot_name = config.get("bot_name", "Hallez FAMQ")
+        logo_url = (config.get("logo_url") or "").strip() or (inter.guild.icon.url if inter.guild and inter.guild.icon else None)
+
+        status = "в эфире" if live else "анонсирует стрим"
+        emb = disnake.Embed(
+            description=f"{inter.author.mention} {status}\n### [twitch.tv/{login}]({link})",
+            color=disnake.Color(CARD_COLOR),
+            timestamp=disnake.utils.utcnow(),
+        )
+        footer = f"Majestic RP • {bot_name}"
+        if logo_url:
+            emb.set_footer(text=footer, icon_url=logo_url)
+        else:
+            emb.set_footer(text=footer)
+
+        file = None
+        if card_bytes:
+            file = disnake.File(io.BytesIO(card_bytes), filename=f"stream_{login}.png")
+            emb.set_image(url=f"attachment://stream_{login}.png")
+        elif note:
+            emb.add_field(name="📝 От автора", value=note, inline=False)
 
         view = disnake.ui.View(timeout=None)
-        view.add_item(disnake.ui.Button(style=disnake.ButtonStyle.url, label="🔴 Открыть на Twitch", url=link))
+        view.add_item(
+            disnake.ui.Button(style=disnake.ButtonStyle.url, label="Смотреть на Twitch", emoji="🟣", url=link)
+        )
 
         try:
-            await target.send(embed=emb, view=view)
+            if file:
+                await target.send(embed=emb, file=file, view=view)
+            else:
+                await target.send(embed=emb, view=view)
         except disnake.Forbidden:
-            return await inter.response.send_message(
-                f"⛔ У бота нет прав писать в {target.mention}.", ephemeral=True
-            )
+            return await inter.edit_original_response(content=f"⛔ У бота нет прав писать в {target.mention}.")
 
-        await inter.response.send_message(f"✅ Анонс опубликован в {target.mention}.", ephemeral=True)
+        await inter.edit_original_response(content=f"✅ Анонс опубликован в {target.mention}.")
 
     @commands.slash_command(name="media_channel", description="Канал для анонсов стримов (для руководства)")
     async def media_channel(
