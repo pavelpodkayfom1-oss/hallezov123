@@ -34,6 +34,8 @@ import disnake
 from disnake.ext import commands
 from disnake import ButtonStyle
 
+from utils.embeds import note_embed
+
 # ---------------------------------------------------------------
 # Пути — файл лежит в cogs/, поднимаемся на уровень выше к корню проекта
 # ---------------------------------------------------------------
@@ -264,7 +266,7 @@ class BlackjackView(disnake.ui.View):
 
     async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
         if inter.author.id != self.author.id:
-            await inter.response.send_message("❌ Это не ваша игра!", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Это не ваша игра!"), ephemeral=True)
             return False
         return True
 
@@ -328,7 +330,7 @@ class DiceDuelView(disnake.ui.View):
 
     async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
         if inter.author.id != self.opponent.id:
-            await inter.response.send_message("❌ Только вызванный игрок может ответить на дуэль!", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Только вызванный игрок может ответить на дуэль!"), ephemeral=True)
             return False
         return True
 
@@ -338,7 +340,7 @@ class DiceDuelView(disnake.ui.View):
         opp_balance = await get_balance(self.opponent.id)
         if opp_balance < self.bet:
             await inter.response.send_message(
-                f"❌ У вас недостаточно средств для этой ставки ({CURRENCY} {fmt(self.bet)}).",
+                embed=note_embed(f"❌ У вас недостаточно средств для этой ставки ({CURRENCY} {fmt(self.bet)})."),
                 ephemeral=True
             )
             return
@@ -427,7 +429,7 @@ class CasinoCog(commands.Cog):
         colors = get_colors()
         top = await get_leaderboard(limit=10)
         if not top:
-            await inter.response.send_message("Пока никто не играл в казино.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("Пока никто не играл в казино."), ephemeral=True)
             return
         lines = []
         medals = ["🥇", "🥈", "🥉"]
@@ -448,10 +450,10 @@ class CasinoCog(commands.Cog):
     ):
         colors = get_colors()
         if not is_admin(inter):
-            await inter.response.send_message("❌ У вас нет прав для использования этой команды.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ У вас нет прав для использования этой команды."), ephemeral=True)
             return
         if количество == 0:
-            await inter.response.send_message("❌ Количество не может быть равно нулю.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Количество не может быть равно нулю."), ephemeral=True)
             return
 
         new_balance = await change_balance(участник.id, количество)
@@ -472,11 +474,11 @@ class CasinoCog(commands.Cog):
     async def slots(self, inter: disnake.ApplicationCommandInteraction, ставка: int):
         colors = get_colors()
         if ставка <= 0:
-            await inter.response.send_message("❌ Ставка должна быть положительным числом.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Ставка должна быть положительным числом."), ephemeral=True)
             return
         balance = await get_balance(inter.author.id)
         if balance < ставка:
-            await inter.response.send_message(f"❌ Недостаточно средств. Ваш баланс: {CURRENCY} {fmt(balance)}", ephemeral=True)
+            await inter.response.send_message(embed=note_embed(f"❌ Недостаточно средств. Ваш баланс: {CURRENCY} {fmt(balance)}"), ephemeral=True)
             return
 
         symbols = ["🍒", "🍋", "🍇", "🔔", "⭐", "7️⃣"]
@@ -515,11 +517,11 @@ class CasinoCog(commands.Cog):
     ):
         colors = get_colors()
         if ставка <= 0:
-            await inter.response.send_message("❌ Ставка должна быть положительным числом.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Ставка должна быть положительным числом."), ephemeral=True)
             return
         balance = await get_balance(inter.author.id)
         if balance < ставка:
-            await inter.response.send_message(f"❌ Недостаточно средств. Ваш баланс: {CURRENCY} {fmt(balance)}", ephemeral=True)
+            await inter.response.send_message(embed=note_embed(f"❌ Недостаточно средств. Ваш баланс: {CURRENCY} {fmt(balance)}"), ephemeral=True)
             return
 
         red_numbers = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
@@ -555,7 +557,7 @@ class CasinoCog(commands.Cog):
                 payout = ставка * 36
         else:
             await inter.response.send_message(
-                "❌ Некорректная ставка. Укажите `red`, `black`, `green` или число от 0 до 36.", ephemeral=True
+                embed=note_embed("❌ Некорректная ставка. Укажите `red`, `black`, `green` или число от 0 до 36."), ephemeral=True
             )
             return
 
@@ -576,11 +578,11 @@ class CasinoCog(commands.Cog):
     @commands.slash_command(name="blackjack", description="Сыграть в блэкджек против дилера")
     async def blackjack(self, inter: disnake.ApplicationCommandInteraction, ставка: int):
         if ставка <= 0:
-            await inter.response.send_message("❌ Ставка должна быть положительным числом.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Ставка должна быть положительным числом."), ephemeral=True)
             return
         balance = await get_balance(inter.author.id)
         if balance < ставка:
-            await inter.response.send_message(f"❌ Недостаточно средств. Ваш баланс: {CURRENCY} {fmt(balance)}", ephemeral=True)
+            await inter.response.send_message(embed=note_embed(f"❌ Недостаточно средств. Ваш баланс: {CURRENCY} {fmt(balance)}"), ephemeral=True)
             return
 
         view = BlackjackView(inter.author, ставка)
@@ -612,18 +614,18 @@ class CasinoCog(commands.Cog):
     async def dice(self, inter: disnake.ApplicationCommandInteraction, соперник: disnake.User, ставка: int):
         colors = get_colors()
         if ставка <= 0:
-            await inter.response.send_message("❌ Ставка должна быть положительным числом.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Ставка должна быть положительным числом."), ephemeral=True)
             return
         if соперник.id == inter.author.id:
-            await inter.response.send_message("❌ Нельзя вызвать самого себя!", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Нельзя вызвать самого себя!"), ephemeral=True)
             return
         if соперник.bot:
-            await inter.response.send_message("❌ Нельзя вызвать бота!", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Нельзя вызвать бота!"), ephemeral=True)
             return
 
         challenger_balance = await get_balance(inter.author.id)
         if challenger_balance < ставка:
-            await inter.response.send_message(f"❌ Недостаточно средств. Ваш баланс: {CURRENCY} {fmt(challenger_balance)}", ephemeral=True)
+            await inter.response.send_message(embed=note_embed(f"❌ Недостаточно средств. Ваш баланс: {CURRENCY} {fmt(challenger_balance)}"), ephemeral=True)
             return
 
         view = DiceDuelView(inter.author, соперник, ставка)
@@ -701,20 +703,20 @@ class JoinView(disnake.ui.View):
     @disnake.ui.button(label="Присоединиться", style=ButtonStyle.success, emoji="🙋")
     async def join(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if self.game.started:
-            await inter.response.send_message("❌ Игра уже началась.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Игра уже началась."), ephemeral=True)
             return
         if any(p.member.id == inter.author.id for p in self.game.players):
-            await inter.response.send_message("Вы уже в игре!", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("Вы уже в игре!"), ephemeral=True)
             return
         if len(self.game.players) >= MAX_PLAYERS:
-            await inter.response.send_message("❌ Лобби заполнено.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Лобби заполнено."), ephemeral=True)
             return
 
         if self.game.bet > 0:
             balance = await get_balance(inter.author.id)
             if balance < self.game.bet:
                 await inter.response.send_message(
-                    f"❌ Для участия нужно {CURRENCY} {fmt(self.game.bet)}, у вас {CURRENCY} {fmt(balance)}.",
+                    embed=note_embed(f"❌ Для участия нужно {CURRENCY} {fmt(self.game.bet)}, у вас {CURRENCY} {fmt(balance)}."),
                     ephemeral=True
                 )
                 return
@@ -727,10 +729,10 @@ class JoinView(disnake.ui.View):
     @disnake.ui.button(label="Начать игру", style=ButtonStyle.primary, emoji="▶️")
     async def start(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if inter.author.id != self.game.host_id:
-            await inter.response.send_message("❌ Только создатель лобби может начать игру.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Только создатель лобби может начать игру."), ephemeral=True)
             return
         if len(self.game.players) < MIN_PLAYERS:
-            await inter.response.send_message(f"❌ Нужно минимум {MIN_PLAYERS} игроков (сейчас {len(self.game.players)}).", ephemeral=True)
+            await inter.response.send_message(embed=note_embed(f"❌ Нужно минимум {MIN_PLAYERS} игроков (сейчас {len(self.game.players)})."), ephemeral=True)
             return
         self.game.started = True
         for child in self.children:
@@ -917,7 +919,7 @@ class MafiaGame:
 
             async def callback(select_inter: disnake.MessageInteraction):
                 if select_inter.author.id != actor.member.id:
-                    await select_inter.response.send_message("Это не ваш выбор.", ephemeral=True)
+                    await select_inter.response.send_message(embed=note_embed("Это не ваш выбор."), ephemeral=True)
                     return
                 chosen_id = int(select.values[0])
                 votes[actor.member.id] = chosen_id
@@ -1044,16 +1046,16 @@ class VoteView(disnake.ui.View):
 
     async def vote_callback(self, inter: disnake.MessageInteraction):
         if self.stop_voting:
-            await inter.response.send_message("⏰ Голосование уже закончилось.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("⏰ Голосование уже закончилось."), ephemeral=True)
             return
         voter = self.game.get_player(inter.author.id)
         if not voter or not voter.alive:
-            await inter.response.send_message("❌ Только живые участники игры могут голосовать.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Только живые участники игры могут голосовать."), ephemeral=True)
             return
         target_id = int(self.children[0].values[0])
         self.votes[inter.author.id] = target_id
         target = self.game.get_player(target_id)
-        await inter.response.send_message(f"✅ Ваш голос против **{target.name}** учтён.", ephemeral=True)
+        await inter.response.send_message(embed=note_embed(f"✅ Ваш голос против **{target.name}** учтён."), ephemeral=True)
 
 
 class MafiaCog(commands.Cog):
@@ -1068,10 +1070,10 @@ class MafiaCog(commands.Cog):
     ):
         colors = get_colors()
         if inter.channel.id in ACTIVE_GAMES:
-            await inter.response.send_message("❌ В этом канале уже идёт игра в Мафию.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ В этом канале уже идёт игра в Мафию."), ephemeral=True)
             return
         if ставка < 0:
-            await inter.response.send_message("❌ Ставка не может быть отрицательной.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Ставка не может быть отрицательной."), ephemeral=True)
             return
 
         game = MafiaGame(self.bot, inter.channel, inter.author, bet=ставка)
@@ -1079,7 +1081,7 @@ class MafiaCog(commands.Cog):
         if ставка > 0:
             balance = await get_balance(inter.author.id)
             if balance < ставка:
-                await inter.response.send_message(f"❌ Недостаточно средств для взноса {CURRENCY} {fmt(ставка)}.", ephemeral=True)
+                await inter.response.send_message(embed=note_embed(f"❌ Недостаточно средств для взноса {CURRENCY} {fmt(ставка)}."), ephemeral=True)
                 return
             await change_balance(inter.author.id, -ставка)
         game.players.append(Player(inter.author))
@@ -1189,7 +1191,7 @@ class PrankTemplateView(disnake.ui.View):
 
     async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
         if inter.author.id != self.host_id:
-            await inter.response.send_message("❌ Это не ваша панель.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Это не ваша панель."), ephemeral=True)
             return False
         return True
 
@@ -1260,7 +1262,7 @@ class PrankUserSelectView(disnake.ui.View):
 
     async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
         if inter.author.id != self.host_id:
-            await inter.response.send_message("❌ Это не ваша панель.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Это не ваша панель."), ephemeral=True)
             return False
         return True
 
@@ -1269,10 +1271,10 @@ class PrankUserSelectView(disnake.ui.View):
         target = self.children[0].values[0]
 
         if target.bot:
-            await inter.response.send_message("❌ Нельзя разыграть бота!", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Нельзя разыграть бота!"), ephemeral=True)
             return
         if target.id == inter.author.id:
-            await inter.response.send_message("❌ Нельзя разыграть самого себя (хотя было бы забавно).", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ Нельзя разыграть самого себя (хотя было бы забавно)."), ephemeral=True)
             return
 
         view = PrankTemplateView(self.host_id, target)
@@ -1291,7 +1293,7 @@ class PrankCog(commands.Cog):
     @commands.slash_command(name="prank_panel", description="[Админ] Панель розыгрышей — отправить участнику пугающее сообщение в ЛС")
     async def prank_panel(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter):
-            await inter.response.send_message("❌ У вас нет прав для использования этой команды.", ephemeral=True)
+            await inter.response.send_message(embed=note_embed("❌ У вас нет прав для использования этой команды."), ephemeral=True)
             return
 
         colors = get_colors()
