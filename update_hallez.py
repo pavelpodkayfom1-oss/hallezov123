@@ -1,11 +1,13 @@
 import os
 
+GUILD_ID = os.environ.get("GUILD_ID", "1554453749936820264")
+
 files = {
-    ".env": """# Токен вашего Discord бота из Discord Developer Portal
-BOT_TOKEN=MTU1NDgwNTUyOTE0OTQ0ODMxNA.GaG9dx._8Rqp4mPFqQ6-6skhJD8spGNzw-m5V3mKkTSus
+    ".env": f"""# Токен вашего Discord бота из Discord Developer Portal
+BOT_TOKEN=ВСТАВЬ_СЮДА_ТОКЕН
 
 # ID сервера (Guild ID)
-GUILD_ID=1554453749936820264
+GUILD_ID={GUILD_ID}
 """,
     "config.json": """{
   "bot_name": "Hallez FAMQ",
@@ -586,9 +588,17 @@ pause
 """
 }
 
+skipped = []
 for filename, content in files.items():
+    if os.path.exists(filename):
+        skipped.append(filename)
+        print(f"[=] Пропущен (уже есть, не трогаем): {filename}")
+        continue
     with open(filename, "w", encoding="utf-8") as f:
         f.write(content)
     print(f"[+] Создан файл: {filename}")
 
-print("\\nВсе файлы успешно созданы! Удалите старую базу данных codex_famq.db (если она есть) и запустите start.bat")
+if skipped:
+    print("\nСуществующие файлы не перезаписаны — настройки бота на месте.")
+    print("Если нужно пересоздать файл с нуля, сначала удалите или переименуйте его.")
+print("\nГотово. Запускайте start.bat")
