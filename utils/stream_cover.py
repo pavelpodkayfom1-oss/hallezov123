@@ -6,6 +6,7 @@
 alpha_composite: PIL не смешивает RGBA-заливку с RGBA-изображением, а заменяет её.
 """
 import io
+import os
 from typing import Dict, List, Optional
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
@@ -18,6 +19,9 @@ RED = (232, 62, 84)
 DARK = (12, 10, 20)
 LINE_H = 66
 BOTTOM = H - 96
+BG_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "stream_bg.jpg"
+)
 
 
 def _cover(source: Image.Image) -> Image.Image:
@@ -39,7 +43,12 @@ def _placeholder(accent) -> Image.Image:
 
 
 def _backdrop(accent, avatar_bytes: Optional[bytes]) -> Image.Image:
-    """Когда превью нет, фон собираем из аватара канала — как делает сам Twitch на офлайне."""
+    """Фон, когда превью нет: сначала фирменная подложка семьи, потом размытый аватар канала."""
+    try:
+        with open(BG_PATH, "rb") as f:
+            return _cover(Image.open(io.BytesIO(f.read())).convert("RGB"))
+    except Exception:
+        pass
     if not avatar_bytes:
         return _placeholder(accent)
     try:
