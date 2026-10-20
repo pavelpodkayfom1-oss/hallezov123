@@ -15,5 +15,5 @@ yt-dlp[default]
 PyNaCl
 dave.py
 
-edge-tts
+edge-tts>=7.3.1
 Pillow
