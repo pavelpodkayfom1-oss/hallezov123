@@ -1,36 +1,43 @@
 import asyncio
+import json
 import os
-import re
+import sys
 import time
 from collections import deque
 
 import disnake
-import yt_dlp
 from disnake.ext import commands
 
 from utils.checks import load_config
 from utils.embeds import note_embed
 
-YTDL_OPTS = {
-    "format": "bestaudio/best",
-    "noplaylist": True,
-    "quiet": True,
-    "no_warnings": True,
-    "default_search": "ytsearch",
-    "source_address": "0.0.0.0",
-    # Лёгкий режим для слабых хостов (256 МБ / 0.25 vCPU): не зависаем на долгих повторах
-    "socket_timeout": 15,
-    "retries": 1,
-    "extractor_retries": 1,
-    "cachedir": False,
-}
 # Кулдаун на заказ музыки (секунд на одного пользователя) и число вариантов поиска
 PLAY_COOLDOWN = 20
 SEARCH_RESULTS = 3
-BOT_CHECK_MARK = "not a bot"
-# На слабом хосте поиск на YouTube (с куками) может убивать бота по памяти.
+# На слабом хосте поиск на YouTube (с куками) может убить бота по памяти.
 # SoundCloud лёгкий и не требует входа, поэтому ищем сначала там. Поставьте False, чтобы вернуть YouTube первым.
 PREFER_SOUNDCLOUD = True
+# Сколько треков максимум может стоять в очереди
+MAX_QUEUE = 25
+# Сколько секунд ждём резолвер, пока он не завис
+EXTRACT_TIMEOUT = 120
+
+# yt-dlp импортируется только в дочернем процессе: сам по себе он занимает ~26 МБ
+# кучи и ещё столько же на разборе, а в обратную ОС память не отдаётся.
+RESOLVER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "utils", "ytdlp_resolve.py")
+
+
+def _trim():
+    """Возвращает освобождённую память операционной системе (на Linux — через malloc)."""
+    import gc
+
+    gc.collect()
+    try:
+        import ctypes
+
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
 
 
 def _rss_mb() -> int:
@@ -47,12 +54,14 @@ def _rss_mb() -> int:
 
 def _log(msg: str):
     print(f"[music] {msg} | RSS={_rss_mb()} МБ", flush=True)
+
+
 # Необязательно: если рядом с main.py лежит cookies.txt, он используется для YouTube.
 # Этот файл лежит в cogs/, поэтому поднимаемся на папку выше — к main.py.
 COOKIES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cookies.txt")
-_ANSI = re.compile(r"\x1b\[[0-9;]*m")
 FFMPEG_BEFORE = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
-FFMPEG_OPTS = "-vn"
+# -vn -sn -dn: ffmpeg не декодирует видео и субтитры — меньше буферов на слабом хосте
+FFMPEG_OPTS = "-vn -sn -dn"
 
 
 def _color(key: str = "embed_color") -> int:
@@ -242,9 +251,12 @@ class Music(commands.Cog):
         p = self.players.pop(guild.id, None)
         if p:
             p.queue.clear()
+            p.current = None
+            p.source = None
         vc = guild.voice_client
         if vc:
             await vc.disconnect(force=True)
+        _trim()
 
     async def _reply(self, inter, text: str):
         if inter.response.is_done():
@@ -296,106 +308,65 @@ class Music(commands.Cog):
         await inter.response.send_message(embed=note_embed(f"🔊 Громкость: **{int(p.volume * 100)}%**"), ephemeral=True)
 
     async def _extract(self, query: str) -> dict:
-        is_url = query.startswith(("http://", "https://"))
-
-        def run():
-            opts = dict(YTDL_OPTS)
-            if os.path.exists(COOKIES_FILE):
-                opts["cookiefile"] = COOKIES_FILE
-            sc_opts = {k: v for k, v in opts.items() if k != "cookiefile"}  # SoundCloud куки YouTube не нужны
-            last = None
-
-            def pick(url, o):
-                with yt_dlp.YoutubeDL(o) as ydl:
-                    data = ydl.extract_info(url, download=False)
-                if "entries" in data:
-                    data = [x for x in data["entries"] if x][0]
-                return data
-
-            def soundcloud():
-                nonlocal last
-                _log("SoundCloud: ищу")
-                try:
-                    with yt_dlp.YoutubeDL(dict(sc_opts, extract_flat=True)) as ydl:
-                        res = ydl.extract_info(f"scsearch{SEARCH_RESULTS}:{query}", download=False)
-                    for e in (res.get("entries") or []):
-                        url = e.get("url") if e else None
-                        if not url:
-                            continue
-                        try:
-                            data = pick(url, sc_opts)
-                            _log("SoundCloud: нашёл")
-                            return data
-                        except Exception as ex:
-                            last = ex
-                except Exception as ex:
-                    last = ex
-                _log("SoundCloud: ничего")
-                return None
-
-            # 1) текстовый запрос — сначала лёгкий SoundCloud
-            if not is_url and PREFER_SOUNDCLOUD:
-                data = soundcloud()
-                if data:
-                    return data
-
-            # 2) YouTube (ссылки и запасной вариант)
-            try:
-                if is_url:
-                    candidates = [query]
-                else:
-                    _log("YouTube: ищу")
-                    with yt_dlp.YoutubeDL(dict(opts, extract_flat=True)) as ydl:
-                        res = ydl.extract_info(f"ytsearch{SEARCH_RESULTS}:{query}", download=False)
-                    candidates = []
-                    for e in (res.get("entries") or []):
-                        if not e:
-                            continue
-                        url = e.get("url") or (f"https://www.youtube.com/watch?v={e['id']}" if e.get("id") else None)
-                        if url:
-                            candidates.append(url)
-                for url in candidates:
-                    try:
-                        _log("YouTube: достаю поток")
-                        data = pick(url, opts)
-                        _log("YouTube: готово")
-                        return data
-                    except Exception as e:  # возрастное ограничение, недоступно и т.п. — пробуем следующий
-                        last = e
-                        if BOT_CHECK_MARK in str(e):
-                            break  # YouTube блокирует вход — остальные варианты упадут так же
-            except Exception as e:
-                last = e
-
-            # 3) старый порядок (YouTube первым) — SoundCloud как запасной
-            if not is_url and not PREFER_SOUNDCLOUD:
-                data = soundcloud()
-                if data:
-                    return data
-
-            msg = _ANSI.sub("", str(last)) if last else "Ничего не найдено"
-            if "confirm you" in msg and "not a bot" in msg:
-                if os.path.exists(COOKIES_FILE):
-                    msg = ("YouTube не принял cookies.txt (устарел или аккаунт разлогинен). "
-                           "Экспортируйте свежий cookies.txt и положите рядом с main.py.")
-                else:
-                    msg = ("YouTube требует вход. Положите cookies.txt рядом с main.py "
-                           "(экспорт из браузера, формат Netscape) и перезапустите бота.")
-            raise RuntimeError(msg[:300])
-
+        """Ищет трек. Разбор — в дочернем процессе, чтобы yt-dlp не съедал память бота."""
         async with self._extract_lock:
             _log(f"старт поиска: {query[:50]!r}")
             t0 = time.time()
-            data = await asyncio.get_running_loop().run_in_executor(None, run)
+            track = await self._resolve_in_child(query)
+            if track is None:
+                # Резолвер не запустился (хост запрещает дочерние процессы) — работаем здесь
+                from utils.ytdlp_resolve import resolve
+
+                loop = asyncio.get_running_loop()
+                track = await loop.run_in_executor(None, lambda: resolve(
+                    query,
+                    COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
+                    PREFER_SOUNDCLOUD,
+                    SEARCH_RESULTS,
+                ))
             _log(f"поиск завершён за {time.time() - t0:.1f} с")
-        return {
-            "title": data.get("title", "Без названия"),
-            "stream_url": data["url"],
-            "webpage_url": data.get("webpage_url") or data.get("original_url") or query,
-            "duration": data.get("duration"),
-            "thumbnail": data.get("thumbnail"),
-            "ts": time.time(),
-        }
+        _trim()
+        track = dict(track)
+        track["ts"] = time.time()
+        return track
+
+    async def _resolve_in_child(self, query: str):
+        """Возвращает трек, либо None, если дочерний процесс не смог стартовать."""
+        request = json.dumps(
+            {
+                "query": query,
+                "cookies": COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
+                "prefer_soundcloud": PREFER_SOUNDCLOUD,
+                "search_results": SEARCH_RESULTS,
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable,
+                RESOLVER,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            )
+        except Exception as e:
+            _log(f"дочерний резолвер не запустился: {e}")
+            return None
+        try:
+            out = (await asyncio.wait_for(proc.communicate(request), timeout=EXTRACT_TIMEOUT))[0]
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            raise RuntimeError(f"Поиск завис ({EXTRACT_TIMEOUT} сек), трек не взят.")
+        try:
+            payload = json.loads(out.decode("utf-8", "replace"))
+        except Exception:
+            _log("резолвер вернул непонятный ответ")
+            return None
+        if payload.get("ok"):
+            return payload.get("track")
+        raise RuntimeError(str(payload.get("error") or "Ничего не найдено")[:300])
 
     # ---------- core ----------
     async def handle_play(self, inter, query: str):
@@ -409,10 +380,14 @@ class Music(commands.Cog):
             return await inter.followup.send(
                 embed=note_embed(f"⏳ Не так быстро, сэр. Подождите ещё {int(wait) + 1} сек."), ephemeral=True)
         self._last_play[inter.author.id] = now
+        p = self.get_player(inter.guild)
+        if len(p.queue) >= MAX_QUEUE:
+            return await inter.followup.send(
+                embed=note_embed(f"️ Очередь забита ({MAX_QUEUE} треков). Почистите её кнопкой ⏹."),
+                ephemeral=True)
         vc = await self.ensure_voice(inter)
         if not vc:
             return
-        p = self.get_player(inter.guild)
         p.text_channel = inter.channel
         try:
             track = await self._extract(query)
