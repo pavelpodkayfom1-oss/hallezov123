@@ -40,6 +40,68 @@ def _child_processes() -> int:
         return -1
 
 
+def _read_int(path: str) -> int:
+    try:
+        with open(path, encoding="utf-8") as f:
+            return int(f.read().strip()) // 1048576
+    except Exception:
+        return -1
+
+
+def _cgroup_mb() -> dict:
+    """Сколько памяти ест ВЕСЬ контейнер — именно это показывает панель хостинга."""
+    limit = _read_int("/sys/fs/cgroup/memory.max") if os.path.exists("/sys/fs/cgroup/memory.max") \
+        else _read_int("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+    if limit > 1_000_000:  # лимита нет — cgroup v1 возвращает гигантское число
+        limit = -1
+    usage = _read_int("/sys/fs/cgroup/memory.current") if os.path.exists("/sys/fs/cgroup/memory.current") \
+        else _read_int("/sys/fs/cgroup/memory/memory.usage_in_bytes")
+    return {"usage": usage, "limit": limit}
+
+
+def _cgroup_stat_mb() -> dict:
+    """Разложение памяти контейнера: свой RSS против кэша файлов (page cache)."""
+    out = {}
+    for path in ("/sys/fs/cgroup/memory.stat", "/sys/fs/cgroup/memory/memory.stat"):
+        try:
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    key, _, value = line.partition(" ")
+                    if key in ("anon", "rss", "file", "cache", "slab"):
+                        out[key] = int(value) // 1048576
+            if out:
+                return out
+        except Exception:
+            continue
+    return out
+
+
+def _top_processes(n: int = 6) -> list:
+    """Процессы внутри контейнера: видно, не сидит ли там второй копии бота."""
+    out = []
+    try:
+        pids = [p for p in os.listdir("/proc") if p.isdigit()]
+    except Exception:
+        return out
+    for pid in pids:
+        try:
+            with open(f"/proc/{pid}/status", encoding="utf-8", errors="replace") as f:
+                rss = name = None
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        rss = int(line.split()[1]) // 1024
+                    elif line.startswith("Name:"):
+                        name = line.split("\t")[-1].strip()
+                    if rss is not None and name is not None:
+                        break
+            if rss:
+                out.append((rss, pid, name))
+        except Exception:
+            continue
+    out.sort(reverse=True)
+    return out[:n]
+
+
 def _cached_members(bot) -> int:
     total = 0
     for g in getattr(bot, "guilds", []):
@@ -71,13 +133,14 @@ class Memory(commands.Cog):
     async def report(self):
         await self._trim()
         st = _proc_status()
+        cg = _cgroup_mb()
+        stat = _cgroup_stat_mb()
         print(
             "[mem] "
-            f"RSS={st.get('VmRSS', -1)}МБ пик={st.get('VmHWM', -1)}МБ "
-            f"виртуально={st.get('VmSize', -1)}МБ | "
+            f"бот={st.get('VmRSS', -1)}МБ | контейнер={cg.get('usage', -1)}/{cg.get('limit', -1)}МБ "
+            f"(своя={stat.get('anon', stat.get('rss', -1))}МБ кэш_файлов={stat.get('file', stat.get('cache', -1))}МБ) | "
             f"участников в кэсе={_cached_members(self.bot)} | "
-            f"сообщений={_cached_messages(self.bot)} | "
-            f"когов={len(self.bot.extensions)} | дочерних процессов={_child_processes()}",
+            f"когов={len(self.bot.extensions)} | процессов={len(_top_processes(99))}",
             flush=True,
         )
 
@@ -129,12 +192,25 @@ class Memory(commands.Cog):
 
         e = disnake.Embed(title="🧠 Память бота", color=get_color("embed_color"))
         e.add_field(
-            name="Процесс",
+            name="Процесс бота",
             value=(
                 f"RSS: **{st.get('VmRSS', -1)} МБ** (пик {st.get('VmHWM', -1)} МБ)\n"
                 f"После сборки мусора: {after.get('VmRSS', -1)} МБ\n"
                 f"Виртуально: {st.get('VmSize', -1)} МБ\n"
                 f"Дочерних процессов: {_child_processes()}"
+            ),
+            inline=False,
+        )
+        cg = _cgroup_mb()
+        stat = _cgroup_stat_mb()
+        procs = _top_processes(5)
+        e.add_field(
+            name="Контейнер (это видит панель хостинга)",
+            value=(
+                f"Использовано: **{cg.get('usage', -1)} МБ** из {cg.get('limit', -1)} МБ\n"
+                f"Процессы: своя память {stat.get('anon', stat.get('rss', -1))} МБ, "
+                f"кэш файлов {stat.get('file', stat.get('cache', -1))} МБ\n"
+                + ("Процессы внутри: " + ", ".join(f"{n}({r}МБ)" for r, _, n in procs) if procs else "")
             ),
             inline=False,
         )
