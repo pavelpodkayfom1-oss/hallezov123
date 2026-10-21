@@ -4,6 +4,7 @@ import json
 import asyncio
 import logging
 import traceback
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import disnake
@@ -20,13 +21,16 @@ if sys.platform == "win32":
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
-# Лог-файл (ошибки и предупреждения библиотеки), чтобы ничего не терялось
+# Лог-файл (ошибки и предупреждения библиотеки), чтобы ничего не терялось.
+# Ротация обязательна: на тесном хосте разросшийся лог съедает и диск, и кэш памяти.
 logging.basicConfig(
     level=logging.WARNING,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),  # теперь предупреждения видны и в консоли хостинга
-        logging.FileHandler(BASE_DIR / "bot.log", encoding="utf-8"),
+        RotatingFileHandler(
+            BASE_DIR / "bot.log", maxBytes=1_500_000, backupCount=1, encoding="utf-8"
+        ),
     ],
 )
 # Показываем ход подключения к Discord
