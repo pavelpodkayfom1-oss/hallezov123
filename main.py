@@ -152,13 +152,18 @@ async def on_ready():
     print(f"📁  Загружено модулей: {len(bot.extensions)}/{len(COGS)}", flush=True)
     print("=" * 60, flush=True)
 
-    # Список участников грузим отдельно, чтобы возможная ошибка не мешала запуску бота
-    for g in bot.guilds:
-        try:
-            await asyncio.wait_for(g.chunk(), timeout=60)
-            print(f"👥  Участники загружены: {g.name} ({len(g.members)})", flush=True)
-        except Exception as e:
-            print(f"⚠️ Не удалось загрузить список участников {g.name}: {e}", file=sys.stderr, flush=True)
+    # Список участников грузим отдельно, чтобы возможная ошибка не мешала запуску бота.
+    # На тесном хосте это главный потребитель RAM: BOT_NO_CHUNK=1 в .env отключает
+    # полное кэширование (состав и family_sync тогда могут быть неполными).
+    if os.getenv("BOT_NO_CHUNK", "").strip().lower() in ("1", "true", "yes", "on"):
+        print("⏭ Кэш участников не загружаем (BOT_NO_CHUNK) — экономим память", flush=True)
+    else:
+        for g in bot.guilds:
+            try:
+                await asyncio.wait_for(g.chunk(), timeout=60)
+                print(f"👥  Участники загружены: {g.name} ({len(g.members)})", flush=True)
+            except Exception as e:
+                print(f"⚠️ Не удалось загрузить список участников {g.name}: {e}", file=sys.stderr, flush=True)
 
 
 async def _handle_error(inter: disnake.Interaction, error: Exception, kind: str):
