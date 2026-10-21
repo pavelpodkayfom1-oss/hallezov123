@@ -7,6 +7,12 @@ import traceback
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+# Ставим ДО импорта библиотеки: glibc резервирует до 8 malloc-арен на ядро и не
+# отдаёт освобождённую память ядру, из-за чего на тесном контейнере RSS раздувается.
+if os.name == "posix":
+    os.environ.setdefault("MALLOC_ARENA_MAX", "2")
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+
 import disnake
 from disnake.ext import commands
 from dotenv import load_dotenv
