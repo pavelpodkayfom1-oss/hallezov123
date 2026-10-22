@@ -576,6 +576,17 @@ XT = {
                           "Рекрутер {reviewer} приглашает вас на обзвон в **Hallez FAMQ**!\n📍 Голосовой канал: {voice}\n⏳ Зайдите и ожидайте рекрутера.",
                           "{reviewer} {voice}"),
     "accept_dm_title": ("ЛС «принят»: заголовок", "{e_crown} Добро пожаловать в Hallez FAMQ!", ""),
+    "accept_dm_desc": ("ЛС «принят»: текст",
+                       "{e_star} **{nick}** — вы теперь семья. Поздравляем, {reviewer} вас приняла!\n\n"
+                       "{e_crown} **Что уже сделано**\n"
+                       "> {e_accept} Семейные роли выданы — заходите и играйте\n"
+                       "> {e_points} Заявка закрыта, статика: `{static}`\n\n"
+                       "{e_apply} **Первые три шага**\n"
+                       "> 1. Правила семьи — в закрепе канала\n"
+                       "> 2. Зайдите в голосовой и скажите, какая роль вам ближе\n"
+                       "> 3. Вам дадут наставника, пока не втянетесь\n\n"
+                       "{e_top} Hallez FAMQ — свои держат друг друга.",
+                       "{nick} {static} {reviewer}"),
     "points_title": ("Рекрут-центр: заголовок", "{e_points} РЕКРУТ-ЦЕНТР HALLEZ FAMQ", ""),
     "points_desc": ("Рекрут-центр: текст",
                     "{e_star} Получайте **баллы** за работу в наборе и обменивайте их на призы!\n\n"
@@ -1330,8 +1341,8 @@ async def h_accept(inter: disnake.MessageInteraction):
         if err:
             warnings.append(err)
 
-    dm_text = T("recruit_accepted_dm", "🎉 Добро пожаловать в **Hallez FAMQ**!",
-                nick=app["nick"], static=app["static_id"], reviewer=inter.author.mention)
+    dm_text = X("accept_dm_desc", nick=app["nick"], static=app["static_id"],
+                reviewer=inter.author.mention)
     await dm(app["user_id"], X("accept_dm_title"), dm_text,
              color=cfg_color("success_color", 0x2ECC71))
 
