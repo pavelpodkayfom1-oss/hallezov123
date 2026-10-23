@@ -7,6 +7,9 @@
 guard_after_deploy() вызывается ДО загрузки когов: он сверяет живые файлы с
 отпечатками последнего снимка и, если деплой вернул старую версию, поднимает
 обратно снимок. /update_save (cogs/state_save.py) делает такой снимок вручную.
+
+Фоновый снимок делается раз в минуту и сразу после mark_dirty() — так теряется
+максимум минута работы, а не последние 15 минут, если деплой всё-таки откатит базу.
 """
 import asyncio
 import hashlib
@@ -24,14 +27,30 @@ BACKUP_DIR = BASE_DIR / "backups"
 STATE_SUFFIXES = (".json", ".db")
 MAX_FILE = 8 * 1024 * 1024          # больше 8 МБ не копируем: снимок не должен есть диск
 PATTERNS = ("*.json", "*.db")       # совместимость со старыми снимками
-KEEP = 4
-INTERVAL = 900
+KEEP = 8
+INTERVAL = 60
 SIG_NAME = "state_sig.json"
 REJECT_DIR = "rejected"
 POSIX_FADV_DONTNEED = 4
 
 # Что подняли из снимка при этом запуске — показывает /update_save.
 LAST_RESTORE: list = []
+
+# Флаг «только что что-то записали»: снимок снимут не дожидаясь INTERVAL.
+_dirty = False
+
+
+def mark_dirty() -> None:
+    """Вызывать после важной записи (заявка, заказ в магазине, рефералка, настройки).
+
+    Само снятие делается в фоне и только локальными копировками файлов — трафик не тратится.
+    """
+    global _dirty
+    _dirty = True
+
+
+def snapshot_count() -> int:
+    return len(_snap_dirs())
 
 
 def _drop_cache(path: Path) -> None:
@@ -161,6 +180,8 @@ def guard_after_deploy() -> list:
 
 
 async def run() -> None:
+    """Фон: раз в INTERVAL секунд (и сразу после mark_dirty()) снимать состояние."""
+    global _dirty
     while True:
         try:
             dest = await asyncio.to_thread(snapshot)
@@ -168,4 +189,8 @@ async def run() -> None:
                 print(f"💾 Снимок настроек и базы: {dest.name}", flush=True)
         except Exception as error:
             print(f"⚠️ Снимок не сделан: {error}", file=sys.stderr, flush=True)
-        await asyncio.sleep(INTERVAL)
+        _dirty = False
+        for _ in range(INTERVAL):
+            await asyncio.sleep(1)
+            if _dirty:
+                break

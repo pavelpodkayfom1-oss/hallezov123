@@ -35,11 +35,17 @@ class StateSave(commands.Cog):
                  if dest else "💾 Новых изменений нет — эталон уже актуален."]
         if dest:
             lines.append(f"Снимок: `backups/{dest.name}`")
+        fresh = state_backup.newest()
+        lines.append(f"Снимков в `backups/`: **{state_backup.snapshot_count()}**"
+                     + (f", самый свежий `{fresh.name}`" if fresh else ""))
         lines.append("Дальше при старте бот сам вернёт это состояние, если деплой из git "
-                     "откатит файлы. После крупных правок настроек жми команду ещё раз.")
+                     "откатит файлы. Фон также снимает копию раз в минуту и сразу после "
+                     "заявки/заказа/покупки, так что теряться должно максимум минута.")
         if state_backup.LAST_RESTORE:
             lines.append("\n♻️ В этот запуск поднято из снимка: "
                          + ", ".join(f"`{n}`" for n in state_backup.LAST_RESTORE))
+        else:
+            lines.append("\n♻️ В этот запуск ничего не откатывалось — файлы состояния целые.")
         await inter.followup.send(embed=note_embed("\n".join(lines)), ephemeral=True)
 
 

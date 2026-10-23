@@ -250,6 +250,10 @@ async def main():
         if restored:
             print("♻️  Настройки вернулись из backups/ — если это нежелательно, "
                   "нажми /update_save после правок.", flush=True)
+        # Если после деплоя снимков стало 0 (или их число упало) — хостинг поднимает
+        # репозиторий заново и диск не переживает обновление. Тогда защита откатов
+        # из backups/ не работает в принципе, нужно уносить файлы состояния из git.
+        print(f"💾 Снимков в backups/: {state_backup.snapshot_count()}", flush=True)
     except Exception as error:
         print(f"⚠️ Восстановление состояния не удалось: {error}", flush=True)
 
