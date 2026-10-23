@@ -6,8 +6,9 @@
 Загруженный раз файл лежит на cdn.discordapp.com, и Discord сам раздаёт его клиентам.
 
 Служебное сообщение с картинкой удалять нельзя: Discord забирает файл вместе с сообщением,
-и эмбеды останутся без картинки (сам кэш при этом продолжит отдавать битый URL —
-поэтому ensure() перечитывает URL, если файл поменялся).
+и эмбеды останутся без картинки — причём молча, просто без изображения. Поэтому ensure()
+перед тем как отдать URL, проверяет, что сообщение ещё живо, и при необходимости заливает
+файл заново (так же, как и когда сам файл ассета изменился).
 """
 import hashlib
 import json
@@ -61,11 +62,47 @@ def cached_url(name: str, path) -> Optional[str]:
         return None
 
 
+async def _url_is_alive(channel, name: str) -> bool:
+    """Ссылка на CDN жива, только пока живёт служебное сообщение с файлом.
+
+    Discord отдаёт вложенный файл ровно до тех пор, пока существует сообщение, с которым
+    его загрузили. Сообщение удалили (или почистили канал) — и все эмбеды с такой ссылкой
+    остаются без картинки, молча и без ошибки.
+    """
+    entry = _load().get(name)
+    mid = entry.get("message_id") if isinstance(entry, dict) else 0
+    if not mid:
+        return False
+    try:
+        await channel.fetch_message(int(mid))
+        return True
+    except disnake.NotFound:
+        return False
+    except disnake.Forbidden:
+        return True     # канал недоступен — не трогаем кэш, чтобы не долбить загрузку заново
+    except Exception:
+        return True
+
+
+def _drop(name: str) -> None:
+    cache = _load()
+    if cache.pop(name, None) is not None:
+        _save(cache)
+
+
 async def ensure(channel, name: str, path) -> Optional[str]:
-    """Возвращает URL картинки, при необходимости загрузив её в канал один раз."""
+    """Возвращает URL картинки, при необходимости загрузив её в канал.
+
+    Проверяет, что старая ссылка ещё работает, и заливает файл заново, если нет.
+    """
     p = Path(path)
     url = cached_url(name, p)
-    if url or channel is None or not p.exists():
+    if url and channel is not None:
+        if await _url_is_alive(channel, name):
+            return url
+        _drop(name)
+        print(f"🌐 Ссылка на CDN для {name} умерла — заливаем картинку заново", flush=True)
+    if channel is None or not p.exists():
         return url
     try:
         msg = await channel.send(content=NOTE, file=disnake.File(str(p), filename=name))

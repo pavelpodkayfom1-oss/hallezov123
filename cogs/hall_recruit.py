@@ -654,33 +654,9 @@ XT = {
                       "Ваша анкета **#{app_id}** передана рекрутерам.\nМы напишем вам в ЛС, когда будет решение {e_star}", "{app_id}"),
     "thread_hello": ("Ветка заявки: приветствие",
                      "{mention}, добро пожаловать в ветку заявки **#{app_id}** {e_star}\n\n"
-                     "### {e_crown}  Как всё устроено\n"
-                     "{n1}  **Рекрутер берёт анкету в работу**\n"
-                     "{n2}  **Приглашение на обзвон** — придёт вам в ЛС\n"
-                     "{n3}  **Решение** — {e_accept} принят или {e_reject} отказ, тоже в ЛС\n\n"
                      "{p_pencil}  Здесь можно задать вопрос или дополнить анкету — рекрутеры увидят.\n"
-                     "*Само решение в этой ветке не пишется, чтобы ничего не потерялось.*",
+                     "*Статусы и решение в ветке не пишем — всё приходит вам в ЛС.*",
                      "{mention} {app_id}"),
-    "thread_review_msg": ("Ветка: заявка взята в работу",
-                          "{e_review}  **Заявка в работе**\n"
-                          "> {p_shield}  Анкету ведёт {reviewer}\n"
-                          "> {e_interview}  Приглашение на обзвон придёт в ЛС",
-                          "{reviewer}"),
-    "thread_interview_msg": ("Ветка: вызов на обзвон",
-                             "{e_interview}  **{nick}** приглашён на обзвон\n"
-                             "> {p_discord}  Канал: {voice}\n"
-                             "> {p_shield}  Рекрутер: {reviewer}",
-                             "{nick} {voice} {reviewer}"),
-    "thread_accept_msg": ("Ветка: кандидат принят",
-                          "{e_accept}  **{nick}** принят в семью\n"
-                          "> {p_shield}  Вёл заявку: {reviewer}\n"
-                          "> {e_crown}  {mention} — заходи, свои ждут!",
-                          "{nick} {reviewer} {mention}"),
-    "thread_reject_msg": ("Ветка: отказ",
-                          "{e_reject}  **{nick}** — отказ\n"
-                          "> {p_book}  Причина: {reason}\n"
-                          "> {p_shield}  Решил: {reviewer}",
-                          "{nick} {reason} {reviewer}"),
     "interview_dm_title": ("ЛС «обзвон»: заголовок", "{e_interview} Вас вызывают на обзвон", ""),
     "interview_dm_desc": ("ЛС «обзвон»: текст",
                           "{e_star} **{nick}**, рекрутер {reviewer} зовёт вас на обзвон в **Hallez FAMQ**!\n\n"
@@ -955,19 +931,38 @@ def put_banner(embed: disnake.Embed, asset: str = BANNER_ASSET) -> Optional[disn
 VIDEO_EXTS = (".gif", ".mp4", ".mov", ".webm")
 
 
-async def ensure_cdn_assets() -> list:
-    """Заливает баннеры на CDN один раз; дальше эмбеды только ссылаются на URL.
-
-    Без этого каждый ЛС-баннер уезжал бы в Discord файлом заново (~0.4 МБ на сообщение).
-    """
+async def cdn_upload_channel():
+    """Куда лить служебные картинки: канал заявок/панели, а если он недоступен — любой, где можем писать."""
     ch = await get_channel(chan_id("review") or chan_id("panel"))
-    if not isinstance(ch, disnake.TextChannel):
+    if isinstance(ch, disnake.TextChannel):
+        return ch
+    if _BOT is None:
+        return None
+    for guild in _BOT.guilds:
+        me = guild.me
+        for c in guild.text_channels:
+            p = c.permissions_for(me) if me else None
+            if p and p.send_messages and p.attach_files:
+                return c
+    return None
+
+
+async def ensure_cdn_assets() -> list:
+    """Проверяет баннеры на CDN: заливает то, чего там ещё нет или что пришлось залить заново.
+
+    Ссылка на CDN живёт ровно столько, сколько живёт служебное сообщение с файлом, поэтому
+    прогонять это нужно на каждом старте, а не один раз в жизни бота. Без CDN каждый
+    ЛС-баннер уезжал бы в Discord файлом заново (~0.4 МБ на сообщение).
+    """
+    ch = await cdn_upload_channel()
+    if ch is None:
         return []
     done = []
     for asset in CDN_ASSETS:
         path = os.path.join(ASSETS_DIR, asset)
-        if not os.path.exists(path) or cdn_assets.cached_url(asset, path):
+        if not os.path.exists(path):
             continue
+        # ensure() сам решит: ссылка жива — вернёт её, умерла — зальёт картинку заново
         if await cdn_assets.ensure(ch, asset, path):
             done.append(asset)
     return done
@@ -1532,12 +1527,7 @@ async def h_review(inter: disnake.MessageInteraction):
                        cfg_color("embed_color", 0x990000), inter.author.mention, stage="review")
     await inter.response.edit_message(embed=emb)
     th = await get_thread(inter.guild, app["thread_id"])
-    if th:
-        text = X("thread_review_msg", reviewer=inter.author.mention)
-        try:
-            await th.send(text)
-        except Exception:
-            pass
+    # в ветке ничего не пишем: этап видно по карточке, а остальное уходит рекрутеру в ЛС
     await remind_take(app, inter.author.id, th.mention if th else f"«{app['nick']}»")
 
 
@@ -1598,13 +1588,6 @@ async def do_interview(inter: disnake.Interaction, card_message: disnake.Message
         await card_message.edit(embed=emb)
     except Exception as e:
         print(f"[hall_recruit] не удалось обновить карточку заявки #{app['id']}: {e!r}", file=sys.stderr, flush=True)
-    th = await get_thread(inter.guild, app["thread_id"])
-    if th:
-        try:
-            await th.send(X("thread_interview_msg", nick=app["nick"], voice=voice,
-                            reviewer=inter.author.mention))
-        except Exception:
-            pass
     await dm(app["user_id"], X("interview_dm_title"),
              X("interview_dm_desc", nick=app["nick"], reviewer=inter.author.mention, voice=voice),
              banner=INTERVIEW_ASSET)
@@ -1682,11 +1665,6 @@ async def h_accept(inter: disnake.MessageInteraction):
 
     th = await get_thread(inter.guild, app["thread_id"])
     if th:
-        try:
-            await th.send(X("thread_accept_msg", nick=app["nick"], reviewer=inter.author.mention,
-                            mention=f"<@{app['user_id']}>"))
-        except Exception:
-            pass
         # архив переписки уходит в логи ДО закрытия (иначе при режиме "delete" он был бы потерян)
         log_err = await archive_thread_to_logs(th, app, inter.author, "принят", cfg_color("success_color", 0x2ECC71))
         if log_err:
@@ -1732,11 +1710,6 @@ class RejectModal(disnake.ui.Modal):
         await self.message.edit(embed=emb, view=None)
         th = await get_thread(inter.guild, app["thread_id"])
         if th:
-            try:
-                await th.send(X("thread_reject_msg", nick=app["nick"], reason=reason,
-                                reviewer=inter.author.mention))
-            except Exception:
-                pass
             await close_thread(th, app["id"], reason=f"Заявка #{app['id']} отклонена")
         await dm(app["user_id"], X("reject_dm_title"),
                  X("reject_dm_desc", nick=app["nick"], reason=reason),
@@ -2069,7 +2042,16 @@ def dash_embed() -> disnake.Embed:
     emb.add_field(name="🛒 Магазин", value=f"Призов: **{len([i for i in S['shop'] if i.get('enabled')])}**", inline=True)
     emb.add_field(name="🔘 Кнопки и ✍️ тексты",
                   value=f"Кнопок изменено: **{len(S['buttons'])}** из {len(BUTTONS)}\nСвоих текстов: **{len(S['texts'])}** из {len(XT)}", inline=True)
-    emb.add_field(name="🖼️ Баннер", value="✅ загружен" if os.path.exists(BANNER_PATH) else "❌ нет файла — `/hr_banner`", inline=True)
+    def asset_state(asset: str) -> str:
+        """Где картинка берётся сейчас: с CDN (ноль трафика) или файлом в каждое сообщение."""
+        path = os.path.join(ASSETS_DIR, asset)
+        if not os.path.exists(path):
+            return "❌ нет файла — `/hr_banner`"
+        return "✅ на CDN" if cdn_assets.cached_url(asset, path) else "⚠️ файлом (не залита на CDN)"
+
+    emb.add_field(name="🖼️ Баннеры",
+                  value=f"Панели: {asset_state(BANNER_ASSET)}\nОбзвон в ЛС: {asset_state(INTERVIEW_ASSET)}",
+                  inline=True)
     vid = "✅ файл" if video_path() else ("✅ ссылка" if S["design"].get("video_url") else "— (`/hr_video`)")
     emb.add_field(name="🎬 Видео", value=vid, inline=True)
     emb.add_field(name="📍 Каналы",
