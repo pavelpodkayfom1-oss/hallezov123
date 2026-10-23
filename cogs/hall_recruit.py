@@ -570,11 +570,49 @@ XT = {
     "apply_ok_title": ("Заявка отправлена: заголовок", "{e_accept} Заявка отправлена!", "{app_id}"),
     "apply_ok_desc": ("Заявка отправлена: текст",
                       "Ваша анкета **#{app_id}** передана рекрутерам.\nМы напишем вам в ЛС, когда будет решение {e_star}", "{app_id}"),
-    "thread_hello": ("Ветка заявки: приветствие", "{mention}, здесь рекрутеры свяжутся с вами. Ожидайте решения {e_star}", "{mention}"),
+    "thread_hello": ("Ветка заявки: приветствие",
+                     "{mention} добро пожаловать в ветку заявки **#{app_id}** {e_star}\n\n"
+                     "**Как всё устроено**\n"
+                     "> 1. {e_review} Рекрутер берёт анкету в работу\n"
+                     "> 2. {e_interview} Приглашение на обзвон — придёт вам в ЛС\n"
+                     "> 3. {e_accept} или {e_reject} Решение — тоже в ЛС\n\n"
+                     "Здесь можно задать вопрос или дополнить анкету — рекрутеры увидят. "
+                     "Само решение в этой ветке не пишется, чтобы ничего не потерялось.",
+                     "{mention} {app_id}"),
+    "thread_review_msg": ("Ветка: заявка взята в работу",
+                          "{e_review} Анкету ведёт {reviewer}. Ждите приглашение на обзвон в ЛС.",
+                          "{reviewer}"),
+    "thread_interview_msg": ("Ветка: вызов на обзвон",
+                             "{e_interview} **{nick}** приглашён на обзвон\n"
+                             "> Канал: {voice}\n> Рекрутер: {reviewer}",
+                             "{nick} {voice} {reviewer}"),
+    "thread_accept_msg": ("Ветка: кандидат принят",
+                          "{e_accept} **{nick}** принят в семью\n"
+                          "> Вёл заявку: {reviewer}\n> {mention} — заходи, свои ждут!",
+                          "{nick} {reviewer} {mention}"),
+    "thread_reject_msg": ("Ветка: отказ",
+                          "{e_reject} **{nick}** — отказ\n"
+                          "> Причина: {reason}\n> Решил: {reviewer}",
+                          "{nick} {reason} {reviewer}"),
     "interview_dm_title": ("ЛС «обзвон»: заголовок", "{e_interview} Вас вызывают на обзвон", ""),
     "interview_dm_desc": ("ЛС «обзвон»: текст",
-                          "Рекрутер {reviewer} приглашает вас на обзвон в **Hallez FAMQ**!\n📍 Голосовой канал: {voice}\n⏳ Зайдите и ожидайте рекрутера.",
-                          "{reviewer} {voice}"),
+                          "{e_star} **{nick}**, рекрутер {reviewer} зовёт вас на обзвон в **Hallez FAMQ**!\n\n"
+                          "📍 **Куда заходить**\n> {voice}\n\n"
+                          "⏳ **Как проходит**\n"
+                          "> 1. Зайдите в канал и подождите — вас позовут\n"
+                          "> 2. 5-10 минут спокойный разговор: кто вы, с кем играли, чего ждёте от семьи\n"
+                          "> 3. Решение придёт в ЛС сразу после\n\n"
+                          "🎤 **Подготовьте**\n> Рабочий микрофон, тихий фон и 10 минут свободного времени\n\n"
+                          "{e_star} Не можете сейчас — напишите сюда, перенесём без обид.",
+                          "{nick} {reviewer} {voice}"),
+    "reject_dm_title": ("ЛС «отказ»: заголовок", "{e_reject} Решение по вашей заявке", ""),
+    "reject_dm_desc": ("ЛС «отказ»: текст",
+                       "{e_star} **{nick}**, спасибо, что откликнулись в **Hallez FAMQ**.\n\n"
+                       "{e_reject} Сейчас мы не готовы сказать «да».\n> **Причина:** {reason}\n\n"
+                       "{e_apply} Дверь не закрывается: подайте заявку заново, когда будете готовы — "
+                       "со свежими скринами и более полной анкетой.\n\n"
+                       "{e_top} Hallez FAMQ — свои держат друг друга.",
+                       "{nick} {reason}"),
     "accept_dm_title": ("ЛС «принят»: заголовок", "{e_crown} Добро пожаловать в Hallez FAMQ!", ""),
     "accept_dm_desc": ("ЛС «принят»: текст",
                        "{e_star} **{nick}** — вы теперь семья. Поздравляем, {reviewer} вас приняла!\n\n"
@@ -932,10 +970,41 @@ class ApplyModal(disnake.ui.Modal):
         await submit_application(inter)
 
 
-def card_embed(app_nick: str, user: disnake.abc.User, answers: List[Dict[str, str]], status: str, color: int) -> disnake.Embed:
+STAGE_SEQ = ("new", "review", "interview", "decided")
+STAGE_LABELS = {"new": "🟡 Новая", "review": "{e_review} В работе",
+                "interview": "{e_interview} Обзвон", "decided": "{e_accept} / {e_reject} Решение"}
+
+
+def stage_line(stage: str) -> str:
+    """Лента этапов заявки: пройденные зачёркнуты, текущий выделен."""
+    try:
+        cur = STAGE_SEQ.index(stage)
+    except ValueError:
+        cur = 0
+    parts = []
+    for i, key in enumerate(STAGE_SEQ):
+        label = STAGE_LABELS[key].format(**{f"e_{k}": em(k) for k in EMOJI_SLOTS})
+        if i < cur:
+            label = f"~{label}~"
+        elif i == cur:
+            label = f"**{label}**"
+        parts.append(label)
+    return " → ".join(parts)
+
+
+def card_desc(user_mention: str, status: str, stage: str) -> str:
+    return f"{user_mention}\n\n{status}\n\n📌 {stage_line(stage)}"
+
+
+def recruiter_field() -> str:
+    return f"{em('review')} Рекрутер"
+
+
+def card_embed(app_nick: str, user: disnake.abc.User, answers: List[Dict[str, str]], status: str, color: int,
+               stage: str = "new") -> disnake.Embed:
     emb = disnake.Embed(
-        title=f"{em('crown')} Анкета кандидата: {app_nick}"[:256],
-        description=f"Кандидат {user.mention}\nСтатус: {status}",
+        title=f"{em('crown')} Анкета кандидата · {app_nick}"[:256],
+        description=card_desc(user.mention, status, stage),
         color=color,
     )
     try:
@@ -945,7 +1014,7 @@ def card_embed(app_nick: str, user: disnake.abc.User, answers: List[Dict[str, st
     for a in answers:
         long = len(a["value"]) > 40
         emb.add_field(name=a["label"][:256], value=(a["value"] or "—")[:1024], inline=not long)
-    emb.add_field(name="Рекрутер", value="—", inline=True)
+    emb.add_field(name=recruiter_field(), value="—", inline=True)
     emb.set_footer(text=footer_text())
     return emb
 
@@ -1031,7 +1100,7 @@ async def submit_application(inter: disnake.ModalInteraction):
     except Exception:
         pass
     try:
-        await thread.send(X("thread_hello", mention=inter.author.mention))
+        await thread.send(X("thread_hello", mention=inter.author.mention, app_id=app_id))
     except Exception:
         pass
 
@@ -1070,12 +1139,13 @@ async def _load_card(inter: disnake.MessageInteraction):
     return app
 
 
-def _card_update(message: disnake.Message, user_id: int, status: str, color: int, reviewer: Optional[str]) -> disnake.Embed:
+def _card_update(message: disnake.Message, user_id: int, status: str, color: int,
+                 reviewer: Optional[str], stage: str = "new") -> disnake.Embed:
     emb = disnake.Embed.from_dict(message.embeds[0].to_dict())
-    emb.description = f"Кандидат <@{user_id}>\nСтатус: {status}"
+    emb.description = card_desc(f"<@{user_id}>", status, stage)
     emb.color = color
     if reviewer:
-        set_field(emb, "Рекрутер", reviewer, True)
+        set_field(emb, recruiter_field(), reviewer, True)
     return emb
 
 
@@ -1174,12 +1244,11 @@ async def h_review(inter: disnake.MessageInteraction):
         return
     await db.update_application_status(app["id"], "in_review", inter.author.id)
     emb = _card_update(inter.message, app["user_id"], f"{em('review')} **На рассмотрении**",
-                       cfg_color("embed_color", 0x990000), inter.author.mention)
+                       cfg_color("embed_color", 0x990000), inter.author.mention, stage="review")
     await inter.response.edit_message(embed=emb)
     th = await get_thread(inter.guild, app["thread_id"])
     if th:
-        text = T("recruit_review_desc", "Рекрутер {reviewer} взял заявку {mention} на рассмотрение.",
-                 reviewer=inter.author.mention, mention=f"<@{app['user_id']}>")
+        text = X("thread_review_msg", reviewer=inter.author.mention)
         try:
             await th.send(text)
         except Exception:
@@ -1239,21 +1308,19 @@ async def do_interview(inter: disnake.Interaction, card_message: disnake.Message
     await db.update_application_status(app["id"], "in_review", inter.author.id)
     try:
         emb = _card_update(card_message, app["user_id"], f"{em('interview')} **Вызван на обзвон**",
-                           cfg_color("embed_color", 0x990000), inter.author.mention)
+                           cfg_color("embed_color", 0x990000), inter.author.mention, stage="interview")
         await card_message.edit(embed=emb)
     except Exception as e:
         print(f"[hall_recruit] не удалось обновить карточку заявки #{app['id']}: {e!r}", file=sys.stderr, flush=True)
-    text = T("recruit_interview_desc",
-             "{mention}, рекрутер {reviewer} приглашает вас на обзвон!\n📍 Канал: {voice}",
-             mention=f"<@{app['user_id']}>", reviewer=inter.author.mention, voice=voice)
     th = await get_thread(inter.guild, app["thread_id"])
     if th:
         try:
-            await th.send(text)
+            await th.send(X("thread_interview_msg", nick=app["nick"], voice=voice,
+                            reviewer=inter.author.mention))
         except Exception:
             pass
     await dm(app["user_id"], X("interview_dm_title"),
-             X("interview_dm_desc", reviewer=inter.author.mention, voice=voice), banner=False)
+             X("interview_dm_desc", nick=app["nick"], reviewer=inter.author.mention, voice=voice))
 
 
 async def h_interview(inter: disnake.MessageInteraction):
@@ -1321,14 +1388,14 @@ async def h_accept(inter: disnake.MessageInteraction):
     await db.update_application_status(app["id"], "accepted", inter.author.id)
 
     emb = _card_update(inter.message, app["user_id"], f"{em('accept')} **Принят в семью**",
-                       cfg_color("success_color", 0x2ECC71), inter.author.mention)
+                       cfg_color("success_color", 0x2ECC71), inter.author.mention, stage="decided")
     await inter.message.edit(embed=emb, view=None)
 
     th = await get_thread(inter.guild, app["thread_id"])
     if th:
         try:
-            await th.send(T("recruit_accepted_thread_msg", "🎉 {mention} принят в семью рекрутером {reviewer}!",
-                            mention=f"<@{app['user_id']}>", reviewer=inter.author.mention))
+            await th.send(X("thread_accept_msg", nick=app["nick"], reviewer=inter.author.mention,
+                            mention=f"<@{app['user_id']}>"))
         except Exception:
             pass
         # архив переписки уходит в логи ДО закрытия (иначе при режиме "delete" он был бы потерян)
@@ -1370,20 +1437,20 @@ class RejectModal(disnake.ui.Modal):
         app = self.app
         await db.update_application_status(app["id"], "rejected", inter.author.id, reason)
         emb = _card_update(self.message, app["user_id"], f"{em('reject')} **Отказано**",
-                           cfg_color("error_color", 0xE74C3C), inter.author.mention)
+                           cfg_color("error_color", 0xE74C3C), inter.author.mention, stage="decided")
         set_field(emb, "Причина", reason[:1024], False)
         await self.message.edit(embed=emb, view=None)
         th = await get_thread(inter.guild, app["thread_id"])
         if th:
             try:
-                await th.send(T("recruit_rejected_desc", "👤 {mention}\n📝 Причина: {reason}",
-                                mention=f"<@{app['user_id']}>", reviewer=inter.author.mention, reason=reason))
+                await th.send(X("thread_reject_msg", nick=app["nick"], reason=reason,
+                                reviewer=inter.author.mention))
             except Exception:
                 pass
             await close_thread(th, app["id"], reason=f"Заявка #{app['id']} отклонена")
-        text = T("recruit_rejected_dm", "К сожалению, заявка отклонена.\n📝 Причина: {reason}",
-                 nick=app["nick"], reason=reason)
-        await dm(app["user_id"], "Решение по вашей заявке", text, color=cfg_color("error_color", 0xE74C3C))
+        await dm(app["user_id"], X("reject_dm_title"),
+                 X("reject_dm_desc", nick=app["nick"], reason=reason),
+                 color=cfg_color("error_color", 0xE74C3C), banner=False)
         await inter.followup.send(embed=note_embed("✅ Отказ оформлен."), ephemeral=True)
 
 
