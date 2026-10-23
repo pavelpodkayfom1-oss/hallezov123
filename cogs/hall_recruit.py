@@ -2174,6 +2174,7 @@ class DashView(AdminView):
         add(HrButton(self.d_shop, label="Магазин", style=B.secondary, emoji="🛒", row=1))
         add(HrButton(self.d_channels, label="Каналы и роли", style=B.secondary, emoji="📍", row=1))
         add(HrButton(self.d_rules, label="Правила", style=B.secondary, emoji="📜", row=1))
+        add(HrButton(self.d_swap, label="Эмодзи в текстах", style=B.secondary, emoji="🎭", row=1))
         add(HrButton(self.d_preview, label="Предпросмотр", style=B.secondary, emoji="👁️", row=2))
         add(HrButton(self.d_toggle, label="Закрыть набор" if is_open else "Открыть набор",
                      style=B.danger if is_open else B.success, emoji="🔒" if is_open else "🔓", row=2))
@@ -2205,6 +2206,10 @@ class DashView(AdminView):
     async def d_rules(self, inter):
         v = RulesView(inter.author.id)
         await inter.response.edit_message(embed=v.embed(), view=v)
+
+    async def d_swap(self, inter):
+        v = EmojiSwapView(inter.author.id)
+        await inter.response.edit_message(embed=swap_embed(v.key, None), view=v)
 
     async def d_emoji(self, inter):
         await inter.response.edit_message(embed=emoji_embed(), view=EmojiView(inter.author.id))
@@ -2763,7 +2768,13 @@ class RulesView(AdminView):
                                       channel_types=[disnake.ChannelType.text], row=0))
         self.add_item(HrButton(self.send_rules, label="Отправить в канал",
                                style=disnake.ButtonStyle.success, emoji="📨", row=1))
+        self.add_item(HrButton(self.swap_emoji, label="Эмодзи", style=disnake.ButtonStyle.secondary,
+                               emoji="🎭", row=1))
         self.add_item(_back_button(author_id))
+
+    async def swap_emoji(self, inter):
+        v = EmojiSwapView(inter.author.id, key="rules_post")
+        await inter.response.edit_message(embed=swap_embed(v.key, None), view=v)
 
     def embed(self) -> disnake.Embed:
         e = rules_embed()
@@ -2872,6 +2883,124 @@ class EmojiModal(disnake.ui.Modal):
         S["emoji"][self.slot] = val
         save_settings()
         await _refresh(inter, emoji_embed(), EmojiView(inter.author.id))
+
+
+# ───── Эмодзи в текстах: меняются кликом, без ручного набора ─────
+
+def _swap_keys() -> List[str]:
+    """XT-тексты, где есть токены :имя: — в них и можно менять эмодзи."""
+    return [k for k in XT if _EMOJI_RE.findall(_text_value(k, "cog"))]
+
+
+def _swap_tokens(key: str) -> List[str]:
+    """Уникальные :имя: из текста, в порядке появления."""
+    found = _EMOJI_RE.findall(_text_value(key, "cog"))
+    out: List[str] = []
+    for name in found:
+        if name not in out:
+            out.append(name)
+    return out
+
+
+def _swap_count(key: str, token: str) -> int:
+    return _EMOJI_RE.findall(_text_value(key, "cog")).count(token)
+
+
+def swap_embed(key: Optional[str], token: Optional[str]) -> disnake.Embed:
+    """Живой предпросмотр текста: он показывается уже с подставленными эмодзи."""
+    if not key:
+        return disnake.Embed(title="🎨 Эмодзи в текстах", color=main_color(),
+                             description="Ни в одном тексте нет эмодзи вида `:имя:`.")
+    body = E(_text_value(key, "cog"))
+    emb = disnake.Embed(title=f"🎨 {XT[key][0]}", color=main_color(),
+                        description=(body[:3900] + "…") if len(body) > 3900 else body)
+    emb.set_footer(text=(f"Меняю :{token}: — {_swap_count(key, token)} шт. → выберите новый эмодзи."
+                         if token else "Выберите, какой эмодзи заменить.") +
+                   " Замена идёт по всему тексту сразу.")
+    return emb
+
+
+def _emoji_page(page: int, per: int = 25):
+    """Страница эмодзи сервера для выпадашки: свои (hz_) первыми, остальные по алфавиту."""
+    items = sorted(_BOT.emojis, key=lambda e: (not e.name.startswith(EMOJI_PREFIX), e.name.lower())) if _BOT else []
+    opts = []
+    for e in items[page * per:(page + 1) * per]:
+        try:
+            icon = disnake.PartialEmoji.from_str(str(e))
+        except Exception:
+            icon = None
+        opts.append(disnake.SelectOption(label=e.name[:100], value=e.name, emoji=icon))
+    return opts, len(items)
+
+
+class EmojiSwapView(AdminView):
+    PER = 25
+
+    def __init__(self, author_id: int, key: Optional[str] = None):
+        super().__init__(author_id)
+        self.key, self.token, self.page = key, None, 0
+        self._build()
+
+    def _build(self):
+        self.clear_items()
+        keys = _swap_keys()
+        if self.key not in keys:
+            self.key, self.token = (keys[0] if keys else None), None
+        self.add_item(HrSelect(self.pick_key, placeholder="📂 В каком тексте менять", row=0,
+                               options=[disnake.SelectOption(label=XT[k][0][:100], value=k,
+                                                             description=f"эмодзи: {len(_swap_tokens(k))}")
+                                        for k in keys[:self.PER]]))
+        if self.key:
+            toks = _swap_tokens(self.key)
+            if self.token not in toks:
+                self.token = None
+            self.add_item(HrSelect(self.pick_token, placeholder="🔁 Какой эмодзи заменить", row=1,
+                                   options=[disnake.SelectOption(label=f":{t}:"[:100], value=t,
+                                                                 description=f"в тексте {_swap_count(self.key, t)} шт.",
+                                                                 default=(t == self.token))
+                                            for t in toks[:self.PER]]))
+            if self.token:
+                opts, total = _emoji_page(self.page)
+                self.add_item(HrSelect(self.pick_emoji, placeholder="✅ На какой заменить", row=2, options=opts))
+                B = disnake.ButtonStyle
+                self.add_item(HrButton(self.prev, label="◀", style=B.secondary, row=3, disabled=self.page == 0))
+                self.add_item(HrButton(self.next, label="▶", style=B.secondary, row=3,
+                                       disabled=(self.page + 1) * self.PER >= total))
+        self.add_item(_back_button(self.author_id))
+
+    async def pick_key(self, inter, values):
+        self.key, self.token, self.page = values[0], None, 0
+        self._build()
+        await inter.response.edit_message(embed=swap_embed(self.key, None), view=self)
+
+    async def pick_token(self, inter, values):
+        self.token, self.page = values[0], 0
+        self._build()
+        await inter.response.edit_message(embed=swap_embed(self.key, self.token), view=self)
+
+    async def prev(self, inter):
+        self.page -= 1
+        self._build()
+        await inter.response.edit_message(view=self)
+
+    async def next(self, inter):
+        self.page += 1
+        self._build()
+        await inter.response.edit_message(view=self)
+
+    async def pick_emoji(self, inter, values):
+        old, new = f":{self.token}:", f":{values[0]}:"
+        text = _text_value(self.key, "cog").replace(old, new)
+        if text == XT[self.key][1]:
+            S["texts"].pop(self.key, None)      # совпало со стандартом — копия в настройках не нужна
+        else:
+            S["texts"][self.key] = text
+        save_settings()
+        self.token, self.page = None, 0
+        self._build()
+        await inter.response.edit_message(embed=swap_embed(self.key, None), view=self)
+        await inter.followup.send(embed=note_embed(f"✅ Готово: `{old}` → `{new}` во всём тексте."), ephemeral=True)
+
 
 
 # ───── Публикация ─────
