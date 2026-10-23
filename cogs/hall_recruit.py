@@ -28,7 +28,7 @@ from disnake.ext import commands
 
 import database as db
 from utils import state_backup
-from utils.embeds import note_embed
+from utils.embeds import note_embed as _note_embed
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SETTINGS_PATH = os.path.join(BASE_DIR, "recruit_plus.json")
@@ -85,6 +85,58 @@ def pe(s: Optional[str]):
 
 def em(slot: str) -> str:
     return S["emoji"].get(slot) or EMOJI_SLOTS[slot][0]
+
+
+def pm(name: str, fallback: str = "") -> str:
+    """Премиум-эмодзи бота по имени (hz_book, number1, ...).
+
+    Сначала берём живые эмодзи сервера (они всегда актуальны), затем emoji_map.json.
+    """
+    if _BOT is not None:
+        low = name.lower()
+        for e in _BOT.emojis:
+            if e.name.lower() == low:
+                return str(e)
+    try:
+        with open(os.path.join(BASE_DIR, "emoji_map.json"), "r", encoding="utf-8") as f:
+            return json.load(f).get(name) or fallback
+    except Exception:
+        return fallback
+
+
+def _premium_extras() -> Dict[str, str]:
+    """Доп. подстановки для текстов: {n1}…{n5} — анимированные цифры, {p_book} и др. — иконки по смыслу."""
+    d = {f"n{i}": pm(f"number{i}") for i in range(1, 6)}
+    d.update(
+        p_book=pm("hz_book"), p_pc=pm("hz_pcicon"), p_house=pm("hz_house"), p_discord=pm("hz_discord"),
+        p_warn=pm("hz_warn"), p_pencil=pm("hz_pencil"), p_shield=pm("hz_moderator"),
+        p_member=pm("hz_membericon"), p_gift=pm("hz_gifticon"), p_mega=pm("hz_megaphone"),
+    )
+    return d
+
+
+_ICON_RE = re.compile(r"^(❌|✅|ℹ️?|⚠️?)[ \t]*", re.M)
+
+
+def pretty(text: Optional[str]) -> str:
+    """Ведущие ❌ ✅ ℹ️ ⚠️ в строках → премиум-эмодзи бота."""
+    if not text:
+        return text or ""
+
+    def repl(m):
+        ch = m.group(1)[0]
+        icon = {"❌": lambda: em("reject"), "✅": lambda: em("accept"),
+                "ℹ": lambda: pm("hz_book", "ℹ️"), "⚠": lambda: pm("hz_warn", "⚠️")}[ch]()
+        return icon + "  "
+
+    return _ICON_RE.sub(repl, text)
+
+
+def note_embed(text: str, kind: Optional[str] = None, title: Optional[str] = None) -> disnake.Embed:
+    """Как utils.embeds.note_embed, но значки ❌ ✅ ℹ️ ⚠️ заменены премиум-эмодзи (цвет — по исходному значку)."""
+    emb = _note_embed(text, kind, title)
+    emb.description = pretty(emb.description)
+    return emb
 
 
 def split_leading_emoji(text: str):
@@ -567,74 +619,81 @@ def btn(key: str) -> Dict[str, Any]:
 
 # ключ: (название, текст по умолчанию, подсказка по переменным)
 XT = {
-    "closed": ("Ответ: набор закрыт", "🔒 Набор в семью сейчас закрыт. Следите за новостями!", ""),
-    "already_member": ("Ответ: уже в семье", "ℹ️ Вы уже состоите в семье.", ""),
+    "closed": ("Ответ: набор закрыт", "{p_warn}  Набор в семью сейчас закрыт. Следите за новостями!", ""),
+    "already_member": ("Ответ: уже в семье", "{p_house}  Вы уже состоите в семье.", ""),
     "apply_ok_title": ("Заявка отправлена: заголовок", "{e_accept} Заявка отправлена!", "{app_id}"),
     "apply_ok_desc": ("Заявка отправлена: текст",
                       "Ваша анкета **#{app_id}** передана рекрутерам.\nМы напишем вам в ЛС, когда будет решение {e_star}", "{app_id}"),
     "thread_hello": ("Ветка заявки: приветствие",
-                     "{mention} добро пожаловать в ветку заявки **#{app_id}** {e_star}\n\n"
-                     "**Как всё устроено**\n"
-                     "> 1. {e_review} Рекрутер берёт анкету в работу\n"
-                     "> 2. {e_interview} Приглашение на обзвон — придёт вам в ЛС\n"
-                     "> 3. {e_accept} или {e_reject} Решение — тоже в ЛС\n\n"
-                     "Здесь можно задать вопрос или дополнить анкету — рекрутеры увидят. "
-                     "Само решение в этой ветке не пишется, чтобы ничего не потерялось.",
+                     "{mention}, добро пожаловать в ветку заявки **#{app_id}** {e_star}\n\n"
+                     "### {e_crown}  Как всё устроено\n"
+                     "{n1}  **Рекрутер берёт анкету в работу**\n"
+                     "{n2}  **Приглашение на обзвон** — придёт вам в ЛС\n"
+                     "{n3}  **Решение** — {e_accept} принят или {e_reject} отказ, тоже в ЛС\n\n"
+                     "{p_pencil}  Здесь можно задать вопрос или дополнить анкету — рекрутеры увидят.\n"
+                     "*Само решение в этой ветке не пишется, чтобы ничего не потерялось.*",
                      "{mention} {app_id}"),
     "thread_review_msg": ("Ветка: заявка взята в работу",
-                          "{e_review} Анкету ведёт {reviewer}. Ждите приглашение на обзвон в ЛС.",
+                          "{e_review}  **Заявка в работе**\n"
+                          "> {p_shield}  Анкету ведёт {reviewer}\n"
+                          "> {e_interview}  Приглашение на обзвон придёт в ЛС",
                           "{reviewer}"),
     "thread_interview_msg": ("Ветка: вызов на обзвон",
-                             "{e_interview} **{nick}** приглашён на обзвон\n"
-                             "> Канал: {voice}\n> Рекрутер: {reviewer}",
+                             "{e_interview}  **{nick}** приглашён на обзвон\n"
+                             "> {p_discord}  Канал: {voice}\n"
+                             "> {p_shield}  Рекрутер: {reviewer}",
                              "{nick} {voice} {reviewer}"),
     "thread_accept_msg": ("Ветка: кандидат принят",
-                          "{e_accept} **{nick}** принят в семью\n"
-                          "> Вёл заявку: {reviewer}\n> {mention} — заходи, свои ждут!",
+                          "{e_accept}  **{nick}** принят в семью\n"
+                          "> {p_shield}  Вёл заявку: {reviewer}\n"
+                          "> {e_crown}  {mention} — заходи, свои ждут!",
                           "{nick} {reviewer} {mention}"),
     "thread_reject_msg": ("Ветка: отказ",
-                          "{e_reject} **{nick}** — отказ\n"
-                          "> Причина: {reason}\n> Решил: {reviewer}",
+                          "{e_reject}  **{nick}** — отказ\n"
+                          "> {p_book}  Причина: {reason}\n"
+                          "> {p_shield}  Решил: {reviewer}",
                           "{nick} {reason} {reviewer}"),
     "interview_dm_title": ("ЛС «обзвон»: заголовок", "{e_interview} Вас вызывают на обзвон", ""),
     "interview_dm_desc": ("ЛС «обзвон»: текст",
                           "{e_star} **{nick}**, рекрутер {reviewer} зовёт вас на обзвон в **Hallez FAMQ**!\n\n"
-                          "📍 **Куда заходить**\n> {voice}\n\n"
-                          "⏳ **Как проходит**\n"
-                          "> 1. Зайдите в канал и подождите — вас позовут\n"
-                          "> 2. 5-10 минут спокойный разговор: кто вы, с кем играли, чего ждёте от семьи\n"
-                          "> 3. Решение придёт в ЛС сразу после\n\n"
-                          "🎤 **Подготовьте**\n> Рабочий микрофон, тихий фон и 10 минут свободного времени\n\n"
-                          "{e_star} Не можете сейчас — напишите сюда, перенесём без обид.",
+                          "### {p_discord}  Куда заходить\n> {voice}\n\n"
+                          "### {p_book}  Как проходит\n"
+                          "{n1}  Зайдите в канал и подождите — вас позовут\n"
+                          "{n2}  5–10 минут спокойный разговор: кто вы, с кем играли, чего ждёте от семьи\n"
+                          "{n3}  Решение придёт в ЛС сразу после\n\n"
+                          "### {p_pc}  Подготовьте\n> Рабочий микрофон, тихий фон и 10 минут свободного времени\n\n"
+                          "*Не можете сейчас — напишите сюда, перенесём без обид.* {e_star}",
                           "{nick} {reviewer} {voice}"),
     "reject_dm_title": ("ЛС «отказ»: заголовок", "{e_reject} Решение по вашей заявке", ""),
     "reject_dm_desc": ("ЛС «отказ»: текст",
                        "{e_star} **{nick}**, спасибо, что откликнулись в **Hallez FAMQ**.\n\n"
-                       "{e_reject} Сейчас мы не готовы сказать «да».\n> **Причина:** {reason}\n\n"
-                       "{e_apply} Дверь не закрывается: подайте заявку заново, когда будете готовы — "
+                       "### {e_reject}  Решение\n"
+                       "Сейчас мы не готовы сказать «да».\n> {p_book}  **Причина:** {reason}\n\n"
+                       "### {e_apply}  Что дальше\n"
+                       "Дверь не закрывается: подайте заявку заново, когда будете готовы — "
                        "со свежими скринами и более полной анкетой.\n\n"
-                       "{e_top} Hallez FAMQ — свои держат друг друга.",
+                       "{e_top}  *Hallez FAMQ — свои держат друг друга.*",
                        "{nick} {reason}"),
     "accept_dm_title": ("ЛС «принят»: заголовок", "{e_crown} Добро пожаловать в Hallez FAMQ!", ""),
     "accept_dm_desc": ("ЛС «принят»: текст",
                        "{e_star} **{nick}** — вы теперь семья. Поздравляем, {reviewer} вас приняла!\n\n"
-                       "{e_crown} **Что уже сделано**\n"
-                       "> {e_accept} Семейные роли выданы — заходите и играйте\n"
-                       "> {e_points} Заявка закрыта, статика: `{static}`\n\n"
-                       "{e_apply} **Первые три шага**\n"
-                       "> 1. Правила семьи — в закрепе канала\n"
-                       "> 2. Зайдите в голосовой и скажите, какая роль вам ближе\n"
-                       "> 3. Вам дадут наставника, пока не втянетесь\n\n"
-                       "{e_top} Hallez FAMQ — свои держат друг друга.",
+                       "### {e_crown}  Что уже сделано\n"
+                       "> {e_accept}  Семейные роли выданы — заходите и играйте\n"
+                       "> {e_points}  Заявка закрыта, статик: `{static}`\n\n"
+                       "### {e_apply}  Первые три шага\n"
+                       "{n1}  Правила семьи — в закрепе канала\n"
+                       "{n2}  Зайдите в голосовой и скажите, какая роль вам ближе\n"
+                       "{n3}  Вам дадут наставника, пока не втянетесь\n\n"
+                       "{e_top}  *Hallez FAMQ — свои держат друг друга.*",
                        "{nick} {static} {reviewer}"),
     "points_title": ("Рекрут-центр: заголовок", "{e_points} РЕКРУТ-ЦЕНТР HALLEZ FAMQ", ""),
     "points_desc": ("Рекрут-центр: текст",
                     "{e_star} Получайте **баллы** за работу в наборе и обменивайте их на призы!\n\n"
-                    "**{e_points} Как заработать**\n"
-                    "> {e_accept} Приняли заявку кандидата — **+{accept}** б.\n"
-                    "> {e_referral} Привели человека, и его приняли — **+{referral}** б.\n\n"
-                    "**{e_shop} Магазин**\n{shop_lines}\n\n"
-                    "👇 Кнопки ниже: баланс, подача приглашённого, магазин и топ.",
+                    "### {e_points}  Как заработать\n"
+                    "> {e_accept}  Приняли заявку кандидата — **+{accept}** б.\n"
+                    "> {e_referral}  Привели человека, и его приняли — **+{referral}** б.\n\n"
+                    "### {e_shop}  Магазин\n{shop_lines}\n\n"
+                    "*Кнопки ниже: баланс, подача приглашённого, магазин и топ.*",
                     "{accept} {referral} {shop_lines}"),
     "ref_sent": ("Приглашение отправлено",
                  "{e_accept} Приглашение **#{ref_id}** отправлено на проверку.\n"
@@ -643,13 +702,13 @@ XT = {
     "ref_paid_title": ("ЛС «приглашённый принят»: заголовок", "{e_referral} Ваш приглашённый принят!", ""),
     "ref_paid_desc": ("ЛС «приглашённый принят»: текст",
                       "{e_star} Игрок **{nick}** (`{static}`) принят в **Hallez FAMQ** — спасибо, что привели хороших людей!\n\n"
-                      "{e_points} Начислено: **+{pts}** баллов\n{e_shop} Баланс: **{bal}** б.\n"
-                      "Обменять баллы на призы можно в Рекрут-центре.", "{nick} {static} {pts} {bal}"),
+                      "> {e_points}  Начислено: **+{pts}** баллов\n> {e_shop}  Баланс: **{bal}** б.\n\n"
+                      "*Обменять баллы на призы можно в Рекрут-центре.*", "{nick} {static} {pts} {bal}"),
     "accept_points_title": ("ЛС рекруту за принятого: заголовок", "{e_points} Баллы за принятого кандидата", ""),
     "accept_points_desc": ("ЛС рекруту за принятого: текст",
                            "{e_star} Вы приняли в семью **{nick}** (`{static}`) — отличная работа!\n\n"
-                           "{e_points} Начислено: **+{pts}** баллов\n{e_shop} Баланс: **{bal}** б.\n"
-                           "Потратить баллы можно в Рекрут-центре, в разделе «Магазин».", "{nick} {static} {pts} {bal}"),
+                           "> {e_points}  Начислено: **+{pts}** баллов\n> {e_shop}  Баланс: **{bal}** б.\n\n"
+                           "*Потратить баллы можно в Рекрут-центре, в разделе «Магазин».*", "{nick} {static} {pts} {bal}"),
     "order_done_title": ("ЛС «приз выдан»: заголовок", "{e_gift} Ваш приз выдан!", ""),
     "order_done_desc": ("ЛС «приз выдан»: текст",
                         "Заказ **#{order_id}** — **{item}** — выдан руководителем {admin}.\n"
@@ -660,6 +719,7 @@ XT = {
 def X(key: str, **kw) -> str:
     """Текст рекрут-центра: правка из /hr → Тексты или стандартный. {e_crown}, {e_star}… — эмодзи слотов."""
     base = {f"e_{k}": em(k) for k in EMOJI_SLOTS}
+    base.update(_premium_extras())
     base.update(kw)
     return fmt(S["texts"].get(key) or XT[key][1], **base)
 
@@ -1002,29 +1062,30 @@ class ApplyModal(disnake.ui.Modal):
 
 
 STAGE_SEQ = ("new", "review", "interview", "decided")
-STAGE_LABELS = {"new": "🟡 Новая", "review": "{e_review} В работе",
-                "interview": "{e_interview} Обзвон", "decided": "{e_accept} / {e_reject} Решение"}
+STAGE_LABELS = {"new": "Новая", "review": "В работе", "interview": "Обзвон", "decided": "Решение"}
 
 
 def stage_line(stage: str) -> str:
-    """Лента этапов заявки: пройденные зачёркнуты, текущий выделен."""
+    """Лента этапов заявки в одном стиле: пройденный этап — зелёная галочка и зачёркнутый текст,
+    текущий — анимированная цифра и жирный текст, будущие — просто цифра."""
     try:
         cur = STAGE_SEQ.index(stage)
     except ValueError:
         cur = 0
     parts = []
     for i, key in enumerate(STAGE_SEQ):
-        label = STAGE_LABELS[key].format(**{f"e_{k}": em(k) for k in EMOJI_SLOTS})
+        label = STAGE_LABELS[key]
         if i < cur:
-            label = f"~{label}~"
+            parts.append(f"{em('accept')} ~~{label}~~")
         elif i == cur:
-            label = f"**{label}**"
-        parts.append(label)
-    return " → ".join(parts)
+            parts.append(f"{pm(f'number{i + 1}')} **{label}**")
+        else:
+            parts.append(f"{pm(f'number{i + 1}')} {label}")
+    return "  ›  ".join(parts)
 
 
 def card_desc(user_mention: str, status: str, stage: str) -> str:
-    return f"{user_mention}\n\n{status}\n\n📌 {stage_line(stage)}"
+    return f"{user_mention}\n\n{status}\n\n{stage_line(stage)}"
 
 
 def recruiter_field() -> str:
@@ -1075,7 +1136,7 @@ async def submit_application(inter: disnake.ModalInteraction):
             embed=note_embed("❌ Канал для заявок не настроен. Администратору: `/hr` → «Каналы и роли»."), ephemeral=True)
 
     await inter.response.defer(ephemeral=True)
-    emb = card_embed(nick, inter.author, answers, f"🟡 **Новая заявка**", cfg_color("warning_color", 0xF39C12))
+    emb = card_embed(nick, inter.author, answers, f"{em('apply')} **Новая заявка**", cfg_color("warning_color", 0xF39C12))
     roles = (set(get_cfg().get("recruiter_role_ids", [])) | set(S["staff_roles"])) - {0}
     ping = " ".join(f"<@&{r}>" for r in roles)
 
@@ -1258,12 +1319,12 @@ async def archive_thread_to_logs(th, app: Dict[str, Any], reviewer, result: str,
         messages = [m async for m in th.history(limit=None, oldest_first=True)]
         data = _thread_dump(messages) or "(в ветке нет сообщений)"
         emb = disnake.Embed(
-            title=f"📁 Архив заявки #{app['id']} — {result}",
-            description=(f"👤 **Кандидат:** <@{app['user_id']}>\n"
-                         f"🎮 **Ник:** `{app['nick']}` • **Статик:** `{app['static_id']}`\n"
-                         f"👮 **Решение принял:** {reviewer.mention}\n"
-                         f"📂 **Ветка:** {th.name}\n"
-                         f"💬 **Сообщений:** {len(messages)}"),
+            title=f"{pm('hz_book')} Архив заявки #{app['id']} — {result}",
+            description=(f"{pm('hz_membericon')}  **Кандидат:** <@{app['user_id']}>\n"
+                         f"{pm('hz_pcicon')}  **Ник:** `{app['nick']}` • **Статик:** `{app['static_id']}`\n"
+                         f"{pm('hz_moderator')}  **Решение принял:** {reviewer.mention}\n"
+                         f"{pm('hz_discord')}  **Ветка:** {th.name}\n"
+                         f"{pm('hz_megaphone')}  **Сообщений:** {len(messages)}"),
             color=color,
         )
         emb.set_footer(text=footer_text())
@@ -1331,13 +1392,13 @@ class VoicePickView(disnake.ui.View):
     async def on_pick(self, inter: disnake.MessageInteraction, values: List[str]):
         fresh = await db.get_application_by_thread(self.app["thread_id"])
         if not fresh or fresh["status"] in ("accepted", "rejected"):
-            return await inter.response.edit_message(content="ℹ️ Эта заявка уже обработана.", view=None)
+            return await inter.response.edit_message(content=pretty("ℹ️ Эта заявка уже обработана."), view=None)
         await do_interview(inter, self.card_message, fresh, f"<#{int(values[0])}>")
 
 
 async def do_interview(inter: disnake.Interaction, card_message: disnake.Message, app: Dict[str, Any], voice: str):
     """Вызов на обзвон: статус, карточка, сообщение в ветку и ЛС кандидату. voice — упоминание выбранного канала."""
-    done = f"✅ Кандидат приглашён на обзвон: {voice}"
+    done = pretty(f"✅ Кандидат приглашён на обзвон: {voice}")
     if inter.response.is_done():
         await inter.followup.send(done, ephemeral=True)
     else:
@@ -1571,7 +1632,7 @@ class ReferralModal(disnake.ui.Modal):
         await inter.response.defer(ephemeral=True)
         ref_id = await db.create_referral(inter.author.id, v["my_nick"], v["my_static"], v["inv_nick"], v["inv_static"], v["proof"])
         emb = disnake.Embed(title=f"{em('referral')} Приглашение #{ref_id}", color=cfg_color("warning_color", 0xF39C12),
-                            description=f"От {inter.author.mention}\nСтатус: 🟡 **Ждёт проверки**")
+                            description=f"От {inter.author.mention}\nСтатус: {pm('hz_book')} **Ждёт проверки**")
         emb.add_field(name="Пригласил", value=f"`{v['my_nick']}` • `{v['my_static']}`", inline=True)
         emb.add_field(name="Приглашённый", value=f"`{v['inv_nick']}` • `{v['inv_static']}`", inline=True)
         emb.add_field(name="Доказательства", value=v["proof"][:1024], inline=False)
@@ -1731,7 +1792,7 @@ async def _shop_buy(inter: disnake.MessageInteraction, key: str):
 
     order_id = await db.create_order(inter.author.id, item["key"], item["name"], item["cost"])
     emb = disnake.Embed(title=f"{em('shop')} Заказ #{order_id}", color=cfg_color("warning_color", 0xF39C12),
-                        description=E(f"{inter.author.mention} купил **{item['name']}**\nСтатус: 🟡 **Ждёт выдачи**"))
+                        description=E(f"{inter.author.mention} купил **{item['name']}**\nСтатус: {pm('hz_gifticon')} **Ждёт выдачи**"))
     member = await db.get_member(inter.author.id)
     if member:
         emb.add_field(name="Игрок", value=f"`{member['nick']}` • `{member['static_id']}`", inline=True)
@@ -1947,7 +2008,7 @@ class PreviewView(AdminView):
 
     async def p_card(self, inter):
         sample = [{"key": f["key"], "label": f["label"], "value": f.get("placeholder") or "—"} for f in enabled_fields()]
-        emb = card_embed("Travis Hallez", inter.author, sample, "🟡 **Новая заявка**", cfg_color("warning_color", 0xF39C12))
+        emb = card_embed("Travis Hallez", inter.author, sample, f"{em('apply')} **Новая заявка**", cfg_color("warning_color", 0xF39C12))
         await inter.response.send_message("👁️ Так выглядит карточка для рекрутеров:", embed=emb, view=_dis(CardView()), ephemeral=True)
 
 
