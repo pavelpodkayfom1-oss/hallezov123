@@ -1168,11 +1168,9 @@ async def submit_application(inter: disnake.ModalInteraction):
         await thread.add_user(inter.author)
     except Exception:
         pass
-    for rec in recruiters_of(inter.guild):
-        try:
-            await thread.add_user(rec)
-        except Exception:
-            pass
+    # Рекрутеров поштучно НЕ добавляем: на каждого Discord пишет в ветку строку
+    # «бот добавляет X к ветке» (удалить её нельзя). Роли рекрутеров пингуются в первом
+    # сообщении ниже, а видеть все приватные ветки им позволяет право «Управлять ветками».
 
     try:
         msg = await thread.send(content=f"{inter.author.mention} {ping}".strip(), embed=emb, view=CardView(),
