@@ -743,6 +743,35 @@ async def get_thread(guild: disnake.Guild, tid: int):
         return None
 
 
+# ───────────── Доступ рекрутеров к приватным веткам заявок ─────────────
+# Приватную ветку Discord показывает только её участникам, поэтому каждого
+# рекрутера надо добавлять в ветку — иначе заявки, поданные до выдачи роли, ему не видны.
+
+THREAD_PREFIX = "Заявка •"
+MAX_REC_PER_THREAD = 40
+
+
+def recruiters_of(guild: disnake.Guild) -> list:
+    out = [m for m in guild.members if not m.bot and is_staff(m)]
+    return out[:MAX_REC_PER_THREAD]
+
+
+def open_app_threads(guild: disnake.Guild) -> list:
+    return [t for t in guild.threads if not t.archived and t.name.startswith(THREAD_PREFIX)]
+
+
+async def sync_recruiter_threads(member: disnake.Member) -> int:
+    """Докидывает одного рекрутера во все открытые ветки заявок. Возвращает число добавленных."""
+    added = 0
+    for th in open_app_threads(member.guild):
+        try:
+            await th.add_user(member)
+            added += 1
+        except Exception:
+            pass
+    return added
+
+
 # ───────────────────────────── БАННЕР / ЭМБЕДЫ ─────────────────────────────
 
 def banner_file() -> Optional[disnake.File]:
@@ -1054,7 +1083,7 @@ async def submit_application(inter: disnake.ModalInteraction):
     for duration in (10080, 1440):
         try:
             thread = await ch.create_thread(
-                name=f"Заявка • {nick}"[:100],
+                name=f"{THREAD_PREFIX} {nick}"[:100],
                 type=disnake.ChannelType.private_thread,
                 invitable=False,
                 auto_archive_duration=duration,
@@ -1076,6 +1105,11 @@ async def submit_application(inter: disnake.ModalInteraction):
         await thread.add_user(inter.author)
     except Exception:
         pass
+    for rec in recruiters_of(inter.guild):
+        try:
+            await thread.add_user(rec)
+        except Exception:
+            pass
 
     try:
         msg = await thread.send(content=f"{inter.author.mention} {ping}".strip(), embed=emb, view=CardView(),
@@ -2570,6 +2604,16 @@ class HallRecruit(commands.Cog):
             self._add_views()
             self._views_added = True
 
+    @commands.Cog.listener()
+    async def on_member_role_update(self, before: disnake.Member, after: disnake.Member):
+        """Только что выдали роль рекрутера: открываем ему уже существующие ветки заявок."""
+        if after.bot or is_staff(before) or not is_staff(after):
+            return
+        try:
+            await sync_recruiter_threads(after)
+        except Exception as e:
+            print(f"[hall_recruit] не удалось открыть ветки новому рекрутеру: {e!r}", file=sys.stderr, flush=True)
+
     # хук: вызывается из database.update_application_status(..., 'accepted', ...)
     async def on_accept(self, app_id: int, reviewer_id: Optional[int]):
         app = await db.get_application_by_id(app_id)
@@ -2592,6 +2636,31 @@ class HallRecruit(commands.Cog):
         if not is_admin(inter.author):
             return await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
         await inter.response.send_message(embed=dash_embed(), view=DashView(inter.author.id), ephemeral=True)
+
+    @commands.slash_command(name="hr_access",
+                            description="Дать всем текущим рекрутерам доступ ко всем открытым веткам заявок")
+    async def hr_access(self, inter: disnake.ApplicationCommandInteraction):
+        if not is_admin(inter.author):
+            return await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
+        await inter.response.defer(ephemeral=True)
+        recs = recruiters_of(inter.guild)
+        threads = open_app_threads(inter.guild)
+        if not recs:
+            return await inter.followup.send(
+                embed=note_embed("❌ На сервере нет ни одного участника с ролью рекрутера. "
+                                 "Добавь роли в `/hr` → «Каналы и роли» или в config.json."), ephemeral=True)
+        added = 0
+        for th in threads:
+            for rec in recs:
+                try:
+                    await th.add_user(rec)
+                    added += 1
+                except Exception:
+                    pass
+        await inter.followup.send(
+            embed=note_embed(f"✅ Рекрутеров: **{len(recs)}**, открытых веток заявок: **{len(threads)}**, "
+                             f"добавлено в ветки: **{added}**.\n"
+                             "Дальше доступ выдаётся автоматически при выдаче роли."), ephemeral=True)
 
     @commands.slash_command(name="hr_banner", description="Загрузить баннер для панелей (картинка)")
     async def hr_banner(self, inter: disnake.ApplicationCommandInteraction,
