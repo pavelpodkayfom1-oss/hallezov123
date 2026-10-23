@@ -27,7 +27,7 @@ import disnake
 from disnake.ext import commands
 
 import database as db
-from utils import state_backup
+from utils import cdn_assets, state_backup
 from utils.embeds import note_embed as _note_embed
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -35,6 +35,10 @@ SETTINGS_PATH = os.path.join(BASE_DIR, "recruit_plus.json")
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 BANNER_PATH = os.path.join(ASSETS_DIR, "banner.png")
+# имена файлов в assets/; баннер «как попасть в семью» уходит только в ЛС обзвона
+BANNER_ASSET = "banner.png"
+INTERVIEW_ASSET = "interview.jpg"
+CDN_ASSETS = (BANNER_ASSET, INTERVIEW_ASSET)
 
 # ───────────────────────────── ЭМОДЗИ ─────────────────────────────
 
@@ -836,20 +840,42 @@ async def sync_recruiter_threads(member: disnake.Member) -> int:
 
 # ───────────────────────────── БАННЕР / ЭМБЕДЫ ─────────────────────────────
 
-def banner_file() -> Optional[disnake.File]:
-    if os.path.exists(BANNER_PATH):
-        return disnake.File(BANNER_PATH, filename="banner.png")
-    return None
+def put_banner(embed: disnake.Embed, asset: str = BANNER_ASSET) -> Optional[disnake.File]:
+    """Картинка под текстом.
 
-
-def put_banner(embed: disnake.Embed) -> Optional[disnake.File]:
-    f = banner_file()
-    if f:
-        embed.set_image(url="attachment://banner.png")
-    return f
+    Если ассет уже залит на CDN — просто ссылка на него (ноль трафика на сообщение),
+    иначе возвращаем файл-вложение, чтобы картинка точно была видна.
+    """
+    path = os.path.join(ASSETS_DIR, asset)
+    if not os.path.exists(path):
+        return None
+    url = cdn_assets.cached_url(asset, path)
+    if url:
+        embed.set_image(url=url)
+        return None
+    embed.set_image(url=f"attachment://{asset}")
+    return disnake.File(path, filename=asset)
 
 
 VIDEO_EXTS = (".gif", ".mp4", ".mov", ".webm")
+
+
+async def ensure_cdn_assets() -> list:
+    """Заливает баннеры на CDN один раз; дальше эмбеды только ссылаются на URL.
+
+    Без этого каждый ЛС-баннер уезжал бы в Discord файлом заново (~0.4 МБ на сообщение).
+    """
+    ch = await get_channel(chan_id("review") or chan_id("panel"))
+    if not isinstance(ch, disnake.TextChannel):
+        return []
+    done = []
+    for asset in CDN_ASSETS:
+        path = os.path.join(ASSETS_DIR, asset)
+        if not os.path.exists(path) or cdn_assets.cached_url(asset, path):
+            continue
+        if await cdn_assets.ensure(ch, asset, path):
+            done.append(asset)
+    return done
 
 
 def video_path() -> Optional[str]:
@@ -963,14 +989,16 @@ def set_field(emb: disnake.Embed, name: str, value: str, inline: bool = True):
     emb.add_field(name=name, value=value, inline=inline)
 
 
-async def dm(user_id: int, title: str, text: str, color: Optional[int] = None, banner: bool = True) -> bool:
+async def dm(user_id: int, title: str, text: str, color: Optional[int] = None,
+             banner: Any = True) -> bool:
+    """Сообщение в ЛС. banner=True — обычный баннер, banner='имя.png' — конкретный ассет, False — без картинки."""
     if _BOT is None:
         return False
     try:
         user = _BOT.get_user(user_id) or await _BOT.fetch_user(user_id)
         emb = disnake.Embed(title=E(title), description=E(text), color=color or main_color())
         emb.set_footer(text=footer_text())
-        f = put_banner(emb) if banner else None
+        f = put_banner(emb, banner if isinstance(banner, str) else BANNER_ASSET) if banner else None
         if f:
             await user.send(embed=emb, file=f)
         else:
@@ -1416,7 +1444,8 @@ async def do_interview(inter: disnake.Interaction, card_message: disnake.Message
         except Exception:
             pass
     await dm(app["user_id"], X("interview_dm_title"),
-             X("interview_dm_desc", nick=app["nick"], reviewer=inter.author.mention, voice=voice))
+             X("interview_dm_desc", nick=app["nick"], reviewer=inter.author.mention, voice=voice),
+             banner=INTERVIEW_ASSET)
 
 
 async def h_interview(inter: disnake.MessageInteraction):
@@ -2667,6 +2696,10 @@ class HallRecruit(commands.Cog):
         if not self._views_added:
             self._add_views()
             self._views_added = True
+        try:
+            await ensure_cdn_assets()
+        except Exception as e:
+            print(f"[hall_recruit] баннеры на CDN не залиты: {e!r}", file=sys.stderr, flush=True)
 
     @commands.Cog.listener()
     async def on_member_role_update(self, before: disnake.Member, after: disnake.Member):
@@ -2735,7 +2768,9 @@ class HallRecruit(commands.Cog):
             return await inter.response.send_message(embed=note_embed("❌ Нужна картинка (PNG/JPG)."), ephemeral=True)
         os.makedirs(ASSETS_DIR, exist_ok=True)
         await image.save(BANNER_PATH)
-        await inter.response.send_message(embed=note_embed("✅ Баннер сохранён. В `/hr` → «Опубликовать» обновите панели."), ephemeral=True)
+        await ensure_cdn_assets()
+        await inter.response.send_message(embed=note_embed("✅ Баннер сохранён и залит на CDN. "
+                                                            "В `/hr` → «Опубликовать» обновите панели."), ephemeral=True)
 
     @commands.slash_command(name="hr_video", description="Видео/GIF под текстом панели заявки")
     async def hr_video(self, inter: disnake.ApplicationCommandInteraction,
