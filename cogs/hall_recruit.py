@@ -197,6 +197,8 @@ def _emoji_name_for(filename: str, used: set) -> str:
     m = re.match(r"^(\d+)[-_ ]*(.*)$", base)
     num, rest = (m.group(1), m.group(2)) if m else ("", base)
     clean = re.sub(r"[^A-Za-z0-9_]", "", rest) or "emoji"
+    if clean.lower().startswith(EMOJI_PREFIX):   # файлы в папке уже названы как эмодзи: hz_book.png
+        clean = clean[len(EMOJI_PREFIX):]
     name = (EMOJI_PREFIX + clean)[:32]
     if name.lower() in used:
         name = (EMOJI_PREFIX + clean)[:32 - len(num) - 1] + "_" + num
@@ -245,8 +247,8 @@ async def upload_emojis(guild: disnake.Guild, progress=None) -> str:
     created, skipped, failed = 0, 0, []
     for fn in order:
         name = names[fn]
-        if name.lower() in existing:
-            skipped += 1
+        if name.lower() in existing or name[len(EMOJI_PREFIX):].lower() in existing:
+            skipped += 1   # уже есть на сервере — в том числе под именем без префикса
             continue
         data, animated, why = _prepare_emoji(os.path.join(EMOJI_DIR, fn))
         if data is None:
