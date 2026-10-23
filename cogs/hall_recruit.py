@@ -473,7 +473,7 @@ DEFAULT_SHOP = [
 ]
 
 DEFAULTS: Dict[str, Any] = {
-    "channels": {"panel": 0, "review": 0, "orders": 0, "points_panel": 0, "cdn": 0},
+    "channels": {"panel": 0, "review": 0, "orders": 0, "points_panel": 0, "cdn": 0, "rules": 0},
     "staff_roles": [],
     "published": {"apply": [0, 0], "points": [0, 0]},
     "design": {
@@ -734,6 +734,37 @@ XT = {
                         "> {thread}\n\n"
                         "{e_interview}  Позовите на обзвон или закройте заявку, чтобы она не висела открытой.",
                         "{nick} {static} {thread} {since} {app_id}"),
+    "rules_post": ("Правила семьи (пост в канал)",
+                   "**:hz_fundedforyoumoderator:  ОБЩЕНИЕ**\n"
+                   "> • Уважаем друг друга. Оскорбления, спам и токсичность запрещены\n"
+                   "> • Внутренние конфликты решаем не в общем чате\n"
+                   "> • Скриншоты семейного чата не выносим за пределы семьи\n\n"
+                   "**:hz_moderator:  В ИГРЕ**\n"
+                   "> • Правила сервера всегда выше семейных правил\n"
+                   "> • Читы и багоюз — **мгновенное исключение**\n"
+                   "> • Исключение: если человек использовал их ранее, но полностью прекратил и больше не собирается\n\n"
+                   "**:hz_discord:  АКТИВНОСТЬ**\n"
+                   "> • На контракты и разборки выходим по зову руководства\n"
+                   "> • На разборках по возможности записываем экран (**Fraps**) и храним запись минимум **48 часов**\n"
+                   "> • Действуем по командам руководства, не разбегаемся и не действуем самовольно\n"
+                   "> • Союзы и войны — только через руководство\n"
+                   "> • Максимальное количество союзов — **4**\n\n"
+                   "**:hz_redflag:  РЕСУРСЫ**\n"
+                   "> • Семейный склад — **не для личной продажи или заработка**\n"
+                   "> • Взял семейную машину — **заправь и верни на место**\n"
+                   "> • Личный транспорт можно передать семье через **G → Семейный транспорт**\n\n"
+                   "**:hz_srmod:  РАНГИ**\n"
+                   "> • Повышение выдаётся за **активность, вклад и посещаемость**\n"
+                   "> • Дружба и личные отношения не являются причиной для повышения\n"
+                   "> • Руководство не использует свои права в личных целях\n\n"
+                   "**:hz_warn:  НАКАЗАНИЯ**\n"
+                   "> :hz_shareicon:  **Предупреждение** — опоздание или пропуск контракта\n"
+                   "> :hz_shareicon:  **Понижение / отстранение на 3–7 дней** — неподчинение командиру, "
+                   "использование семейных ресурсов в личных целях, провокации и ссоры\n"
+                   "> :hz_shareicon:  **Исключение** — слив информации, читы или багоюз\n\n"
+                   "**:hz_warning:  ГЛАВНОЕ**\n"
+                   "> Будь активным.\n> Играй честно.\n> Уважай своих.\n> Слушай руководство.",
+                   ""),
 }
 
 
@@ -2130,6 +2161,7 @@ class DashView(AdminView):
         add(HrButton(self.d_points, label="Баллы", style=B.secondary, emoji="💎", row=1))
         add(HrButton(self.d_shop, label="Магазин", style=B.secondary, emoji="🛒", row=1))
         add(HrButton(self.d_channels, label="Каналы и роли", style=B.secondary, emoji="📍", row=1))
+        add(HrButton(self.d_rules, label="Правила", style=B.secondary, emoji="📜", row=1))
         add(HrButton(self.d_preview, label="Предпросмотр", style=B.secondary, emoji="👁️", row=2))
         add(HrButton(self.d_toggle, label="Закрыть набор" if is_open else "Открыть набор",
                      style=B.danger if is_open else B.success, emoji="🔒" if is_open else "🔓", row=2))
@@ -2156,6 +2188,10 @@ class DashView(AdminView):
 
     async def d_channels(self, inter):
         v = ChannelsView(inter.author.id)
+        await inter.response.edit_message(embed=v.embed(), view=v)
+
+    async def d_rules(self, inter):
+        v = RulesView(inter.author.id)
         await inter.response.edit_message(embed=v.embed(), view=v)
 
     async def d_emoji(self, inter):
@@ -2287,6 +2323,7 @@ TEXT_GROUPS = [
     ("💎 Рекрут-центр, ответы и ЛС", lambda k, src: src == "cog"),
     ("📥 Набор: карточки и ЛС", lambda k, src: k.startswith(("recruit_", "modal_recruit", "modal_reject", "btn_recruit"))),
     ("📈 Повышения", lambda k, src: k.startswith(("promo_", "modal_promo", "select_promo", "btn_promo"))),
+    ("📜 Правила семьи", lambda k, src: k.startswith("rules_")),
     ("⚔️ События и прочее", lambda k, src: True),
 ]
 
@@ -2687,6 +2724,50 @@ class ChannelsView(AdminView):
         await inter.response.edit_message(embed=self.embed(), view=self)
 
 
+# ───── Правила семьи ─────
+
+def rules_embed() -> disnake.Embed:
+    """Пост с правилами: текст и эмодзи берутся из «✍️ Тексты» → «Правила семьи (пост)»."""
+    return disnake.Embed(title=f"{pm('hz_redflag', '🚩')}  ПРАВИЛА СЕМЬИ",
+                         description=X("rules_post"), color=main_color())
+
+
+class RulesView(AdminView):
+    def __init__(self, author_id: int):
+        super().__init__(author_id)
+        self.add_item(HrChannelSelect(self.pick_channel, placeholder="Канал, куда положить правила",
+                                      channel_types=[disnake.ChannelType.text], row=0))
+        self.add_item(HrButton(self.send_rules, label="Отправить в канал",
+                               style=disnake.ButtonStyle.success, emoji="📨", row=1))
+        self.add_item(_back_button(author_id))
+
+    def embed(self) -> disnake.Embed:
+        e = rules_embed()
+        cid = S["channels"].get("rules") or 0
+        e.description += ("\n\n​\n*Канал для отправки: " + (f"<#{cid}>" if cid else "не выбран") +
+                          ".\nТекст правится в «✍️ Тексты» → «Правила семьи (пост)».*")
+        return e
+
+    async def pick_channel(self, inter, ids):
+        if ids:
+            S["channels"]["rules"] = ids[0]
+            save_settings()
+        await inter.response.edit_message(embed=self.embed(), view=self)
+
+    async def send_rules(self, inter):
+        cid = S["channels"].get("rules") or 0
+        if not cid:
+            return await inter.response.send_message(embed=note_embed("❌ Сначала выберите канал."), ephemeral=True)
+        ch = await get_channel(cid)
+        if not isinstance(ch, disnake.TextChannel):
+            return await inter.response.send_message(embed=note_embed("❌ Канал недоступен боту."), ephemeral=True)
+        try:
+            await ch.send(embed=rules_embed())
+        except disnake.HTTPException as ex:
+            return await inter.response.send_message(embed=note_embed(f"❌ Не отправлено: {str(ex)[:80]}"), ephemeral=True)
+        await inter.response.send_message(embed=note_embed(f"✅ Правила отправлены в {ch.mention}"), ephemeral=True)
+
+
 # ───── Эмодзи ─────
 
 def emoji_embed() -> disnake.Embed:
@@ -3011,6 +3092,10 @@ class HallRecruit(commands.Cog):
             lines.append("Рекрутеры видят все приватные ветки канала заявок — поштучно добавлять "
                          "их в ветки не нужно. Нужны именно участники? Запусти с `врузноyu = да`.")
         await inter.followup.send(embed=note_embed("\n".join(lines)), ephemeral=True)
+
+    @commands.slash_command(name="rules", description="Правила семьи")
+    async def rules_cmd(self, inter: disnake.ApplicationCommandInteraction):
+        await inter.response.send_message(embed=rules_embed())
 
     @commands.slash_command(name="hr_banner", description="Загрузить баннер для панелей (картинка)")
     async def hr_banner(self, inter: disnake.ApplicationCommandInteraction,
