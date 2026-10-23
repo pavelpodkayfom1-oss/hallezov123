@@ -27,6 +27,16 @@ def get_text(key: str, default: str = "") -> str:
     texts = config.get("texts", {})
     return texts.get(key, default)
 
+# Названия рангов, которые важнее config.json (деплой из git не откатит их снимком).
+RANK_NAME_OVERRIDES: Dict[int, str] = {4: "Recruit"}
+
+def rank_title(config: Dict[str, Any], rank: int, default: Optional[str] = None) -> str:
+    """Название ранга: сперва переопределение из кода, затем config.json["ranks"]."""
+    if rank in RANK_NAME_OVERRIDES:
+        return RANK_NAME_OVERRIDES[rank]
+    name = ((config.get("ranks", {}) or {}).get(str(rank), {}) or {}).get("name")
+    return name or (default if default is not None else f"{rank} ранг")
+
 def is_admin(user_or_inter: Any) -> bool:
     """
     Проверяет, является ли пользователь администратором:

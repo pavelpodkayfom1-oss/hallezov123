@@ -57,7 +57,7 @@ class ProfileCard(commands.Cog):
 
         badges = []
         if rank and rank >= core.max_rank():
-            badges.append("Старший состав")
+            badges.append(core.rank_name(rank))
         if days >= 180:
             badges.append("Ветеран")
         elif days >= 30:

@@ -1,7 +1,10 @@
+import json
+from pathlib import Path
+
 import disnake
 from disnake.ext import commands
 from typing import Optional
-from utils.checks import load_config, is_recruiter, get_text
+from utils.checks import load_config, is_recruiter, get_text, rank_title
 from utils.embeds import base_embed, success_embed, error_embed, warning_embed
 from database import (
     create_promotion_report,
@@ -10,6 +13,67 @@ from database import (
     upsert_member,
     get_member
 )
+
+
+# ───────────────────── премиум-эмодзи из emoji_map.json ─────────────────────
+_EMOJI_FILE = Path(__file__).resolve().parent.parent / "emoji_map.json"
+
+
+def em(name: str) -> str:
+    """Код премиум-эмодзи <:имя:id> из emoji_map.json (пустая строка, если такого нет)."""
+    try:
+        with open(_EMOJI_FILE, "r", encoding="utf-8") as f:
+            return json.load(f).get(name, "")
+    except Exception:
+        return ""
+
+
+def pe(name: str) -> Optional[disnake.PartialEmoji]:
+    """То же самое для выпадающего списка и кнопок."""
+    code = em(name)
+    if not code:
+        return None
+    try:
+        return disnake.PartialEmoji.from_str(code)
+    except Exception:
+        return None
+
+
+def build_promo_panel_embed(guild: Optional[disnake.Guild] = None) -> disnake.Embed:
+    """Панель «Отчёты на повышение» — оформлена премиум-эмодзи бота."""
+    cfg = load_config()
+    bot_name = (cfg.get("bot_name") or "Hallez FAMQ").upper()
+    crown = em("red_crown")
+    arrow = "➔"
+    line = "▬" * 24
+    num = {i: em(f"number{i}") for i in range(1, 5)}
+    sword_2, sword_3, sword_4 = em("hz_moderatorroleicon"), em("hz_bluemodroleicon"), em("hz_headmoderatorroleicon")
+
+    desc = (
+        f"### {em('hz_megaphone')}  Растём вместе с семьёй\n"
+        "Выполнил условия своего ранга? Подай отчёт, руководство проверит его и выдаст повышение.\n"
+        f"\n{line}\n\n"
+        f"### {em('hz_book')}  Путь по рангам\n"
+        f"> {num[1]} {arrow} {num[2]}   {sword_2}  **{rank_title(cfg, 2)}**\n"
+        f"> {em('hz_pencil')}  Смена фамилии в игре на `Hallez FAMQ`\n"
+        f"> {em('hz_pcicon')}  Скриншот паспорта / смены\n"
+        ">\n"
+        f"> {num[2]} {arrow} {num[3]}   {sword_3}  **{rank_title(cfg, 3)}**\n"
+        f"> {em('hz_house')}  Более 14 дней в семье\n"
+        f"> {em('hz_pcicon')}  Скриншот планшета / профиля\n"
+        ">\n"
+        f"> {num[3]} {arrow} {num[4]}   {sword_4}  **{rank_title(cfg, 4)}**\n"
+        f"> {em('hz_moderator')}  По индивидуальным нормативам и решению руководства\n"
+        f"\n{line}\n\n"
+        f"### {em('hz_pencil')}  Как подать отчёт\n"
+        f"{em('hz_moderator')}  Выбери свой ранг в списке ниже\n"
+        f"{em('hz_pencil')}  Заполни форму: ник, статик и ссылка на скриншот\n"
+        f"{em('hz_gifticon')}  Дождись решения, ответ придёт в личные сообщения\n"
+        "\n"
+        f"{em('hz_warn')}  **Отчёт без доказательств будет отклонён.**"
+    )
+    title = f"{crown}  ОТЧЁТЫ НА ПОВЫШЕНИЕ  ·  {bot_name}  {crown}".strip()
+    return base_embed(title, desc, guild=guild)
 
 
 class PromoRejectModal(disnake.ui.Modal):
@@ -162,10 +226,9 @@ class PromotionModal(disnake.ui.Modal):
             proof_url=proof_url
         )
 
-        ranks_cfg = config.get("ranks", {})
-        target_name = ranks_cfg.get(str(self.target_rank), {}).get("name", f"{self.target_rank} ранг")
+        target_name = rank_title(config, self.target_rank)
         prev_rank = self.target_rank - 1
-        prev_name = ranks_cfg.get(str(prev_rank), {}).get("name", f"{prev_rank} ранг")
+        prev_name = rank_title(config, prev_rank)
 
         title_tpl = get_text("promo_card_title", "📈 Отчет на повышение #{id}")
         desc_tpl = get_text(
@@ -219,29 +282,26 @@ class PromotionModal(disnake.ui.Modal):
 class PromotionRankSelect(disnake.ui.StringSelect):
     def __init__(self):
         ph = get_text("select_promo_ph", "Выберите ранг, на который повышаетесь...")
-        opt1_lbl = get_text("select_promo_opt_1_2_label", "1 ➔ 2 ранг (Смена фамилии на Zakonov)")
-        opt1_desc = get_text("select_promo_opt_1_2_desc", "Требуется скрин смены фамилии на Zakonov")
-        opt2_lbl = get_text("select_promo_opt_2_3_label", "2 ➔ 3 ранг (>2 недель в семье)")
-        opt2_desc = get_text("select_promo_opt_2_3_desc", "Требуется скрин доказательства нахождения в семье > 14 дней")
+        cfg = load_config()
 
         options = [
             disnake.SelectOption(
-                label=opt1_lbl[:100],
+                label=f"1 ➔ 2 ранг  ·  {rank_title(cfg, 2)}"[:100],
                 value="2",
-                emoji="🏷️",
-                description=opt1_desc[:100]
+                emoji=pe("hz_moderatorroleicon"),
+                description="Смена фамилии на Hallez FAMQ + скриншот"[:100]
             ),
             disnake.SelectOption(
-                label=opt2_lbl[:100],
+                label=f"2 ➔ 3 ранг  ·  {rank_title(cfg, 3)}"[:100],
                 value="3",
-                emoji="⏳",
-                description=opt2_desc[:100]
+                emoji=pe("hz_bluemodroleicon"),
+                description="Более 14 дней в семье + скриншот профиля"[:100]
             ),
             disnake.SelectOption(
-                label="3 ➔ 4 ранг (Старший состав)",
+                label=f"3 ➔ 4 ранг  ·  {rank_title(cfg, 4)}"[:100],
                 value="4",
-                emoji="⭐",
-                description="Отчет по спец. критериям руководства"
+                emoji=pe("hz_headmoderatorroleicon"),
+                description="По нормативам и решению руководства"[:100]
             )
         ]
         super().__init__(
@@ -366,8 +426,8 @@ class Promotions(commands.Cog):
             await update_promotion_status(promo_id, status="approved", reviewer_id=inter.author.id)
             await upsert_member(user_id=applicant_id, nick=promo["nick"], static_id=promo["static_id"], rank=target_rank)
 
-            target_name = ranks_cfg.get(str(target_rank), {}).get("name", f"{target_rank} ранг")
-            
+            target_name = rank_title(config, target_rank)
+
             title = get_text("promo_approved_title", "Отчет одобрен • Повышение выдано!")
             desc_tpl = get_text(
                 "promo_approved_desc",

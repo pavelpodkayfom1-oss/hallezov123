@@ -5,7 +5,7 @@ from utils.checks import load_config, save_config, is_admin, get_text
 from utils.embeds import base_embed, success_embed, error_embed, warning_embed
 from database import get_stats
 from cogs.recruitment import RecruitLaunchView
-from cogs.promotions import PromotionLaunchView
+from cogs.promotions import PromotionLaunchView, build_promo_panel_embed
 
 
 # -------------------------------------------------------------
@@ -487,9 +487,7 @@ class SendPanelsView(disnake.ui.View):
             await inter.edit_original_response(content="❌ Сначала привяжите канал подачи отчетов в меню 'Настройка каналов'!")
             return
 
-        title = get_text("promo_panel_title", "📈 ОТЧЕТЫ НА ПОВЫШЕНИЕ В СЕМЬЕ ZAKONOV FAMQ")
-        desc = get_text("promo_panel_desc", "Выберите ранг из списка ниже для сдачи отчета:")
-        emb = base_embed(title, desc, guild=inter.guild)
+        emb = build_promo_panel_embed(inter.guild)
         view = PromotionLaunchView()
         await self.promotion_ch.send(embed=emb, view=view)
         await inter.edit_original_response(content=f"✅ Панель повышений успешно отправлена в {self.promotion_ch.mention}!")

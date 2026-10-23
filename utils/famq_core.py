@@ -19,7 +19,7 @@ import disnake
 from disnake.ext import commands
 
 import database
-from utils.checks import load_config
+from utils.checks import load_config, rank_title
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SETTINGS_PATH = os.path.join(BASE_DIR, "panel_settings.json")
@@ -314,7 +314,7 @@ def member_rank(member: Any) -> int:
 
 def rank_name(n: int) -> str:
     cfg = load_config()
-    return ((cfg.get("ranks", {}) or {}).get(str(n), {}) or {}).get("name", f"Ранг {n}")
+    return rank_title(cfg, n, f"Ранг {n}")
 
 
 def max_rank() -> int:
