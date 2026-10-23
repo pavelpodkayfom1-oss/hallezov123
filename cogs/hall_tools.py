@@ -5,7 +5,8 @@ Hall FAMQ: дополнительные функции бота.
  • Автонапоминание о повышении (срок в днях/часах задаётся в панели /hall)
  • /уволить + автоудаление из базы при выходе с сервера (архив в таблице fired_members)
  • Заявки на отпуск / неактив (/отпуск), решение руководства кнопками
- • Автообновляемый список состава руководства по ролям (канал и роли задаются в /hall)
+ • Автообновляемый список состава семьи: роли берутся из иерархии сервера по старшинству,
+   пост правится через ~20 секунд после смены ролей у участников (кнопки в /hall)
 
 Настройки хранятся в файле hall_settings.json рядом с main.py.
 """
@@ -16,6 +17,7 @@ import io
 import json
 import time
 import asyncio
+import hashlib
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
@@ -28,7 +30,12 @@ from utils.checks import load_config
 from utils.embeds import note_embed
 from utils.roster_card import render_roster
 
-ROSTER_ROWS_PER_ROLE = 18
+ROSTER_ROWS_PER_ROLE = 12       # строк одной роли в постере
+ROSTER_MAX_SECTIONS = 14        # секций в постере (картинка не должна расти бесконечно)
+ROSTER_MAX_ROLES = 40           # сколько ролей авто-список может показать
+ROSTER_MAX_POSTER_ROWS = 45     # всего строк с аватарами в постере — ограничение на высоту и память
+ROSTER_FLUSH_DELAY = 20         # секунд ожидания после смены ролей: пачим залпом, без спама правками
+ROSTER_POSTER_COOLDOWN = 300    # не перерисовываем картинку чаще, чем раз в 5 минут
 
 SETTINGS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hall_settings.json"
@@ -60,6 +67,9 @@ DEFAULTS = {
     "leave_channel_id": 0,
     "roster_channel_id": 0,
     "roster_message_id": 0,
+    "roster_auto": True,          # список ролей берём из иерархии сервера
+    "roster_skip_roles": [],      # роли, которые авто-список должен пропустить
+    "roster_poster_keys": {},     # guild_id -> отпечаток картинки, чтобы после рестарта не грузить аватары
     "roster_roles": [],           # [{"role_id": int, "title": str}]
     "afk_enabled": True,
     "afk_default_hours": 3,
@@ -528,6 +538,22 @@ class AfkTextModal(disnake.ui.Modal):
         await inter.response.send_message(embed=note_embed("✅ Текст АФК-панели сохранён."), ephemeral=True)
 
 
+def roster_auto_roles(guild: disnake.Guild, s) -> List[disnake.Role]:
+    """Роли сервера по старшинству (сверху вниз) — весь состав без ручного добавления."""
+    skip = {int(x) for x in s.get("roster_skip_roles", []) or []}
+    out: List[disnake.Role] = []
+    for role in sorted(guild.roles, key=lambda r: r.position, reverse=True):
+        if role.id == guild.id or role.is_default() or role.managed:
+            continue  # @everyone, роли ботов/интеграций и бустеров
+        if role.id in skip:
+            continue
+        if any(not m.bot for m in role.members):
+            out.append(role)
+        if len(out) >= ROSTER_MAX_ROLES:
+            break
+    return out
+
+
 # ───────────────────────── Панель /hall ─────────────────────────
 
 def panel_embed(guild) -> disnake.Embed:
@@ -537,7 +563,20 @@ def panel_embed(guild) -> disnake.Embed:
         return f"<#{i}>" if i else "не задан"
 
     mode = {"dm": "в личные сообщения", "channel": "в канал", "both": "в личку и в канал"}[s["remind_mode"]]
-    roles = " → ".join(f"<@&{r['role_id']}>" for r in s["roster_roles"]) or "не добавлены"
+    auto = bool(s.get("roster_auto", True))
+    if auto and guild is not None:
+        roles_list = roster_auto_roles(guild, s)
+        roles = f"авто по иерархии сервера, всего {len(roles_list)}:\n" + (
+            " → ".join(f"<@&{r.id}>" for r in roles_list[:10]) + (" → …" if len(roles_list) > 10 else "")
+            if roles_list else "— пока пусто —"
+        )
+        skip = s.get("roster_skip_roles") or []
+        if skip:
+            roles += f"\nИсключено ({len(skip)}): " + " ".join(f"<@&{rid}>" for rid in skip[:6])
+    else:
+        roles = "вручную, по порядку добавления:\n" + (
+            " → ".join(f"<@&{r['role_id']}>" for r in s["roster_roles"]) or "роли не добавлены"
+        )
     e = make_embed("⚙️ Панель настроек Hall FAMQ", "Настройки приветствия, напоминаний, отпусков и списка состава.")
     e.add_field(
         name="👋 Приветствие",
@@ -555,8 +594,8 @@ def panel_embed(guild) -> disnake.Embed:
     )
     e.add_field(name="🌴 Заявки на отпуск", value=f"Канал заявок: {ch(s['leave_channel_id'])}", inline=False)
     e.add_field(
-        name="👥 Состав руководства",
-        value=f"Канал: {ch(s['roster_channel_id'])}\nРоли по порядку (сверху вниз): {roles}",
+        name="👥 Состав семьи",
+        value=f"Канал: {ch(s['roster_channel_id'])}\nРежим: {'🪄 роли берутся из иерархии сервера' if s.get('roster_auto', True) else '✋ список задаётся вручную'}\n{roles}",
         inline=False,
     )
     e.add_field(
@@ -594,6 +633,8 @@ class ChannelPicker(disnake.ui.View):
 
 
 class RoleAddPicker(disnake.ui.View):
+    """Вручную — добавить роль в список; в авто-режиме — вернуть ранее исключённую роль."""
+
     def __init__(self):
         super().__init__(timeout=120)
 
@@ -601,32 +642,63 @@ class RoleAddPicker(disnake.ui.View):
     async def pick(self, select, inter: disnake.MessageInteraction):
         role = select.values[0]
         s = get_settings()
-        if any(r["role_id"] == role.id for r in s["roster_roles"]):
-            await inter.response.edit_message(content="⚠️ Эта роль уже в списке.", view=None)
-            return
-        if len(s["roster_roles"]) >= 20:
-            await inter.response.edit_message(content="⚠️ Максимум 20 ролей в списке.", view=None)
-            return
-        s["roster_roles"].append({"role_id": role.id, "title": role.name})
-        save_settings(s)
-        await inter.response.edit_message(
-            content=f"✅ Роль <@&{role.id}> добавлена в конец списка. Порядок = порядок добавления.", view=None
-        )
+        if s.get("roster_auto", True):
+            skip = [int(r) for r in s.get("roster_skip_roles") or []]
+            if role.id not in skip:
+                await inter.response.edit_message(content="⚠️ Эта роль и так попадает в список автоматически.", view=None)
+                return
+            s["roster_skip_roles"] = [r for r in skip if r != role.id]
+            save_settings(s)
+            await inter.response.edit_message(content=f"✅ Вернули <@&{role.id}> в список.", view=None)
+        else:
+            if any(r["role_id"] == role.id for r in s["roster_roles"]):
+                await inter.response.edit_message(content="⚠️ Эта роль уже в списке.", view=None)
+                return
+            if len(s["roster_roles"]) >= 20:
+                await inter.response.edit_message(content="⚠️ Максимум 20 ролей в списке.", view=None)
+                return
+            s["roster_roles"].append({"role_id": role.id, "title": role.name})
+            save_settings(s)
+            await inter.response.edit_message(
+                content=f"✅ Роль <@&{role.id}> добавлена в конец списка. Порядок = порядок добавления.", view=None
+            )
         cog = inter.bot.get_cog("HallTools")
         if cog:
             await cog.update_roster(inter.guild, force=True)
 
 
-class RoleRemoveSelect(disnake.ui.StringSelect):
-    def __init__(self, options):
-        super().__init__(placeholder="Какую роль убрать из списка?", options=options, min_values=1, max_values=1)
+class RoleRemovePicker(disnake.ui.View):
+    """Убрать роль из поста: в авто-режиме добавляем её в исключения, вручную — вычёркиваем из списка."""
 
-    async def callback(self, inter: disnake.MessageInteraction):
-        rid = int(self.values[0])
+    def __init__(self):
+        super().__init__(timeout=120)
+
+    @disnake.ui.role_select(placeholder="Какую роль убрать из списка?", min_values=1, max_values=1)
+    async def pick(self, select, inter: disnake.MessageInteraction):
+        role = select.values[0]
         s = get_settings()
-        s["roster_roles"] = [r for r in s["roster_roles"] if r["role_id"] != rid]
-        save_settings(s)
-        await inter.response.edit_message(content="✅ Роль убрана из списка.", view=None)
+        if s.get("roster_auto", True):
+            if role.id == role.guild.id:
+                await inter.response.edit_message(content="⚠️ @everyone в списке не бывает.", view=None)
+                return
+            skip = [int(r) for r in s.get("roster_skip_roles") or []]
+            if role.id in skip:
+                await inter.response.edit_message(content="⚠️ Эта роль уже исключена.", view=None)
+                return
+            skip.append(role.id)
+            s["roster_skip_roles"] = skip
+            save_settings(s)
+            await inter.response.edit_message(
+                content=f"✅ <@&{role.id}> больше не будет попадать в список. Передумали — кнопка «Добавить роль».",
+                view=None,
+            )
+        else:
+            if not any(r["role_id"] == role.id for r in s["roster_roles"]):
+                await inter.response.edit_message(content="⚠️ этой роли в списке нет.", view=None)
+                return
+            s["roster_roles"] = [r for r in s["roster_roles"] if r["role_id"] != role.id]
+            save_settings(s)
+            await inter.response.edit_message(content="✅ Роль убрана из списка.", view=None)
         cog = inter.bot.get_cog("HallTools")
         if cog:
             await cog.update_roster(inter.guild, force=True)
@@ -737,12 +809,23 @@ class HallPanel(disnake.ui.View):
     async def roster_channel(self, button, inter):
         await inter.response.send_message(embed=note_embed("Выберите канал для списка состава:"), view=ChannelPicker("roster_channel_id"), ephemeral=True)
 
+    @disnake.ui.button(label="Роли по иерархии", emoji="🪄", style=disnake.ButtonStyle.primary, row=3)
+    async def roster_auto_toggle(self, button, inter):
+        """Авто-режим: список ролей берётся из иерархии сервера, «Убрать роль» работает как исключение."""
+        set_setting("roster_auto", not bool(get_settings().get("roster_auto", True)))
+        cog = inter.bot.get_cog("HallTools")
+        if cog:
+            await cog.update_roster(inter.guild, force=True)
+        await self._refresh(inter)
+
     @disnake.ui.button(label="Добавить роль", emoji="➕", style=disnake.ButtonStyle.success, row=3)
     async def roster_add(self, button, inter):
-        await inter.response.send_message(
-            "Выберите роль. Добавляйте сверху вниз: Owner, Dep Owner, Chief Recruit и т.д.",
-            view=RoleAddPicker(), ephemeral=True,
+        hint = (
+            "Роль из списка исключена? Выберите её здесь — вернётся в авто-список."
+            if get_settings().get("roster_auto", True)
+            else "Добавляйте сверху вниз: Owner, Dep Owner, Chief Recruit и т.д."
         )
+        await inter.response.send_message(hint, view=RoleAddPicker(), ephemeral=True)
 
     # АФК-панель
     @disnake.ui.button(label="АФК вкл/выкл", emoji="🌴", style=disnake.ButtonStyle.primary, row=2)
@@ -780,14 +863,9 @@ class HallPanel(disnake.ui.View):
 
     @disnake.ui.button(label="Убрать роль", emoji="➖", style=disnake.ButtonStyle.danger, row=3)
     async def roster_remove(self, button, inter):
-        roles = get_settings()["roster_roles"]
-        if not roles:
-            await inter.response.send_message(embed=note_embed("Список ролей пуст."), ephemeral=True)
-            return
-        options = [disnake.SelectOption(label=r["title"][:100], value=str(r["role_id"])) for r in roles]
-        view = disnake.ui.View(timeout=120)
-        view.add_item(RoleRemoveSelect(options))
-        await inter.response.send_message(embed=note_embed("Какую роль убрать?"), view=view, ephemeral=True)
+        await inter.response.send_message(
+            embed=note_embed("Какую роль убрать из списка?"), view=RoleRemovePicker(), ephemeral=True
+        )
 
     @disnake.ui.button(label="Обновить список сейчас", emoji="🔁", style=disnake.ButtonStyle.secondary, row=4)
     async def roster_refresh(self, button, inter):
@@ -807,7 +885,11 @@ class HallTools(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self._views_added = False
-        self._roster_hash = None
+        self._roster_hash: dict = {}        # guild_id -> отпечаток поста
+        self._poster_ts: dict = {}          # guild_id -> когда последний раз перерисовывали
+        self._poster_lock = asyncio.Lock()
+        self._roster_dirty: set = set()     # guild_id, ждущие внепланового обновления
+        self._roster_task = None
         self.reminder_loop.start()
         self.leave_loop.start()
         self.roster_loop.start()
@@ -818,6 +900,8 @@ class HallTools(commands.Cog):
         self.leave_loop.cancel()
         self.roster_loop.cancel()
         self.afk_loop.cancel()
+        if self._roster_task is not None:
+            self._roster_task.cancel()
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -825,12 +909,29 @@ class HallTools(commands.Cog):
             self.bot.add_view(LeaveReviewView())
             self.bot.add_view(AfkPanelView())
             self._views_added = True
+        for guild in self.bot.guilds:
+            self.schedule_roster(guild.id)
+
+    # ── Состав: обновление сразу, как только у кого-то сменились роли ──
+    @commands.Cog.listener()
+    async def on_member_role_update(self, before: disnake.Member, after: disnake.Member):
+        if after.bot or not guild_ok(after.guild):
+            return
+        if {r.id for r in before.roles} == {r.id for r in after.roles}:
+            return
+        self.schedule_roster(after.guild.id)
+
+    @commands.Cog.listener()
+    async def on_guild_role_delete(self, role: disnake.Role):
+        if guild_ok(role.guild):
+            self.schedule_roster(role.guild.id)
 
     # ── Приветствие ──
     @commands.Cog.listener()
     async def on_member_join(self, member: disnake.Member):
         if member.bot or not guild_ok(member.guild):
             return
+        self.schedule_roster(member.guild.id)
         s = get_settings()
         if not s["welcome_enabled"]:
             return
@@ -859,6 +960,7 @@ class HallTools(commands.Cog):
     async def on_member_remove(self, member: disnake.Member):
         if member.bot or not guild_ok(member.guild):
             return
+        self.schedule_roster(member.guild.id)
         row = await archive_member(member.id, "left", "Покинул сервер")
         if not row:
             return
@@ -1049,76 +1151,130 @@ class HallTools(commands.Cog):
     # ── Состав ──
     def roster_sections(self, guild: disnake.Guild, s) -> List[Tuple[str, List[disnake.Member]]]:
         """Роли по порядку; участник показывается только в первой из его ролей."""
+        auto = bool(s.get("roster_auto", True))
+        if auto:
+            pairs = [(r.name, r.id) for r in roster_auto_roles(guild, s)]
+        else:
+            pairs = [(i["title"], i["role_id"]) for i in s["roster_roles"]]
         seen: set = set()
         sections: List[Tuple[str, List[disnake.Member]]] = []
-        for item in s["roster_roles"]:
-            role = guild.get_role(item["role_id"])
+        for title, role_id in pairs:
+            role = guild.get_role(role_id)
             if role is None:
                 continue
             members = sorted(
                 (m for m in role.members if not m.bot and m.id not in seen),
                 key=lambda m: m.display_name.lower(),
             )
+            if auto and not members:
+                continue  # все его носители уже показаны выше — лишняя секция не нужна
             seen.update(m.id for m in members)
-            sections.append((item["title"], members))
+            sections.append((title, members))
         return sections
 
-    async def roster_poster(self, guild: disnake.Guild, s) -> Optional[bytes]:
+    def poster_plan(self, sections) -> List[Tuple[str, List[Tuple[str, Optional[disnake.Member]]]]]:
+        """Что влезет в постер: ограничиваем высоту картинки, а значит и память с трафиком."""
+        plan, left = [], ROSTER_MAX_POSTER_ROWS
+        for title, members in sections[:ROSTER_MAX_SECTIONS]:
+            if left <= 0:
+                break
+            take = members[: min(ROSTER_ROWS_PER_ROLE, left)]
+            rows = [(m.display_name, m) for m in take]
+            hidden = len(members) - len(take)
+            if hidden:
+                if len(rows) == left:  # строку «и ещё…» тоже учитываем в высоте
+                    rows.pop()
+                    hidden += 1
+                rows.append((f"и ещё {hidden}…", None))
+            plan.append((title, rows))
+            left -= len(rows)
+        return plan
+
+    def poster_key(self, sections) -> str:
+        """Отпечаток постера по именам: если он не изменился, картинку не перерисовываем.
+
+        Храним его в настройках — после рестарта бот не выкачивает аватары заново.
+        """
+        plan = [(t, [n for n, _ in rows]) for t, rows in self.poster_plan(sections)]
+        return hashlib.sha1(repr(plan).encode("utf-8")).hexdigest()[:16]
+
+    async def roster_poster(self, sections) -> Optional[bytes]:
         """Картинка состава. Аватары тянем только когда постер реально нужен."""
-        sections, total = [], 0
-        for title, members in self.roster_sections(guild, s):
-            rows = []
-            for m in members[:ROSTER_ROWS_PER_ROLE]:
-                avatar = await m.avatar.read() if m.avatar else None
-                rows.append((m.display_name, avatar))
-            if len(members) > ROSTER_ROWS_PER_ROLE:
-                rows.append((f"и ещё {len(members) - ROSTER_ROWS_PER_ROLE}…", None))
-            sections.append((title, rows))
-            total += len(members)
-        if not total:
+        plan = self.poster_plan(sections)
+        members = [m for _, rows in plan for _, m in rows if m is not None]
+        if not members:
             return None
+        sem = asyncio.Semaphore(5)
+
+        async def grab(m):
+            if m.avatar is None:
+                return None
+            async with sem:
+                try:
+                    return await m.avatar.read()
+                except Exception:
+                    return None
+
+        avatars = dict(zip([m.id for m in members], await asyncio.gather(*(grab(m) for m in members))))
+        rendered = [
+            (title, [(name, avatars.get(m.id) if m else None) for name, m in rows])
+            for title, rows in plan
+        ]
+        shown = sum(len([1 for _, m in rows if m is not None]) for _, rows in plan)
+        total = len({m.id for _, ms in sections for m in ms})
         name = load_config().get("bot_name", "Hallez FAMQ")
         stamp = datetime.now(timezone.utc).strftime("%d.%m.%Y")
+        note = f"Всего участников: {total}  ·  {stamp}"
+        if shown < total:
+            note += f"  ·  на картинке {shown}, полный список в тексте выше"
         return await asyncio.to_thread(
-            render_roster,
-            f"Состав семьи {name}",
-            "Список по должностям, обновляется автоматически",
-            sections,
-            f"Всего участников: {total}  ·  {stamp}",
+            render_roster, f"Состав семьи {name}", "Список по должностям, обновляется автоматически", rendered, note
         )
 
-    def build_roster_embed(self, guild: disnake.Guild, s) -> disnake.Embed:
+    def build_roster_embed(self, sections) -> disnake.Embed:
         name = load_config().get("bot_name", "Hall FAMQ")
-        e = make_embed(f"👥 Состав руководства {name}", "Актуальный список по должностям. Обновляется автоматически.")
-        for title, members in self.roster_sections(guild, s):
-            lines = [f"• {m.mention}" for m in members] or ["— пока никого —"]
-            chunks, cur = [], ""
+        total = len({m.id for _, ms in sections for m in ms})
+        e = make_embed(
+            f"👥 Состав семьи {name}",
+            f"Весь состав по должностям, от старших к младшим. Обновляется автоматически.\n"
+            f"Всего: **{total}**",
+        )
+        # лимит Discord на эмбед — 6000 символов, поэтому пачем секции в поля с запасом
+        chunks, cur = [], ""
+        for title, members in sections:
+            lines = [f"**⚜️ {title} • {len(members)}**"]
+            lines += [f"• {m.mention}" for m in members] or ["• — пока никого —"]
             for line in lines:
-                if len(cur) + len(line) + 1 > 1000:
+                if len(cur) + len(line) + 1 > 950 and cur:
                     chunks.append(cur)
                     cur = ""
                 cur += line + "\n"
-            if cur:
-                chunks.append(cur)
-            for i, chunk in enumerate(chunks):
-                if len(e.fields) >= 24:
-                    break
-                head = f"⚜️ {title} • {len(members)}" if i == 0 else "\u200b"
-                e.add_field(name=head[:256], value=chunk.strip(), inline=False)
+        if cur:
+            chunks.append(cur)
+        spent = 0
+        for chunk in chunks:
+            if len(e.fields) >= 25 or spent + len(chunk) > 5400:
+                if len(e.fields) < 25:
+                    e.add_field(name="\u200b", value="…часть списка не влезла — смотрите картинку и список ролей сервера",
+                                inline=False)
+                break
+            spent += len(chunk)
+            e.add_field(name="\u200b", value=chunk.strip(), inline=False)
         return e
 
     async def update_roster(self, guild: disnake.Guild, force: bool = False) -> bool:
         s = get_settings()
-        if not s["roster_channel_id"] or not s["roster_roles"]:
+        if not s["roster_channel_id"]:
             return False
         channel = guild.get_channel(s["roster_channel_id"])
         if channel is None:
             return False
-        embed = self.build_roster_embed(guild, s)
-        poster = await self.roster_poster(guild, s)
-        if poster:
-            embed.set_image(url="attachment://roster.jpg")
-        digest = json.dumps(embed.to_dict(), sort_keys=True, ensure_ascii=False) + f"#{hash(poster or b'')}"
+        sections = self.roster_sections(guild, s)
+        if not sections:
+            return False
+        embed = self.build_roster_embed(sections)
+        key = self.poster_key(sections)
+        digest = json.dumps(embed.to_dict(), sort_keys=True, ensure_ascii=False) + f"#{key}"
         msg = None
         if s["roster_message_id"]:
             try:
@@ -1127,18 +1283,81 @@ class HallTools(commands.Cog):
                 msg = None
             except disnake.HTTPException:
                 return False
-        file = disnake.File(io.BytesIO(poster), filename="roster.jpg") if poster else None
+        old = next((a for a in (msg.attachments if msg else []) if a.filename == "roster.jpg"), None)
+        keys = dict(s.get("roster_poster_keys") or {})
+        stored = str(keys.get(str(guild.id)) or "")
+        fresh = stored == key and old is not None
+        poster_pending = stored != key
+        if msg is None:
+            poster_pending = True  # поста нет (его удалили) — перерисовываем картинку и заводим заново
+        if not force and not poster_pending and digest == self._roster_hash.get(guild.id):
+            return False
+
+        now = time.time()
+        file = None
+        has_image = False
+        if fresh:
+            embed.set_image(url=old.url)
+            has_image = True
+        else:
+            may_render = force or msg is None or now - self._poster_ts.get(guild.id, 0.0) >= ROSTER_POSTER_COOLDOWN
+            if may_render:
+                async with self._poster_lock:
+                    poster = await self.roster_poster(sections)
+                if poster:
+                    file = disnake.File(io.BytesIO(poster), filename="roster.jpg")
+                    embed.set_image(url="attachment://roster.jpg")
+                    has_image = True
+            elif old is not None:
+                # картинка устарела, но перерисовку держит кулдаун — правим только текст
+                embed.set_image(url=old.url)
+                has_image = True
+
+        keep = [old] if file is None and old is not None and has_image else []
         try:
             if msg is None:
-                msg = await channel.send(embed=embed, file=file)
+                if file is None:
+                    msg = await channel.send(embed=embed)
+                else:
+                    msg = await channel.send(embed=embed, file=file)
                 set_setting("roster_message_id", msg.id)
-                self._roster_hash = digest
-            elif force or digest != self._roster_hash:
+            elif file is not None:
                 await msg.edit(embed=embed, file=file, attachments=[])
-                self._roster_hash = digest
+            else:
+                await msg.edit(embed=embed, attachments=keep)
         except disnake.HTTPException:
             return False
+        # отпечаток картинки пишем только когда пост реально обновился —
+        # иначе получится, что картинка «свежая», а на посте старая
+        if file is not None:
+            keys[str(guild.id)] = key
+            set_setting("roster_poster_keys", keys)
+            self._poster_ts[guild.id] = now
+        self._roster_hash[guild.id] = digest
         return True
+
+    def schedule_roster(self, guild_id: int) -> None:
+        """Отложить обновление состава: смены ролей приходят залпом, правим пост один раз."""
+        self._roster_dirty.add(guild_id)
+        if self._roster_task is None or self._roster_task.done():
+            self._roster_task = asyncio.ensure_future(self._flush_roster())
+
+    async def _flush_roster(self):
+        try:
+            await asyncio.sleep(ROSTER_FLUSH_DELAY)
+            guild_ids, self._roster_dirty = self._roster_dirty, set()
+            for gid in guild_ids:
+                guild = self.bot.get_guild(gid)
+                if guild is None:
+                    continue
+                try:
+                    await self.update_roster(guild)
+                except Exception as ex:
+                    print(f"[hall_tools] внеплановое обновление состава: {ex}", file=sys.stderr, flush=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as ex:
+            print(f"[hall_tools] отложенное обновление состава упало: {ex}", file=sys.stderr, flush=True)
 
     # ── Фоновые задачи ──
     @tasks.loop(minutes=3)
