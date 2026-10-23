@@ -539,12 +539,27 @@ def save_settings():
 S: Dict[str, Any] = _load_settings()
 
 
+_CFG_CACHE: Dict[str, Any] = {"mt": None, "size": None, "at": 0.0, "data": None}
+
+
 def get_cfg() -> Dict[str, Any]:
+    """config.json в памяти: его зовут десятки раз на один рендер панели, и каждый раз читать
+    файл с диска — это секунды на слабом контейнере. Перечитываем, только если файл изменился
+    (по mtime/размеру) или если с прошлого чтения прошло больше 2 секунд."""
+    try:
+        st = os.stat(CONFIG_PATH)
+    except OSError:
+        return {}
+    c, now = _CFG_CACHE, time.monotonic()
+    if c["data"] is not None and c["mt"] == st.st_mtime_ns and c["size"] == st.st_size and now - c["at"] < 2.0:
+        return c["data"]
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
     except Exception:
-        return {}
+        return c["data"] or {}
+    c.update(mt=st.st_mtime_ns, size=st.st_size, at=now, data=data)
+    return data
 
 
 class _Safe(dict):

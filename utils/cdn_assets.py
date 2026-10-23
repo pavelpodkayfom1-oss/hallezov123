@@ -24,13 +24,27 @@ NOTE = ("📌 Служебные картинки бота. Не удаляй э
         "иначе в ЛС кандидатам и на панелях перестанут грузиться баннеры.")
 
 
+_LOAD_CACHE: list = []   # [(mtime_ns, size), данные] — файл перечитывается только после записи
+
+
 def _load() -> dict:
+    """Кэш cdn_assets.json в памяти: его спрашивает каждый эмбед с картинкой."""
+    try:
+        st = CACHE_PATH.stat()
+        key = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return {}
+    if _LOAD_CACHE and _LOAD_CACHE[0] == key:
+        return _LOAD_CACHE[1]
     try:
         with open(CACHE_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return data if isinstance(data, dict) else {}
+        data = data if isinstance(data, dict) else {}
     except Exception:
         return {}
+    _LOAD_CACHE.clear()
+    _LOAD_CACHE.extend([key, data])
+    return data
 
 
 def _save(cache: dict) -> None:
@@ -38,14 +52,33 @@ def _save(cache: dict) -> None:
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=1)
     tmp.replace(CACHE_PATH)
+    _LOAD_CACHE.clear()
 
 
-def _sha1(path: Path) -> str:
+_SHA_CACHE: dict = {}    # путь -> ((mtime_ns, размер), хэш)
+
+
+def _sha1(path) -> str:
+    """Хэш файла по mtime/размеру. Пересчитывать SHA1 баннера на каждый эмбед — значит
+    читать сотни килобайт с диска десятки раз за рендер панели."""
+    p = Path(path)
+    try:
+        st = p.stat()
+        key = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        key = None
+    if key is not None:
+        hit = _SHA_CACHE.get(str(p))
+        if hit and hit[0] == key:
+            return hit[1]
     h = hashlib.sha1()
-    with open(path, "rb") as f:
+    with open(p, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
-    return h.hexdigest()
+    digest = h.hexdigest()
+    if key is not None:
+        _SHA_CACHE[str(p)] = (key, digest)
+    return digest
 
 
 def cached_url(name: str, path) -> Optional[str]:
