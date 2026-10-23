@@ -90,12 +90,33 @@ def _drop(name: str) -> None:
         _save(cache)
 
 
+async def _delete_stale(entry, channel, name: str) -> None:
+    """Убирает старое служебное сообщение, если картинка переехала в другой канал.
+
+    Иначе при смене канала в чате остаётся висеть старое «📌 Служебные картинки бота»,
+    которое никто уже не использует.
+    """
+    try:
+        cid = int(entry.get("channel_id") or 0) if isinstance(entry, dict) else 0
+        mid = int(entry.get("message_id") or 0) if isinstance(entry, dict) else 0
+        if not cid or not mid or cid == channel.id:
+            return
+        old_ch = channel.guild.get_channel(cid)
+        if old_ch is None:
+            return
+        await (await old_ch.fetch_message(mid)).delete()
+        print(f"🌐 Старое служебное сообщение {name} удалено из прежнего канала", flush=True)
+    except Exception:
+        pass
+
+
 async def ensure(channel, name: str, path) -> Optional[str]:
     """Возвращает URL картинки, при необходимости загрузив её в канал.
 
     Проверяет, что старая ссылка ещё работает, и заливает файл заново, если нет.
     """
     p = Path(path)
+    old = _load().get(name)
     url = cached_url(name, p)
     if url and channel is not None:
         if await _url_is_alive(channel, name):
@@ -112,6 +133,7 @@ async def ensure(channel, name: str, path) -> Optional[str]:
         cache = _load()
         cache[name] = {"url": url, "sha1": _sha1(p), "channel_id": channel.id, "message_id": msg.id}
         _save(cache)
+        await _delete_stale(old, channel, name)
         print(f"🌐 На CDN залит ассет {name}", flush=True)
         return url
     except Exception as error:

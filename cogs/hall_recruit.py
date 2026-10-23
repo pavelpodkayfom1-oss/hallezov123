@@ -473,7 +473,7 @@ DEFAULT_SHOP = [
 ]
 
 DEFAULTS: Dict[str, Any] = {
-    "channels": {"panel": 0, "review": 0, "orders": 0, "points_panel": 0},
+    "channels": {"panel": 0, "review": 0, "orders": 0, "points_panel": 0, "cdn": 0},
     "staff_roles": [],
     "published": {"apply": [0, 0], "points": [0, 0]},
     "design": {
@@ -933,19 +933,38 @@ def put_banner(embed: disnake.Embed, asset: str = BANNER_ASSET) -> Optional[disn
 VIDEO_EXTS = (".gif", ".mp4", ".mov", ".webm")
 
 
+def _can_post(ch) -> bool:
+    """Может ли бот прикрепить файл к сообщению в этом канале."""
+    me = getattr(getattr(ch, "guild", None), "me", None)
+    p = ch.permissions_for(me) if me else None
+    return bool(p and p.send_messages and p.attach_files)
+
+
 async def cdn_upload_channel():
-    """Куда лить служебные картинки: канал заявок/панели, а если он недоступен — любой, где можем писать."""
-    ch = await get_channel(chan_id("review") or chan_id("panel"))
-    if isinstance(ch, disnake.TextChannel):
-        return ch
+    """Куда лить служебные картинки: канал из «Каналы и роли», иначе любой закрытый для гостей.
+
+    Discord отдаёт постоянную ссылку на файл только если файл прикреплён к сообщению, поэтому
+    сообщению нужен канал. Только не канал заявок — там оно мозолит глаза кандидатам.
+    """
     if _BOT is None:
         return None
+    ch = await get_channel(S["channels"].get("cdn") or 0)
+    if isinstance(ch, disnake.TextChannel) and _can_post(ch):
+        return ch
+    busy = {S["channels"].get(k) or 0 for k in ("panel", "review", "orders", "points_panel")}
+    busy.add(get_cfg().get("channels", {}).get("recruitment_channel_id", 0) or 0)
     for guild in _BOT.guilds:
         me = guild.me
+        if me is None:
+            continue
         for c in guild.text_channels:
-            p = c.permissions_for(me) if me else None
-            if p and p.send_messages and p.attach_files:
-                return c
+            if c.id in busy or not _can_post(c):
+                continue
+            if not c.permissions_for(guild.default_role).view_channel:
+                return c      # @everyone его не видит — служебное сообщение никто не заметит
+    ch = await get_channel(get_cfg().get("channels", {}).get("logs_channel_id", 0) or 0)
+    if isinstance(ch, disnake.TextChannel) and _can_post(ch):
+        return ch
     return None
 
 
@@ -2626,6 +2645,7 @@ CHANNEL_TARGETS = {
     "review": "Карточки заявок для рекрутеров",
     "orders": "Заказы магазина и приглашения",
     "points_panel": "Панель «Рекрут-центр» (баллы/магазин)",
+    "cdn": "Служебный канал для баннеров (не заявочный)",
 }
 
 
