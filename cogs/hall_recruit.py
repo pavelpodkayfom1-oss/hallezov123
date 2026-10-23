@@ -38,7 +38,9 @@ BANNER_PATH = os.path.join(ASSETS_DIR, "banner.png")
 # имена файлов в assets/; баннер «как попасть в семью» уходит только в ЛС обзвона
 BANNER_ASSET = "banner.png"
 INTERVIEW_ASSET = "interview.jpg"
-CDN_ASSETS = (BANNER_ASSET, INTERVIEW_ASSET)
+# широкий баннер «Правила семьи HALLEZ» — кладётся под текстом правил
+RULES_BANNER_ASSET = "rules_banner.jpg"
+CDN_ASSETS = (BANNER_ASSET, INTERVIEW_ASSET, RULES_BANNER_ASSET)
 
 # ───────────────────────────── ЭМОДЗИ ─────────────────────────────
 
@@ -735,37 +737,40 @@ XT = {
                         "{e_interview}  Позовите на обзвон или закройте заявку, чтобы она не висела открытой.",
                         "{nick} {static} {thread} {since} {app_id}"),
     "rules_post": ("Правила семьи (пост в канал)",
-                   "**:hz_bluethumbsup:  ОБЩЕНИЕ**\n"
+                   "*:hz_glowingdotblue:  Уважение*  ✦  *:hz_glowingdotblue:  Порядок*  ✦  "
+                   "*:hz_glowingdotblue:  Развитие*\n\n"
+                   "### :hz_bluethumbsup:  ОБЩЕНИЕ\n"
                    "> :hz_bluetick:  Уважаем друг друга. Оскорбления, спам и токсичность запрещены\n"
                    "> :hz_bluetick:  Внутренние конфликты решаем не в общем чате\n"
                    "> :hz_bluetick:  Скриншоты семейного чата не выносим за пределы семьи\n\n"
-                   "**:hz_legit:  В ИГРЕ**\n"
+                   "### :hz_legit:  В ИГРЕ\n"
                    "> :hz_shield:  Правила сервера всегда выше семейных правил\n"
                    "> :hz_lock:  Читы и багоюз — **мгновенное исключение**\n"
                    ">    ↳ :hz_info:  **Исключение:** если человек использовал их ранее, но полностью "
                    "прекратил и больше не собирается\n\n"
-                   "**:hz_booster:  АКТИВНОСТЬ**\n"
+                   "### :hz_booster:  АКТИВНОСТЬ\n"
                    "> :hz_starblue:  На контракты и разборки выходим по зову руководства\n"
                    "> :hz_starblue:  На разборках по возможности записываем экран (**Fraps**) "
                    "и храним запись минимум **48 часов**\n"
                    "> :hz_starblue:  Действуем по командам руководства, не разбегаемся и не действуем самовольно\n"
                    "> :hz_starblue:  Союзы и войны — только через руководство\n"
                    "> :hz_starblue:  Максимальное количество союзов — **4**\n\n"
-                   "**:hz_ownership:  РЕСУРСЫ**\n"
+                   "### :hz_ownership:  РЕСУРСЫ\n"
                    "> :hz_gradientarrowright:  Семейный склад — **не для личной продажи или заработка**\n"
                    "> :hz_gradientarrowright:  Взял семейную машину — **заправь и верни на место**\n"
-                   "> :hz_gradientarrowright:  Личный транспорт можно передать семье через **G → Семейный транспорт**\n\n"
-                   "**:hz_bluestaffbadge:  РАНГИ**\n"
+                   "> :hz_gradientarrowright:  Личный транспорт можно передать семье через "
+                   "**G → Семейный транспорт**\n\n"
+                   "### :hz_bluestaffbadge:  РАНГИ\n"
                    "> :hz_bluecrewmate:  Повышение выдаётся за **активность, вклад и посещаемость**\n"
                    "> :hz_bluecrewmate:  Дружба и личные отношения не являются причиной для повышения\n"
                    "> :hz_bluecrewmate:  Руководство не использует свои права в личных целях\n\n"
-                   "**:hz_bluemoderator:  НАКАЗАНИЯ**\n"
+                   "### :hz_bluemoderator:  НАКАЗАНИЯ\n"
                    "> :hz_animatedarrowblue:  **Предупреждение** — опоздание или пропуск контракта\n"
                    "> :hz_animatedarrowyellow:  **Понижение / отстранение на 3–7 дней** — "
                    "неподчинение командиру, использование семейных ресурсов в личных целях, "
                    "провокации и ссоры\n"
                    "> :hz_animatedarrowred:  **Исключение** — слив информации, читы или багоюз\n\n"
-                   "**:hz_warning:  ГЛАВНОЕ**\n"
+                   "### :hz_warning:  ГЛАВНОЕ\n"
                    "> :hz_glowingdotblue:  Будь активным.\n"
                    "> :hz_glowingdotblue:  Играй честно.\n"
                    "> :hz_glowingdotblue:  Уважай своих.\n"
@@ -2108,7 +2113,8 @@ def dash_embed() -> disnake.Embed:
         return "✅ на CDN" if cdn_assets.cached_url(asset, path) else "⚠️ файлом (не залита на CDN)"
 
     emb.add_field(name="🖼️ Баннеры",
-                  value=f"Панели: {asset_state(BANNER_ASSET)}\nОбзвон в ЛС: {asset_state(INTERVIEW_ASSET)}",
+                  value=f"Панели: {asset_state(BANNER_ASSET)}\nОбзвон в ЛС: {asset_state(INTERVIEW_ASSET)}\n"
+                        f"Правила: {asset_state(RULES_BANNER_ASSET)}",
                   inline=True)
     vid = "✅ файл" if video_path() else ("✅ ссылка" if S["design"].get("video_url") else "— (`/hr_video`)")
     emb.add_field(name="🎬 Видео", value=vid, inline=True)
@@ -2732,10 +2738,22 @@ class ChannelsView(AdminView):
 
 # ───── Правила семьи ─────
 
-def rules_embed() -> disnake.Embed:
-    """Пост с правилами: текст и эмодзи берутся из «✍️ Тексты» → «Правила семьи (пост)»."""
-    return disnake.Embed(title=f"{pm('hz_redflag', '🚩')}  ПРАВИЛА СЕМЬИ",
-                         description=X("rules_post"), color=main_color())
+def rules_embed(with_file: bool = False):
+    """Пост с правилами: текст из «✍️ Тексты» → «Правила семьи (пост)», снизу широкий баннер HALLEZ.
+
+    with_file=True — для реальной отправки: вернёт (эмбед, файл), если баннер ещё не на CDN.
+    Без CDN-ссылки в предпросмотре картинку не ставим: attachment:// без файла Discord не покажет.
+    """
+    fam = (get_cfg().get("bot_name") or "HALLEZ").upper()
+    emb = disnake.Embed(title=f"{pm('red_crown', '👑')}  ПРАВИЛА СЕМЬИ  ·  {fam}",
+                        description=X("rules_post"), color=main_color())
+    if with_file:
+        return emb, put_banner(emb, RULES_BANNER_ASSET)
+    path = os.path.join(ASSETS_DIR, RULES_BANNER_ASSET)
+    url = cdn_assets.cached_url(RULES_BANNER_ASSET, path)
+    if url:
+        emb.set_image(url=url)
+    return emb
 
 
 class RulesView(AdminView):
@@ -2768,7 +2786,8 @@ class RulesView(AdminView):
         if not isinstance(ch, disnake.TextChannel):
             return await inter.response.send_message(embed=note_embed("❌ Канал недоступен боту."), ephemeral=True)
         try:
-            await ch.send(embed=rules_embed())
+            emb, file = rules_embed(with_file=True)
+            await ch.send(embed=emb, file=file)
         except disnake.HTTPException as ex:
             return await inter.response.send_message(embed=note_embed(f"❌ Не отправлено: {str(ex)[:80]}"), ephemeral=True)
         await inter.response.send_message(embed=note_embed(f"✅ Правила отправлены в {ch.mention}"), ephemeral=True)
@@ -3101,19 +3120,24 @@ class HallRecruit(commands.Cog):
 
     @commands.slash_command(name="rules", description="Правила семьи")
     async def rules_cmd(self, inter: disnake.ApplicationCommandInteraction):
-        await inter.response.send_message(embed=rules_embed())
+        emb, file = rules_embed(with_file=True)
+        await inter.response.send_message(embed=emb, file=file)
 
-    @commands.slash_command(name="hr_banner", description="Загрузить баннер для панелей (картинка)")
+    @commands.slash_command(name="hr_banner", description="Загрузить баннер (картинка)")
     async def hr_banner(self, inter: disnake.ApplicationCommandInteraction,
-                        image: disnake.Attachment = commands.Param(description="Картинка баннера (PNG/JPG)")):
+                        image: disnake.Attachment = commands.Param(description="Картинка баннера (PNG/JPG)"),
+                        куда: str = commands.Param(name="куда", default="Панели набора",
+                                                   choices=["Панели набора", "Правила семьи"],
+                                                   description="Куда положить картинку")):
         if not is_admin(inter.author):
             return await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
         if not (image.content_type or "").startswith("image/"):
             return await inter.response.send_message(embed=note_embed("❌ Нужна картинка (PNG/JPG)."), ephemeral=True)
+        asset = RULES_BANNER_ASSET if куда == "Правила семьи" else BANNER_ASSET
         os.makedirs(ASSETS_DIR, exist_ok=True)
-        await image.save(BANNER_PATH)
+        await image.save(os.path.join(ASSETS_DIR, asset))
         await ensure_cdn_assets()
-        await inter.response.send_message(embed=note_embed("✅ Баннер сохранён и залит на CDN. "
+        await inter.response.send_message(embed=note_embed(f"✅ Баннер «{куда}» сохранён и залит на CDN. "
                                                             "В `/hr` → «Опубликовать» обновите панели."), ephemeral=True)
 
     @commands.slash_command(name="hr_video", description="Видео/GIF под текстом панели заявки")
