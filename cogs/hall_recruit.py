@@ -24,7 +24,7 @@ import io
 from typing import Optional, Dict, Any, List
 
 import disnake
-from disnake.ext import commands
+from disnake.ext import commands, tasks
 
 import database as db
 from utils import cdn_assets, state_backup
@@ -500,6 +500,9 @@ DEFAULTS: Dict[str, Any] = {
     "emoji": {},
     "buttons": {},
     "texts": {},
+    # Напоминания рекрутеру, взявшему заявку: интервал в минутах и живые хвосты
+    "remind_minutes": 120,
+    "reminders": {},
 }
 
 
@@ -738,6 +741,21 @@ XT = {
     "order_done_desc": ("ЛС «приз выдан»: текст",
                         "Заказ **#{order_id}** — **{item}** — выдан руководителем {admin}.\n"
                         "{e_star} Спасибо за вклад в семью, продолжайте в том же духе!", "{order_id} {item} {admin}"),
+    "rec_take_title": ("ЛС рекруту «заявка на вас»: заголовок", "{e_review} Заявка #{app_id} теперь на вас", ""),
+    "rec_take_desc": ("ЛС рекруту «заявка на вас»: текст",
+                      "{p_shield}  Вы взяли в работу **{nick}** (статик `{static}`). Обзвоните по возможности быстрее.\n\n"
+                      "### {e_interview}  Что дальше\n"
+                      "{n1}  Нажмите **«{btn_interview}»** на карточке и позовите кандидата в голосовой\n"
+                      "{n2}  После разговора закройте заявку: **{e_accept}** принят или **{e_reject}** отказ\n\n"
+                      "### {p_pc}  Ветка заявки\n> {thread}\n\n"
+                      "*Бот будет напоминать вам каждые {mins} минут, пока заявка не закрыта.*",
+                      "{nick} {static} {thread} {app_id} {mins}"),
+    "rec_remind_title": ("ЛС-напоминание рекруту: заголовок", "{e_interview} Кандидат всё ещё ждёт обзвон", ""),
+    "rec_remind_desc": ("ЛС-напоминание рекруту: текст",
+                        "{p_warn}  **{nick}** (статик `{static}`) ждёт вас уже **{since}** — заявка №{app_id} на вас.\n\n"
+                        "> {thread}\n\n"
+                        "{e_interview}  Позовите на обзвон или закройте заявку, чтобы она не висела открытой.",
+                        "{nick} {static} {thread} {since} {app_id}"),
 }
 
 
@@ -1327,6 +1345,56 @@ async def submit_application(inter: disnake.ModalInteraction):
     await inter.followup.send(embed=ok, ephemeral=True)
 
 
+# ───────────── Напоминания рекрутеру об обзвоне ─────────────
+# Заявка не должна висеть открытой: взявший её рекрутер получает ЛС сразу и
+# потом каждые S["remind_minutes"] (по умолчанию 2 часа), пока не закрыт вердикт.
+
+REMIND_MAX = 12   # дальше не пилим: кандидат либо потерян, либо заявку решит кто-то другой
+
+
+def remind_minutes() -> int:
+    try:
+        return min(1440, max(10, int(S.get("remind_minutes") or 120)))
+    except (TypeError, ValueError):
+        return 120
+
+
+def remind_since(ts: float) -> str:
+    """Сколько кандидат уже ждёт — по-человечески, без «0.0 ч»."""
+    mins = max(0, int((time.time() - float(ts or time.time())) / 60))
+    if mins < 60:
+        return f"{mins} мин" if mins >= 5 else "меньше часа"
+    h = mins / 60
+    return f"{int(h)} ч" if abs(h - round(h)) < 0.05 else f"{h:.1f} ч"
+
+
+async def remind_take(app: Dict[str, Any], recruiter_id: int, where: str) -> None:
+    now = time.time()
+    S.setdefault("reminders", {})[str(app["id"])] = {
+        "rec": int(recruiter_id), "where": where, "t0": now,
+        "next": now + remind_minutes() * 60, "n": 0,
+    }
+    save_settings()
+    await dm(recruiter_id,
+             X("rec_take_title", app_id=app["id"]),
+             X("rec_take_desc", nick=app["nick"], static=app["static_id"], thread=where,
+               app_id=app["id"], mins=remind_minutes(), btn_interview=btn("interview")["label"]),
+             color=cfg_color("embed_color", 0x990000))
+
+
+def remind_forget(app_id) -> None:
+    if S.get("reminders", {}).pop(str(app_id), None) is not None:
+        save_settings()
+
+
+def remind_bump(app_id) -> None:
+    """Рекрутер уже перешёл к следующему шагу (обзвон) — таймер сбрасываем, чтобы не пилил зря."""
+    e = (S.get("reminders") or {}).get(str(app_id))
+    if isinstance(e, dict):
+        e["next"] = time.time() + remind_minutes() * 60
+        save_settings()
+
+
 # ───────────── Карточка заявки: кнопки рекрутера ─────────────
 
 class CardView(disnake.ui.View):
@@ -1470,6 +1538,7 @@ async def h_review(inter: disnake.MessageInteraction):
             await th.send(text)
         except Exception:
             pass
+    await remind_take(app, inter.author.id, th.mention if th else f"«{app['nick']}»")
 
 
 def voice_options(guild: disnake.Guild) -> List[disnake.SelectOption]:
@@ -1539,6 +1608,7 @@ async def do_interview(inter: disnake.Interaction, card_message: disnake.Message
     await dm(app["user_id"], X("interview_dm_title"),
              X("interview_dm_desc", nick=app["nick"], reviewer=inter.author.mention, voice=voice),
              banner=INTERVIEW_ASSET)
+    remind_bump(app["id"])
 
 
 async def h_interview(inter: disnake.MessageInteraction):
@@ -1604,6 +1674,7 @@ async def h_accept(inter: disnake.MessageInteraction):
     await db.upsert_member(app["user_id"], app["nick"], app["static_id"], 1)
     # внутри вызывается хук, который начисляет баллы рекруту и приглашающему
     await db.update_application_status(app["id"], "accepted", inter.author.id)
+    remind_forget(app["id"])
 
     emb = _card_update(inter.message, app["user_id"], f"{em('accept')} **Принят в семью**",
                        cfg_color("success_color", 0x2ECC71), inter.author.mention, stage="decided")
@@ -1654,6 +1725,7 @@ class RejectModal(disnake.ui.Modal):
         await inter.response.defer(ephemeral=True)
         app = self.app
         await db.update_application_status(app["id"], "rejected", inter.author.id, reason)
+        remind_forget(app["id"])
         emb = _card_update(self.message, app["user_id"], f"{em('reject')} **Отказано**",
                            cfg_color("error_color", 0xE74C3C), inter.author.mention, stage="decided")
         set_field(emb, "Причина", reason[:1024], False)
@@ -2781,6 +2853,8 @@ class HallRecruit(commands.Cog):
 
     def cog_unload(self):
         db.unregister_accept_hook("hall_recruit")
+        if self.remind_loop.is_running():
+            self.remind_loop.cancel()
 
     def _add_views(self):
         for v in (ApplyView(), CardView(), PointsView(), RefView(), OrderView()):
@@ -2803,6 +2877,62 @@ class HallRecruit(commands.Cog):
                 await ensure_recruiter_role_access(ch)
         except Exception as e:
             print(f"[hall_recruit] доступ рекрутеров к веткам не настроен: {e!r}", file=sys.stderr, flush=True)
+        if not self.remind_loop.is_running():
+            self.remind_loop.start()
+
+    @tasks.loop(minutes=5)
+    async def remind_loop(self):
+        """Напоминания рекрутерам, что кандидат ждёт обзвон."""
+        now = time.time()
+        entries = S.setdefault("reminders", {})
+        due = []
+        changed = False
+        for key, e in list(entries.items()):
+            if not isinstance(e, dict):
+                entries.pop(key, None)          # мусор от ручной правки recruit_plus.json
+                changed = True
+                continue
+            try:
+                nxt = float(e.get("next") or 0)
+            except (TypeError, ValueError):
+                nxt = 0
+            if nxt <= now:
+                due.append((key, e))
+        if not due:
+            if changed:
+                save_settings()
+            return
+        for key, e in due:
+            try:
+                app_id = int(key)
+                rec = int(e.get("rec") or 0)
+            except (TypeError, ValueError):
+                entries.pop(key, None)
+                changed = True
+                continue
+            app = await db.get_application_by_id(app_id)
+            if not app or app["status"] in ("accepted", "rejected"):
+                entries.pop(key, None)          # заявку закрыли в обход кнопок — убираем хвост
+                changed = True
+                continue
+            n = int(e.get("n") or 0) + 1
+            if rec:
+                await dm(rec, X("rec_remind_title"),
+                         X("rec_remind_desc", nick=app["nick"], static=app["static_id"],
+                           thread=e.get("where") or "—", since=remind_since(e.get("t0")), app_id=app_id),
+                         color=cfg_color("warning_color", 0xF39C12))
+            if n >= REMIND_MAX:
+                entries.pop(key, None)
+            else:
+                e["n"] = n
+                e["next"] = time.time() + remind_minutes() * 60
+            changed = True
+        if changed:
+            save_settings()
+
+    @remind_loop.before_loop
+    async def _remind_ready(self):
+        await self.bot.wait_until_ready()
 
     @commands.Cog.listener()
     async def on_member_role_update(self, before: disnake.Member, after: disnake.Member):
