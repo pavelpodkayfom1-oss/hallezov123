@@ -2787,7 +2787,10 @@ class RulesView(AdminView):
             return await inter.response.send_message(embed=note_embed("❌ Канал недоступен боту."), ephemeral=True)
         try:
             emb, file = rules_embed(with_file=True)
-            await ch.send(embed=emb, file=file)
+            if file:
+                await ch.send(embed=emb, file=file)
+            else:
+                await ch.send(embed=emb)
         except disnake.HTTPException as ex:
             return await inter.response.send_message(embed=note_embed(f"❌ Не отправлено: {str(ex)[:80]}"), ephemeral=True)
         await inter.response.send_message(embed=note_embed(f"✅ Правила отправлены в {ch.mention}"), ephemeral=True)
@@ -3121,7 +3124,10 @@ class HallRecruit(commands.Cog):
     @commands.slash_command(name="rules", description="Правила семьи")
     async def rules_cmd(self, inter: disnake.ApplicationCommandInteraction):
         emb, file = rules_embed(with_file=True)
-        await inter.response.send_message(embed=emb, file=file)
+        if file:
+            await inter.response.send_message(embed=emb, file=file)
+        else:
+            await inter.response.send_message(embed=emb)
 
     @commands.slash_command(name="hr_banner", description="Загрузить баннер (картинка)")
     async def hr_banner(self, inter: disnake.ApplicationCommandInteraction,
