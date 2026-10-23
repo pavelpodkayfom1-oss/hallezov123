@@ -241,6 +241,18 @@ async def _watchdog():
 
 
 async def main():
+    # Деплой из git возвращает *.json/*.db к закоммиченной версии. Поднимаем последний
+    # снимок бота ДО загрузки когов — иначе они прочитают откатанные настройки.
+    try:
+        restored = await asyncio.to_thread(state_backup.guard_after_deploy)
+        for name in restored:
+            print(f"♻️  Восстановлено из снимка: {name}", flush=True)
+        if restored:
+            print("♻️  Настройки вернулись из backups/ — если это нежелательно, "
+                  "нажми /update_save после правок.", flush=True)
+    except Exception as error:
+        print(f"⚠️ Восстановление состояния не удалось: {error}", flush=True)
+
     await init_db()
 
     for cog in COGS:
