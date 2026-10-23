@@ -91,21 +91,41 @@ def em(slot: str) -> str:
     return S["emoji"].get(slot) or EMOJI_SLOTS[slot][0]
 
 
+_EMOJI_MAP: Optional[Dict[str, str]] = None
+_PM_CACHE: Dict[str, str] = {}
+
+
 def pm(name: str, fallback: str = "") -> str:
     """Премиум-эмодзи бота по имени (hz_book, number1, ...).
 
-    Сначала берём живые эмодзи сервера (они всегда актуальны), затем emoji_map.json.
+    Сначала живые эмодзи сервера (всегда актуальны), затем emoji_map.json.
+    Результат кэшируется: один рендер текста делает до 14 подстановок,
+    а чтение файла на каждую — это блокировка event loop.
     """
+    low = (name or "").lower()
+    if low in _PM_CACHE:
+        return _PM_CACHE[low]
+    out = ""
     if _BOT is not None:
-        low = name.lower()
         for e in _BOT.emojis:
-            if e.name.lower() == low:
-                return str(e)
-    try:
-        with open(os.path.join(BASE_DIR, "emoji_map.json"), "r", encoding="utf-8") as f:
-            return json.load(f).get(name) or fallback
-    except Exception:
-        return fallback
+            if e.name and e.name.lower() == low:
+                out = str(e)
+                break
+    if not out:
+        global _EMOJI_MAP
+        if _EMOJI_MAP is None:
+            try:
+                with open(os.path.join(BASE_DIR, "emoji_map.json"), "r", encoding="utf-8") as f:
+                    _EMOJI_MAP = json.load(f)
+            except Exception:
+                _EMOJI_MAP = {}
+        out = _EMOJI_MAP.get(low) or _EMOJI_MAP.get(name) or ""
+    if not out:
+        out = fallback
+    # до готовности бота живых эмодзи не видно — не держим в кэше пустой результат
+    if out or _BOT is not None:
+        _PM_CACHE[low] = out
+    return out
 
 
 def _premium_extras() -> Dict[str, str]:
@@ -139,7 +159,8 @@ def pretty(text: Optional[str]) -> str:
 def note_embed(text: str, kind: Optional[str] = None, title: Optional[str] = None) -> disnake.Embed:
     """Как utils.embeds.note_embed, но значки ❌ ✅ ℹ️ ⚠️ заменены премиум-эмодзи (цвет — по исходному значку)."""
     emb = _note_embed(text, kind, title)
-    emb.description = pretty(emb.description)
+    # note_embed режет по исходным значкам; после замены на эмодзи строка длиннее — держим лимит Discord
+    emb.description = pretty(emb.description)[:4000]
     return emb
 
 
@@ -810,11 +831,21 @@ async def get_thread(guild: disnake.Guild, tid: int):
 
 
 # ───────────── Доступ рекрутеров к приватным веткам заявок ─────────────
-# Приватную ветку Discord показывает только её участникам, поэтому каждого
-# рекрутера надо добавлять в ветку — иначе заявки, поданные до выдачи роли, ему не видны.
+# Приватную ветку Discord показывает только её участникам. Добавлять всех
+# рекрутеров при каждой заявке нельзя: на каждого Discord пишет в ветку
+# неудаляемую строку «бот добавляет X к ветке» — получается стена мусора.
+# Поэтому: один раз выдаём ролям рекрутеров право «Управлять ветками» в канале
+# заявок (role access), а в саму ветку рекрутер попадает, когда нажимает кнопку.
 
 THREAD_PREFIX = "Заявка •"
 MAX_REC_PER_THREAD = 40
+_IN_THREAD: set = set()
+_roles_acc_ts = 0.0
+
+
+def recruiter_role_ids(guild: disnake.Guild) -> list:
+    ids = (set(get_cfg().get("recruiter_role_ids", [])) | set(S["staff_roles"])) - {0}
+    return sorted(ids)
 
 
 def recruiters_of(guild: disnake.Guild) -> list:
@@ -826,12 +857,58 @@ def open_app_threads(guild: disnake.Guild) -> list:
     return [t for t in guild.threads if not t.archived and t.name.startswith(THREAD_PREFIX)]
 
 
+async def ensure_recruiter_role_access(ch: disnake.TextChannel) -> list:
+    """Даёт ролям рекрутеров «Управлять ветками» в канале заявок: с этим правом видно
+    все приватные ветки канала, и не нужен поштучный add_user с системными строками."""
+    missing = []
+    for rid in recruiter_role_ids(ch.guild):
+        role = ch.guild.get_role(rid)
+        if role is None:
+            continue
+        ow = ch.overwrites_for(role)
+        if getattr(ow, "manage_threads", None) is not True:
+            missing.append(role)
+    if not missing:
+        return []
+    fixed = []
+    for role in missing:
+        try:
+            ow = ch.overwrites_for(role)
+            ow.manage_threads = True
+            if ow.view_channel is None:
+                ow.view_channel = True
+            await ch.set_permissions(role, overwrite=ow, reason="Рекрут-центр: доступ ко веткам заявок")
+            fixed.append(role)
+        except Exception as e:
+            print(f"[hall_recruit] не удалось дать {role.name} доступ к веткам: {e!r}", file=sys.stderr, flush=True)
+    return fixed
+
+
+async def ensure_thread_member(thread: disnake.Thread, member: disnake.Member) -> None:
+    """Рекрутер нажал кнопку в ветке — делаем его участником, если ещё нет.
+
+    Один раз на пару (ветка, человек): повторный add_user снова печатал бы
+    системную строку в ветке.
+    """
+    key = (thread.id, member.id)
+    if key in _IN_THREAD:
+        return
+    if len(_IN_THREAD) > 20000:
+        _IN_THREAD.clear()
+    _IN_THREAD.add(key)
+    try:
+        await thread.add_user(member)
+    except Exception:
+        pass
+
+
 async def sync_recruiter_threads(member: disnake.Member) -> int:
     """Докидывает одного рекрутера во все открытые ветки заявок. Возвращает число добавленных."""
     added = 0
     for th in open_app_threads(member.guild):
         try:
             await th.add_user(member)
+            _IN_THREAD.add((th.id, member.id))
             added += 1
         except Exception:
             pass
@@ -1163,6 +1240,20 @@ async def submit_application(inter: disnake.ModalInteraction):
         return await inter.response.send_message(
             embed=note_embed("❌ Канал для заявок не настроен. Администратору: `/hr` → «Каналы и роли»."), ephemeral=True)
 
+    # Рекрутеры должны видеть приватные ветки канала — право «Управлять ветками» на роль.
+    # Делаем это не на каждой заявке, а раз в 10 минут.
+    global _roles_acc_ts
+    now = time.time()
+    if now - _roles_acc_ts > 600:
+        _roles_acc_ts = now
+        try:
+            fixed = await ensure_recruiter_role_access(ch)
+            if fixed:
+                print(f"[hall_recruit] каналу заявок: выдано «Управлять ветками» ролям "
+                      f"{', '.join(r.name for r in fixed)}", flush=True)
+        except Exception as e:
+            print(f"[hall_recruit] доступ к веткам ролям рекрутеров не выдан: {e!r}", file=sys.stderr, flush=True)
+
     await inter.response.defer(ephemeral=True)
     emb = card_embed(nick, inter.author, answers, f"{em('apply')} **Новая заявка**", cfg_color("warning_color", 0xF39C12))
     roles = (set(get_cfg().get("recruiter_role_ids", [])) | set(S["staff_roles"])) - {0}
@@ -1251,6 +1342,8 @@ async def _load_card(inter: disnake.MessageInteraction):
     if not is_staff(inter.author):
         await inter.response.send_message(embed=note_embed("❌ Эти кнопки доступны только рекрутерам."), ephemeral=True)
         return None
+    if isinstance(inter.channel, disnake.Thread):
+        await ensure_thread_member(inter.channel, inter.author)
     app = await db.get_application_by_thread(inter.message.id)   # старые заявки: id сообщения в канале
     if not app and isinstance(inter.channel, disnake.Thread):
         app = await db.get_application_by_thread(inter.channel.id)   # новые заявки: id приватной ветки
@@ -2511,8 +2604,10 @@ class ChannelsView(AdminView):
         await inter.response.edit_message(embed=self.embed(), view=self)
 
     async def pick_roles(self, inter, ids):
+        global _roles_acc_ts
         S["staff_roles"] = ids
         save_settings()
+        _roles_acc_ts = 0.0   # сменили роли — права на ветки надо перевыдать
         await inter.response.edit_message(embed=self.embed(), view=self)
 
 
@@ -2693,6 +2788,7 @@ class HallRecruit(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
+        global _roles_acc_ts
         if not self._views_added:
             self._add_views()
             self._views_added = True
@@ -2700,16 +2796,31 @@ class HallRecruit(commands.Cog):
             await ensure_cdn_assets()
         except Exception as e:
             print(f"[hall_recruit] баннеры на CDN не залиты: {e!r}", file=sys.stderr, flush=True)
+        try:
+            ch = await get_channel(chan_id("review"))
+            if isinstance(ch, disnake.TextChannel):
+                _roles_acc_ts = time.time()
+                await ensure_recruiter_role_access(ch)
+        except Exception as e:
+            print(f"[hall_recruit] доступ рекрутеров к веткам не настроен: {e!r}", file=sys.stderr, flush=True)
 
     @commands.Cog.listener()
     async def on_member_role_update(self, before: disnake.Member, after: disnake.Member):
-        """Только что выдали роль рекрутера: открываем ему уже существующие ветки заявок."""
+        """Только что выдали роль рекрутера.
+
+        Ветки заявок ему открывать не нужно: роль рекрутера уже имеет «Управлять
+        ветками» в канале заявок, а это право показывает все приватные ветки канала.
+        """
         if after.bot or is_staff(before) or not is_staff(after):
             return
+        global _roles_acc_ts
         try:
-            await sync_recruiter_threads(after)
+            ch = await get_channel(chan_id("review"))
+            if isinstance(ch, disnake.TextChannel):
+                _roles_acc_ts = time.time()
+                await ensure_recruiter_role_access(ch)
         except Exception as e:
-            print(f"[hall_recruit] не удалось открыть ветки новому рекрутеру: {e!r}", file=sys.stderr, flush=True)
+            print(f"[hall_recruit] не удалось обновить доступ рекрутера к веткам: {e!r}", file=sys.stderr, flush=True)
 
     # хук: вызывается из database.update_application_status(..., 'accepted', ...)
     async def on_accept(self, app_id: int, reviewer_id: Optional[int]):
@@ -2735,29 +2846,37 @@ class HallRecruit(commands.Cog):
         await inter.response.send_message(embed=dash_embed(), view=DashView(inter.author.id), ephemeral=True)
 
     @commands.slash_command(name="hr_access",
-                            description="Дать всем текущим рекрутерам доступ ко всем открытым веткам заявок")
-    async def hr_access(self, inter: disnake.ApplicationCommandInteraction):
+                            description="Дать рекрутерам доступ ко всем веткам заявок")
+    async def hr_access(self, inter: disnake.ApplicationCommandInteraction,
+                        vruznoyu: bool = commands.Param(
+                            default=False,
+                            description="Поштучно добавить каждого рекрутера в каждую ветку "
+                                        "(в ветках появятся строки «бот добавляет …»)")
+                        ):
         if not is_admin(inter.author):
             return await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
-        recs = recruiters_of(inter.guild)
-        threads = open_app_threads(inter.guild)
-        if not recs:
-            return await inter.followup.send(
-                embed=note_embed("❌ На сервере нет ни одного участника с ролью рекрутера. "
-                                 "Добавь роли в `/hr` → «Каналы и роли» или в config.json."), ephemeral=True)
-        added = 0
-        for th in threads:
+        global _roles_acc_ts
+        lines = []
+        ch = await get_channel(chan_id("review"))
+        if isinstance(ch, disnake.TextChannel):
+            _roles_acc_ts = time.time()
+            fixed = await ensure_recruiter_role_access(ch)
+            lines.append(f"✅ Право «Управлять ветками» в {ch.mention} получили: "
+                         f"{', '.join(r.mention for r in fixed) if fixed else 'всё было выдано'}")
+        else:
+            lines.append("❌ Канал заявок не настроен — `/hr` → «Каналы и роли».")
+        if vruznoyu:
+            recs = recruiters_of(inter.guild)
+            threads = open_app_threads(inter.guild)
+            added = 0
             for rec in recs:
-                try:
-                    await th.add_user(rec)
-                    added += 1
-                except Exception:
-                    pass
-        await inter.followup.send(
-            embed=note_embed(f"✅ Рекрутеров: **{len(recs)}**, открытых веток заявок: **{len(threads)}**, "
-                             f"добавлено в ветки: **{added}**.\n"
-                             "Дальше доступ выдаётся автоматически при выдаче роли."), ephemeral=True)
+                added += await sync_recruiter_threads(rec)
+            lines.append(f"Вручную в ветки добавлено: **{added}** (рекрутеров {len(recs)}, веток {len(threads)}).")
+        else:
+            lines.append("Рекрутеры видят все приватные ветки канала заявок — поштучно добавлять "
+                         "их в ветки не нужно. Нужны именно участники? Запусти с `врузноyu = да`.")
+        await inter.followup.send(embed=note_embed("\n".join(lines)), ephemeral=True)
 
     @commands.slash_command(name="hr_banner", description="Загрузить баннер для панелей (картинка)")
     async def hr_banner(self, inter: disnake.ApplicationCommandInteraction,
