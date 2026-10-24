@@ -44,15 +44,22 @@ DEFAULTS: Dict[str, Any] = {
     "afk_panel_text": (
         "Отошёл на час-другой — не проблема, но остальные должны видеть, что ты не игноришь.\n\n"
         "### :hz_gradientarrowright: Что делает АФК\n"
-        "**:hz_bluetick: Статус** — роль выдаётся сразу после нажатия кнопки\n"
+        "**:hz_bluetick: Срок** — выбираешь в списке, считать можно и свои часы\n"
+        "**:hz_bluetick: Статус** — роль выдаётся сразу, ждать не надо\n"
         "**:hz_bluetick: Таймер** — статус снимается сам, как только выйдет время\n"
-        "**:hz_bluetick: Напоминание** — напишем в личные перед концом\n"
-        "**:hz_bluetick: Возврат** — вернулся раньше? Жми «Прекратить»\n\n"
-        ":hz_info: Долго не на сервере — бери полноценный отпуск: «Подать заявку на отпуск»."
+        "**:hz_bluetick: Возврат** — вернулся раньше? Жми «Прекратить АФК»\n\n"
+        ":hz_info: Долго не на сервере — бери полноценный отпуск в панели семьи."
     ),
     "panel_access_user_ids": [],
     "panel_access_role_ids": [],
 }
+
+# Текст панели до перевода на бренд-пак: кто его не правил — получает новый стандарт.
+LEGACY_AFK_TEXT = (
+    "Если вам нужно ненадолго отойти — нажмите **«Взять АФК»**.\n"
+    "Статус снимется автоматически через заданное время, либо вы можете нажать "
+    "**«Прекратить»**, чтобы вернуться раньше."
+)
 
 
 def _read_raw() -> Dict[str, Any]:
@@ -65,7 +72,10 @@ def _read_raw() -> Dict[str, Any]:
 
 
 def load_settings() -> Dict[str, Any]:
-    return {**DEFAULTS, **_read_raw()}
+    st = {**DEFAULTS, **_read_raw()}
+    if st["afk_panel_text"] == LEGACY_AFK_TEXT:
+        st["afk_panel_text"] = DEFAULTS["afk_panel_text"]
+    return st
 
 
 def update_settings(**changes: Any) -> None:
@@ -240,32 +250,67 @@ def text_input(label: str, cid: str, value: str = "", paragraph: bool = False,
 # ──────────────────────────── Панель АФК (публичная, persistent) ────────────────────────────
 
 class AfkPanelView(disnake.ui.View):
-    # custom_id не менять: под них Discord находит вьюху на уже опубликованных панелях
+    """Панель АФК: срок берётся из списка, действия — две кнопки.
+
+    custom_id не менять: под них Discord находит вьюху на уже опубликованных панелях.
+    """
+
+    # подпись, значение в часах (или custom), подсказка справа, эмодзи пака, заглушка
+    PRESETS = (
+        ("30 минут", "0.5", "отойти по-быстрому", "hz_glowingdotblue", "•"),
+        ("1 час", "1", "вернусь через час", "hz_starblue", "★"),
+        ("2 часа", "2", "небольшая пауза", "hz_blueplanet", "🪐"),
+        ("3 часа", "3", "столько стоит по умолчанию", "hz_booster", "🚀"),
+        ("6 часов", "6", "на весь вечер", "hz_shield", "🛡"),
+        ("Своё время…", "custom", "часы и причина", "hz_pencil", "✏️"),
+    )
     BRAND = {
-        "hallpanel:afk:quick": ("hz_glowingdotblue", "💤"),
-        "hallpanel:afk:custom": ("hz_pencil", "⏱"),
-        "hallpanel:afk:stop": ("hz_verifiedgreen", "✅"),
+        "hallpanel:afk:stop": ("hz_bluetick", "✅"),
         "hallpanel:afk:list": ("hz_bluecrewmate", "👥"),
     }
 
     def __init__(self, bot=None):
         super().__init__(timeout=None)
+        mx = float(load_settings()["afk_max_hours"])
+        self.pick.options = [
+            disnake.SelectOption(label=label, value=value, description=hint,
+                                 emoji=brand.btn_emoji(bot, emote, fallback))
+            for label, value, hint, emote, fallback in self.PRESETS
+            if value == "custom" or float(value) <= mx
+        ]
         brand.paint(bot, self, self.BRAND)
 
     @staticmethod
     def _cog(inter: disnake.MessageInteraction) -> "HallPanel":
         return inter.bot.get_cog("HallPanel")
 
-    @disnake.ui.button(label="Взять АФК", emoji="💤", style=disnake.ButtonStyle.primary,
-                       custom_id="hallpanel:afk:quick", row=0)
-    async def quick(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
+    @disnake.ui.string_select(placeholder="💤 На сколько уходишь?", custom_id="hallpanel:afk:pick",
+                              row=0, options=[disnake.SelectOption(label="30 минут", value="0.5")])
+    async def pick(self, select: disnake.ui.StringSelect, inter: disnake.MessageInteraction):
+        value = select.values[0]
+        if value == "custom":
+            return await self._custom(inter)
         st = load_settings()
-        ok, msg = await self._cog(inter).take_afk(inter.author, float(st["afk_default_hours"]), "")
+        hours = parse_num(value, 0.5, float(st["afk_max_hours"]))
+        if hours is None:
+            return await inter.response.send_message(
+                "❌ Такой срок больше не разрешён — обнови панель.", ephemeral=True)
+        ok, msg = await self._cog(inter).take_afk(inter.author, hours, "")
         await inter.response.send_message(msg, ephemeral=True)
 
-    @disnake.ui.button(label="Своё время", emoji="⏱", style=disnake.ButtonStyle.secondary,
-                       custom_id="hallpanel:afk:custom", row=0)
-    async def custom(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
+    @disnake.ui.button(label="Прекратить АФК", emoji="✅", style=disnake.ButtonStyle.success,
+                       custom_id="hallpanel:afk:stop", row=1)
+    async def stop(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
+        ok, msg = await self._cog(inter).stop_afk(inter.author)
+        await inter.response.send_message(msg, ephemeral=True)
+
+    @disnake.ui.button(label="Кто в АФК", emoji="👥", style=disnake.ButtonStyle.secondary,
+                       custom_id="hallpanel:afk:list", row=1)
+    async def who(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
+        embed = await self._cog(inter).afk_list_embed(inter.guild)
+        await inter.response.send_message(embed=embed, ephemeral=True)
+
+    async def _custom(self, inter: disnake.MessageInteraction):
         st = load_settings()
         cog = self._cog(inter)
 
@@ -282,18 +327,6 @@ class AfkPanelView(disnake.ui.View):
             text_input("На сколько часов?", "hours", f"{float(st['afk_default_hours']):g}", max_length=5),
             text_input("Причина (необязательно)", "reason", max_length=100, required=False),
         ], handler))
-
-    @disnake.ui.button(label="Прекратить", emoji="✅", style=disnake.ButtonStyle.success,
-                       custom_id="hallpanel:afk:stop", row=1)
-    async def stop(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
-        ok, msg = await self._cog(inter).stop_afk(inter.author)
-        await inter.response.send_message(msg, ephemeral=True)
-
-    @disnake.ui.button(label="Кто в АФК", emoji="👥", style=disnake.ButtonStyle.secondary,
-                       custom_id="hallpanel:afk:list", row=1)
-    async def who(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
-        embed = await self._cog(inter).afk_list_embed(inter.guild)
-        await inter.response.send_message(embed=embed, ephemeral=True)
 
 
 # ──────────────────────────── Админ-панель ────────────────────────────
