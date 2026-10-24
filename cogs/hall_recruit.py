@@ -50,11 +50,11 @@ EMOJI_SLOTS = {
     "review": (":hz_info:", "Кнопка «Взять на рассмотрение»"),
     "interview": (":hz_megaphone:", "Кнопка «Вызвать на обзвон»"),
     "accept": (":hz_bluetick:", "Кнопка «Принять»"),
-    "reject": (":hz_forbidden:", "Кнопка «Отказать»"),
-    "points": (":hz_Rainbow_Diamond:", "Баллы"),
-    "referral": (":hz_handshake:", "Приглашение"),
+    "reject": (":hz_joobithumbsdown:", "Кнопка «Отказать»"),
+    "points": (":hz_booster:", "Баллы"),
+    "referral": (":hz_joobithumbsup:", "Приглашение"),
     "shop": (":hz_shoppingcart:", "Магазин"),
-    "top": (":hz_crownicon:", "Топ рекрутов"),
+    "top": (":hz_ownership:", "Топ рекрутов"),
     "gift": (":hz_gifticon:", "Призы"),
     "star": (":hz_starblue:", "Украшения текста"),
 }
@@ -485,10 +485,10 @@ DEFAULTS: Dict[str, Any] = {
         "description": (
             "Мы открываем двери для амбициозных, адекватных и стрессоустойчивых игроков семьи "
             "**Hallez FAMQ** — **Loyalty • Power • Respect**.\n\n"
-            "### :hz_bluetick: Что мы ждём от тебя\n"
+            "### :hz_bluethumbsup: Что мы ждём от тебя\n"
             "**:hz_legit: Адекватность** — дисциплина и уважение к субординации\n"
             "**:hz_info: Микрофон** — и желание бывать на семейных МП\n"
-            "**:hz_ownership: Фамилия Hallez** — после испытательного срока\n\n"
+            "**:hz_bluecheckmark: Фамилия Hallez** — после испытательного срока\n\n"
             "### :hz_starblue: Что даём взамен\n"
             "**:hz_bluecrewmate: Коллектив** — дружный, со старшими за спиной\n"
             "**:hz_booster: Рост** — ранги, награды и призы за активность\n\n"
@@ -754,8 +754,8 @@ XT = {
                         "{e_interview}  Позовите на обзвон или закройте заявку, чтобы она не висела открытой.",
                         "{nick} {static} {thread} {since} {app_id}"),
     "rules_post": ("Правила семьи (пост в канал)",
-                   "*:hz_glowingdotblue:  Уважение*  ✦  *:hz_glowingdotblue:  Порядок*  ✦  "
-                   "*:hz_glowingdotblue:  Развитие*\n\n"
+                   "*:hz_bluestarshiny:  Уважение*  ✦  *:hz_bluestarshiny:  Порядок*  ✦  "
+                   "*:hz_bluestarshiny:  Развитие*\n\n"
                    "### :hz_bluethumbsup:  ОБЩЕНИЕ\n"
                    "> :hz_bluetick:  Уважаем друг друга. Оскорбления, спам и токсичность запрещены\n"
                    "> :hz_bluetick:  Внутренние конфликты решаем не в общем чате\n"
@@ -787,11 +787,11 @@ XT = {
                    "неподчинение командиру, использование семейных ресурсов в личных целях, "
                    "провокации и ссоры\n"
                    "> :hz_animatedarrowred:  **Исключение** — слив информации, читы или багоюз\n\n"
-                   "### :hz_warning:  ГЛАВНОЕ\n"
-                   "> :hz_glowingdotblue:  Будь активным.\n"
-                   "> :hz_glowingdotblue:  Играй честно.\n"
-                   "> :hz_glowingdotblue:  Уважай своих.\n"
-                   "> :hz_glowingdotblue:  Слушай руководство.",
+                   "### :hz_starids:  ГЛАВНОЕ\n"
+                   "> :hz_bluetick:  Будь активным.\n"
+                   "> :hz_bluetick:  Играй честно.\n"
+                   "> :hz_bluetick:  Уважай своих.\n"
+                   "> :hz_bluetick:  Слушай руководство.",
                    ""),
 }
 
@@ -1264,8 +1264,8 @@ STAGE_LABELS = {"new": "Новая", "review": "В работе", "interview": "
 
 
 def stage_line(stage: str) -> str:
-    """Лента этапов заявки: пройденный — синяя галочка и зачёркнутый текст, текущий — пульсирующая
-    точка и жирный, будущие — просто текст. Разделитель — градиентная стрелка из нового пака."""
+    """Лента этапов заявки: пройденный — синяя галочка и зачёркнутый текст, текущий — бегущие
+    стрелки и жирный, будущие — просто текст. Разделитель — градиентная стрелка из нового пака."""
     try:
         cur = STAGE_SEQ.index(stage)
     except ValueError:
@@ -1276,7 +1276,7 @@ def stage_line(stage: str) -> str:
         if i < cur:
             parts.append(f"{em('accept')} ~~{label}~~")
         elif i == cur:
-            parts.append(f"{pm('hz_glowingdotblue')} **{label}**")
+            parts.append(f"{pm('hz_animatedarrowblue')} **{label}**")
         else:
             parts.append(label)
     return f"  {pm('hz_gradientarrowright')}  ".join(parts)

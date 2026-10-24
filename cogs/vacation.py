@@ -126,8 +126,8 @@ class RejectModal(disnake.ui.Modal):
 
 class VacationReviewView(disnake.ui.View):
     BRAND = {
-        "vac:approve": ("hz_verifiedgreen", "✅"),
-        "vac:reject": ("hz_forbidden", "⛔"),
+        "vac:approve": ("hz_partneredsuccess", "✅"),
+        "vac:reject": ("hz_joobithumbsdown", "⛔"),
     }
 
     def __init__(self, bot=None):

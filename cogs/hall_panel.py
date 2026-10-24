@@ -44,10 +44,10 @@ DEFAULTS: Dict[str, Any] = {
     "afk_panel_text": (
         "Отошёл на час-другой — не проблема, но остальные должны видеть, что ты не игноришь.\n\n"
         "### :hz_gradientarrowright: Что делает АФК\n"
-        "**:hz_bluetick: Срок** — выбираешь в списке, считать можно и свои часы\n"
-        "**:hz_bluetick: Статус** — роль выдаётся сразу, ждать не надо\n"
-        "**:hz_bluetick: Таймер** — статус снимается сам, как только выйдет время\n"
-        "**:hz_bluetick: Возврат** — вернулся раньше? Жми «Прекратить АФК»\n\n"
+        "**:hz_bluecheckmark: Срок** — выбираешь в списке, считать можно и свои часы\n"
+        "**:hz_bluecheckmark: Статус** — роль выдаётся сразу, ждать не надо\n"
+        "**:hz_bluecheckmark: Таймер** — статус снимается сам, как только выйдет время\n"
+        "**:hz_bluecheckmark: Возврат** — вернулся раньше? Жми «Прекратить АФК»\n\n"
         ":hz_info: Долго не на сервере — бери полноценный отпуск в панели семьи."
     ),
     "panel_access_user_ids": [],
@@ -917,10 +917,10 @@ class HallPanel(commands.Cog):
             return False, "❌ Сначала выберите канал для АФК-панели."
 
         desc = st["afk_panel_text"]
-        desc += f"\n\n:hz_info: По умолчанию — **:hz_glowingdotblue: {fmt_hours(st['afk_default_hours'])}**."
+        desc += f"\n\n:hz_info: По умолчанию — **:hz_bluestarshiny: {fmt_hours(st['afk_default_hours'])}**."
         if st["afk_role_id"]:
             desc += f"\n:hz_bluecrewmate: Статус даёт роль <@&{st['afk_role_id']}> и снимает её сам."
-        embed = base_embed(brand.E(self.bot, ":hz_glowingdotblue: АФК-статус"),
+        embed = base_embed(brand.E(self.bot, ":hz_joobithink: АФК-статус"),
                            brand.E(self.bot, desc))
         view = AfkPanelView(self.bot)
 
