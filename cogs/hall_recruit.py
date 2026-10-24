@@ -45,18 +45,18 @@ CDN_ASSETS = (BANNER_ASSET, INTERVIEW_ASSET, RULES_BANNER_ASSET)
 # ───────────────────────────── ЭМОДЗИ ─────────────────────────────
 
 EMOJI_SLOTS = {
-    "crown": ("👑", "Корона / заголовки"),
-    "apply": ("📝", "Кнопка «Подать заявку»"),
-    "review": ("🔎", "Кнопка «Взять на рассмотрение»"),
-    "interview": ("🎙️", "Кнопка «Вызвать на обзвон»"),
-    "accept": ("✅", "Кнопка «Принять»"),
-    "reject": ("❌", "Кнопка «Отказать»"),
-    "points": ("💎", "Баллы"),
-    "referral": ("🤝", "Приглашение"),
-    "shop": ("🛒", "Магазин"),
-    "top": ("🏆", "Топ рекрутов"),
-    "gift": ("🎁", "Призы"),
-    "star": ("✨", "Украшения текста"),
+    "crown": (":hz_bluestaffbadge:", "Значок / заголовки"),
+    "apply": (":hz_ticketicon:", "Кнопка «Подать заявку»"),
+    "review": (":hz_info:", "Кнопка «Взять на рассмотрение»"),
+    "interview": (":hz_megaphone:", "Кнопка «Вызвать на обзвон»"),
+    "accept": (":hz_bluetick:", "Кнопка «Принять»"),
+    "reject": (":hz_forbidden:", "Кнопка «Отказать»"),
+    "points": (":hz_Rainbow_Diamond:", "Баллы"),
+    "referral": (":hz_handshake:", "Приглашение"),
+    "shop": (":hz_shoppingcart:", "Магазин"),
+    "top": (":hz_crownicon:", "Топ рекрутов"),
+    "gift": (":hz_gifticon:", "Призы"),
+    "star": (":hz_starblue:", "Украшения текста"),
 }
 
 _BOT: Optional[commands.Bot] = None
@@ -90,7 +90,9 @@ def pe(s: Optional[str]):
 
 
 def em(slot: str) -> str:
-    return S["emoji"].get(slot) or EMOJI_SLOTS[slot][0]
+    """Эмодзи слота уже подставленный: стандарт хранится токеном `:имя:`, а не id — id меняются
+    при каждой перезагрузке пака, а имя остаётся."""
+    return E(S["emoji"].get(slot) or EMOJI_SLOTS[slot][0])
 
 
 _EMOJI_MAP: Optional[Dict[str, str]] = None
@@ -803,10 +805,10 @@ def X(key: str, **kw) -> str:
 
 
 def default_steps() -> str:
-    return (":red_crown: Как проходит набор\n"
-            ":number1: **Нажми кнопку** и заполни анкету — это пара минут\n"
-            ":number2: **Рекрутер** возьмёт заявку в работу и позовёт на обзвон\n"
-            ":number3: **После обзвона** — решение, роль и приветствие в ЛС")
+    return (":hz_bluestaffbadge: Как проходит набор\n"
+            ":hz_ticketicon: **Нажми кнопку** и заполни анкету — это пара минут\n"
+            ":hz_bluemoderator: **Рекрутер** возьмёт заявку в работу и позовёт на обзвон\n"
+            ":hz_bluetick: **После обзвона** — решение, роль и приветствие в ЛС")
 
 
 def steps_block():
@@ -1262,8 +1264,8 @@ STAGE_LABELS = {"new": "Новая", "review": "В работе", "interview": "
 
 
 def stage_line(stage: str) -> str:
-    """Лента этапов заявки в одном стиле: пройденный этап — зелёная галочка и зачёркнутый текст,
-    текущий — анимированная цифра и жирный текст, будущие — просто цифра."""
+    """Лента этапов заявки: пройденный — синяя галочка и зачёркнутый текст, текущий — пульсирующая
+    точка и жирный, будущие — просто текст. Разделитель — градиентная стрелка из нового пака."""
     try:
         cur = STAGE_SEQ.index(stage)
     except ValueError:
@@ -1274,10 +1276,10 @@ def stage_line(stage: str) -> str:
         if i < cur:
             parts.append(f"{em('accept')} ~~{label}~~")
         elif i == cur:
-            parts.append(f"{pm(f'number{i + 1}')} **{label}**")
+            parts.append(f"{pm('hz_glowingdotblue')} **{label}**")
         else:
-            parts.append(f"{pm(f'number{i + 1}')} {label}")
-    return "  ›  ".join(parts)
+            parts.append(label)
+    return f"  {pm('hz_gradientarrowright')}  ".join(parts)
 
 
 def card_desc(user_mention: str, status: str, stage: str) -> str:
@@ -1285,7 +1287,7 @@ def card_desc(user_mention: str, status: str, stage: str) -> str:
 
 
 def recruiter_field() -> str:
-    return f"{em('review')} Рекрутер"
+    return f"{pm('hz_bluemoderator', em('review'))} Рекрутер"
 
 
 def card_embed(app_nick: str, user: disnake.abc.User, answers: List[Dict[str, str]], status: str, color: int,
