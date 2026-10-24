@@ -61,7 +61,7 @@ class VacationPanelView(disnake.ui.View):
         super().__init__(timeout=None)
         brand.paint(bot, self, self.BRAND)
 
-    @disnake.ui.button(label="Подать заявку на отпуск", emoji="🌴",
+    @disnake.ui.button(label="Подать заявку", emoji="🌴",
                        style=disnake.ButtonStyle.primary, custom_id="vac:apply", row=0)
     async def apply(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if core.rank_roles_map() and any(core.rank_roles_map().values()) and core.member_rank(inter.author) < 1:
@@ -94,8 +94,8 @@ class VacationPanelView(disnake.ui.View):
             text += f"\n**Причина отказа:** {row['reject_reason']}"
         await inter.response.send_message(embed=note_embed(text), ephemeral=True)
 
-    @disnake.ui.button(label="Вернуться из отпуска", emoji="🔙",
-                       style=disnake.ButtonStyle.success, custom_id="vac:return", row=1)
+    @disnake.ui.button(label="Вернуться", emoji="🔙",
+                       style=disnake.ButtonStyle.success, custom_id="vac:return", row=0)
     async def back(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         cog: "Vacation" = inter.bot.get_cog("Vacation")
         row = await core.q_one(
@@ -216,12 +216,12 @@ class Vacation(commands.Cog):
             "Отойти на пару дней — нормально. Пока ты в отпуске, с тебя снимаются "
             "**проверки активности и взносы**, а " + role + " выдаётся и снимается автоматически.\n\n"
             "### :hz_gradientarrowright: Как это работает\n"
-            "**:hz_bluetick: Заявка** — нажми «Подать заявку на отпуск», укажи срок "
+            "**:hz_bluetick: Заявка** — нажми «Подать заявку», укажи срок "
             f"({lo}–{hi} дн.) и причину\n"
             "**:hz_bluetick: Решение** — руководство рассмотрит и напишет в личные\n"
             "**:hz_bluetick: Отдых** — " + role + " выдаётся сразу после одобрения\n"
             "**:hz_bluetick: Возвращение** — снимется сама в срок, раньше — кнопкой "
-            "«Вернуться из отпуска»\n\n"
+            "«Вернуться»\n\n"
             ":hz_info: Статус своей заявки — кнопка «Мой отпуск»."
         )
         return core.make_embed(brand.E(self.bot, ":hz_blueplanet: ОТПУСК В СЕМЬЕ"),
