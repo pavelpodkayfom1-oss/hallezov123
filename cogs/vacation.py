@@ -10,6 +10,7 @@ from typing import Dict, Optional, Tuple
 import disnake
 from disnake.ext import commands, tasks
 
+from utils import brand
 from utils import famq_core as core
 from utils.embeds import note_embed
 from utils.famq_core import WarnGuardBlocked
@@ -49,11 +50,19 @@ class VacationModal(disnake.ui.Modal):
 # ───────────────────────── ПАНЕЛЬ (постоянная) ─────────────────────────
 
 class VacationPanelView(disnake.ui.View):
-    def __init__(self):
+    # custom_id не менять: под них Discord находит вьюху на уже опубликованных панелях
+    BRAND = {
+        "vac:apply": ("hz_ticketicon", "🌴"),
+        "vac:status": ("hz_info", "📋"),
+        "vac:return": ("hz_gradientarrowright", "🔙"),
+    }
+
+    def __init__(self, bot=None):
         super().__init__(timeout=None)
+        brand.paint(bot, self, self.BRAND)
 
     @disnake.ui.button(label="Подать заявку на отпуск", emoji="🌴",
-                       style=disnake.ButtonStyle.green, custom_id="vac:apply")
+                       style=disnake.ButtonStyle.primary, custom_id="vac:apply", row=0)
     async def apply(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if core.rank_roles_map() and any(core.rank_roles_map().values()) and core.member_rank(inter.author) < 1:
             return await inter.response.send_message(embed=note_embed("❌ Отпуск доступен только участникам семьи."), ephemeral=True)
@@ -69,7 +78,7 @@ class VacationPanelView(disnake.ui.View):
         await inter.response.send_modal(VacationModal())
 
     @disnake.ui.button(label="Мой отпуск", emoji="📋",
-                       style=disnake.ButtonStyle.secondary, custom_id="vac:status")
+                       style=disnake.ButtonStyle.secondary, custom_id="vac:status", row=0)
     async def status(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         row = await core.q_one(
             "SELECT * FROM vacations WHERE user_id=? AND guild_id=? ORDER BY id DESC LIMIT 1",
@@ -86,7 +95,7 @@ class VacationPanelView(disnake.ui.View):
         await inter.response.send_message(embed=note_embed(text), ephemeral=True)
 
     @disnake.ui.button(label="Вернуться из отпуска", emoji="🔙",
-                       style=disnake.ButtonStyle.danger, custom_id="vac:return")
+                       style=disnake.ButtonStyle.success, custom_id="vac:return", row=1)
     async def back(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         cog: "Vacation" = inter.bot.get_cog("Vacation")
         row = await core.q_one(
@@ -116,10 +125,16 @@ class RejectModal(disnake.ui.Modal):
 
 
 class VacationReviewView(disnake.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
+    BRAND = {
+        "vac:approve": ("hz_verifiedgreen", "✅"),
+        "vac:reject": ("hz_forbidden", "⛔"),
+    }
 
-    @disnake.ui.button(label="Одобрить", emoji="✅", style=disnake.ButtonStyle.green, custom_id="vac:approve")
+    def __init__(self, bot=None):
+        super().__init__(timeout=None)
+        brand.paint(bot, self, self.BRAND)
+
+    @disnake.ui.button(label="Одобрить", emoji="✅", style=disnake.ButtonStyle.success, custom_id="vac:approve")
     async def approve(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         if not core.is_staff(inter.author):
             return await inter.response.send_message(embed=note_embed("❌ У вас нет прав рассматривать заявки."), ephemeral=True)
@@ -183,8 +198,8 @@ class Vacation(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         if not self._views_added:
-            self.bot.add_view(VacationPanelView())
-            self.bot.add_view(VacationReviewView())
+            self.bot.add_view(VacationPanelView(self.bot))
+            self.bot.add_view(VacationReviewView(self.bot))
             self._views_added = True
         if not self.expiry_loop.is_running():
             self.expiry_loop.start()
@@ -194,17 +209,23 @@ class Vacation(commands.Cog):
     def panel_embed(self) -> disnake.Embed:
         lo = core.get("vacation.min_days", 1)
         hi = core.get("vacation.max_days", 30)
-        e = core.make_embed(
-            "🌴 Отпуск в семье",
-            "Нужно ненадолго отойти от игры? Подайте заявку — руководство рассмотрит её, "
-            "а при одобрении вам автоматически выдастся роль отпуска и снимется по окончании срока.\n\n"
-            f"**Как это работает:**\n"
-            f"1️⃣ Нажмите **«Подать заявку на отпуск»**\n"
-            f"2️⃣ Укажите срок ({lo}–{hi} дн.) и причину\n"
-            f"3️⃣ Дождитесь решения руководства — придёт сообщение в личные\n"
-            f"4️⃣ Вернуться раньше можно кнопкой **«Вернуться из отпуска»**\n\n"
-            "На время отпуска вы освобождены от проверок активности и взносов.")
-        return e
+        role_id = int(core.get("vacation.role_id", 0) or 0)
+        role = f"роль <@&{role_id}>" if role_id else "роль отпуска"
+        desc = (
+            "### :hz_blueplanet: Отдых без последствий\n"
+            "Отойти на пару дней — нормально. Пока ты в отпуске, с тебя снимаются "
+            "**проверки активности и взносы**, а " + role + " выдаётся и снимается автоматически.\n\n"
+            "### :hz_gradientarrowright: Как это работает\n"
+            "**:hz_bluetick: Заявка** — нажми «Подать заявку на отпуск», укажи срок "
+            f"({lo}–{hi} дн.) и причину\n"
+            "**:hz_bluetick: Решение** — руководство рассмотрит и напишет в личные\n"
+            "**:hz_bluetick: Отдых** — " + role + " выдаётся сразу после одобрения\n"
+            "**:hz_bluetick: Возвращение** — снимется сама в срок, раньше — кнопкой "
+            "«Вернуться из отпуска»\n\n"
+            ":hz_info: Статус своей заявки — кнопка «Мой отпуск»."
+        )
+        return core.make_embed(brand.E(self.bot, ":hz_blueplanet: ОТПУСК В СЕМЬЕ"),
+                               brand.E(self.bot, desc))
 
     async def publish_panel(self, guild: disnake.Guild) -> str:
         cid = int(core.get("vacation.panel_channel_id", 0) or 0)
@@ -215,12 +236,12 @@ class Vacation(commands.Cog):
         if mid:
             try:
                 msg = await channel.fetch_message(mid)
-                await msg.edit(embed=self.panel_embed(), view=VacationPanelView())
+                await msg.edit(embed=self.panel_embed(), view=VacationPanelView(self.bot))
                 return f"✅ Панель обновлена: {msg.jump_url}"
             except Exception:
                 pass
         try:
-            msg = await channel.send(embed=self.panel_embed(), view=VacationPanelView())
+            msg = await channel.send(embed=self.panel_embed(), view=VacationPanelView(self.bot))
         except Exception as e:
             return f"❌ Не удалось отправить сообщение: {e}"
         core.set_value("vacation.panel_message_id", msg.id)
@@ -260,7 +281,7 @@ class Vacation(commands.Cog):
 
         ping = " ".join(f"<@&{r}>" for r in core.ids_list("vacation.reviewer_roles"))
         try:
-            msg = await channel.send(content=ping or None, embed=e, view=VacationReviewView(),
+            msg = await channel.send(content=ping or None, embed=e, view=VacationReviewView(self.bot),
                                      allowed_mentions=disnake.AllowedMentions(roles=True))
         except Exception as ex:
             await core.q_exec("DELETE FROM vacations WHERE id=?", (vid,))

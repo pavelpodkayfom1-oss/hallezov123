@@ -481,16 +481,16 @@ DEFAULTS: Dict[str, Any] = {
     "design": {
         "title": "⚜️ НАБОР В HALLEZ FAMQ",
         "description": (
-            "Мы открываем двери для амбициозных, адекватных и стрессоустойчивых игроков семьи **Hallez FAMQ** — "
-            "**Loyalty • Power • Respect**.\n\n"
-            ":star: **Что мы ждём от тебя**\n"
-            "> • Адекватность, дисциплина, уважение к субординации\n"
-            "> • Микрофон и желание бывать на семейных МП\n"
-            "> • Смена фамилии на **Hallez** после испытательного срока\n\n"
-            ":gift: **Что даём взамен**\n"
-            "> • Дружный коллектив и поддержку старших\n"
-            "> • Рост по рангам, награды и призы за активность\n\n"
-            "👇 Нажми кнопку ниже и заполни анкету — это займёт пару минут."
+            "Мы открываем двери для амбициозных, адекватных и стрессоустойчивых игроков семьи "
+            "**Hallez FAMQ** — **Loyalty • Power • Respect**.\n\n"
+            "### :hz_bluetick: Что мы ждём от тебя\n"
+            "**:hz_legit: Адекватность** — дисциплина и уважение к субординации\n"
+            "**:hz_info: Микрофон** — и желание бывать на семейных МП\n"
+            "**:hz_ownership: Фамилия Hallez** — после испытательного срока\n\n"
+            "### :hz_starblue: Что даём взамен\n"
+            "**:hz_bluecrewmate: Коллектив** — дружный, со старшими за спиной\n"
+            "**:hz_booster: Рост** — ранги, награды и призы за активность\n\n"
+            ":hz_gradientarrowright: Жми кнопку ниже и заполни анкету — это займёт пару минут."
         ),
         "color": "0x990000",
         "footer": "Majestic RP • Hallez FAMQ",
@@ -803,10 +803,10 @@ def X(key: str, **kw) -> str:
 
 
 def default_steps() -> str:
-    return (f"{em('crown')} Как проходит набор\n"
-            "**1.** Нажмите кнопку и заполните анкету\n"
-            "**2.** Рекрутер возьмёт заявку и вызовет на обзвон\n"
-            "**3.** После обзвона — решение, роли и приветствие в ЛС")
+    return (":red_crown: Как проходит набор\n"
+            ":number1: **Нажми кнопку** и заполни анкету — это пара минут\n"
+            ":number2: **Рекрутер** возьмёт заявку в работу и позовёт на обзвон\n"
+            ":number3: **После обзвона** — решение, роль и приветствие в ЛС")
 
 
 def steps_block():
@@ -2475,21 +2475,34 @@ class DesignModal(disnake.ui.Modal):
         d = S["design"]
         T_ = disnake.ui.TextInput
         super().__init__(title="Оформление панели заявки", custom_id="hr:design", components=[
-            T_(label="Заголовок", custom_id="title", value=d["title"], max_length=200),
-            T_(label="Текст (можно :эмодзи:, **жирный**)", custom_id="description", value=d["description"],
-               style=disnake.TextInputStyle.paragraph, max_length=3500),
+            T_(label="Заголовок («сброс» = стандарт)", custom_id="title", value=d["title"], max_length=200),
+            T_(label="Текст: :эмодзи:, **жирный**, «сброс» = стандарт", custom_id="description",
+               value=d["description"], style=disnake.TextInputStyle.paragraph, max_length=3500),
             T_(label="Подпись внизу", custom_id="footer", value=d["footer"], max_length=100),
             T_(label="Цвет (HEX, например 990000)", custom_id="color", value=str(d["color"]).replace("0x", ""), max_length=8),
             T_(label="Шаги набора (1-я строка — заголовок)", custom_id="steps",
                value=(d.get("steps") if d.get("steps") is not None else default_steps())[:1000] or "-",
                style=disnake.TextInputStyle.paragraph, required=False, max_length=1000,
-               placeholder="«-» чтобы убрать блок"),
+               placeholder="«-» чтобы убрать блок, «сброс» — вернуть стандарт"),
         ])
 
     async def callback(self, inter: disnake.ModalInteraction):
-        v = inter.text_values
-        S["design"].update({"title": v["title"].strip(), "description": v["description"].strip(),
-                            "footer": v["footer"].strip(), "steps": (v["steps"].strip() or "-"), "color": "0x" + v["color"].strip().replace("#", "").replace("0x", "")})
+        v = {k: (x or "").strip() for k, x in inter.text_values.items()}
+
+        def val(key: str, standard: str) -> str:
+            # «сброс» в любом поле: текст правится на сервере, и перепечатывать его ради
+            # возврата стандартного никто не будет
+            raw = v.get(key, "")
+            return standard if raw.lower() in ("сброс", "reset") else raw
+
+        d = DEFAULTS["design"]
+        S["design"].update({
+            "title": val("title", d["title"]),
+            "description": val("description", d["description"]),
+            "footer": val("footer", d["footer"]),
+            "steps": val("steps", default_steps()) or "-",
+            "color": "0x" + val("color", str(d["color"])).replace("#", "").replace("0x", ""),
+        })
         save_settings()
         await _refresh(inter, dash_embed(), DashView(inter.author.id))
         await inter.followup.send(embed=note_embed("✅ Оформление сохранено. Нажмите «Опубликовать», чтобы обновить панель в канале."), ephemeral=True)

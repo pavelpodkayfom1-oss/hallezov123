@@ -17,6 +17,7 @@ import disnake
 from disnake.ext import commands, tasks
 
 from database import DB_PATH, get_stats
+from utils import brand
 from utils.checks import load_config
 
 # ──────────────────────────── Настройки ────────────────────────────
@@ -41,9 +42,13 @@ DEFAULTS: Dict[str, Any] = {
     "afk_panel_channel_id": 0,
     "afk_panel_message_id": 0,
     "afk_panel_text": (
-        "Если вам нужно ненадолго отойти — нажмите **«Взять АФК»**.\n"
-        "Статус снимется автоматически через заданное время, либо вы можете нажать "
-        "**«Прекратить»**, чтобы вернуться раньше."
+        "Отошёл на час-другой — не проблема, но остальные должны видеть, что ты не игноришь.\n\n"
+        "### :hz_gradientarrowright: Что делает АФК\n"
+        "**:hz_bluetick: Статус** — роль выдаётся сразу после нажатия кнопки\n"
+        "**:hz_bluetick: Таймер** — статус снимается сам, как только выйдет время\n"
+        "**:hz_bluetick: Напоминание** — напишем в личные перед концом\n"
+        "**:hz_bluetick: Возврат** — вернулся раньше? Жми «Прекратить»\n\n"
+        ":hz_info: Долго не на сервере — бери полноценный отпуск: «Подать заявку на отпуск»."
     ),
     "panel_access_user_ids": [],
     "panel_access_role_ids": [],
@@ -235,22 +240,31 @@ def text_input(label: str, cid: str, value: str = "", paragraph: bool = False,
 # ──────────────────────────── Панель АФК (публичная, persistent) ────────────────────────────
 
 class AfkPanelView(disnake.ui.View):
-    def __init__(self):
+    # custom_id не менять: под них Discord находит вьюху на уже опубликованных панелях
+    BRAND = {
+        "hallpanel:afk:quick": ("hz_glowingdotblue", "💤"),
+        "hallpanel:afk:custom": ("hz_pencil", "⏱"),
+        "hallpanel:afk:stop": ("hz_verifiedgreen", "✅"),
+        "hallpanel:afk:list": ("hz_bluecrewmate", "👥"),
+    }
+
+    def __init__(self, bot=None):
         super().__init__(timeout=None)
+        brand.paint(bot, self, self.BRAND)
 
     @staticmethod
     def _cog(inter: disnake.MessageInteraction) -> "HallPanel":
         return inter.bot.get_cog("HallPanel")
 
     @disnake.ui.button(label="Взять АФК", emoji="💤", style=disnake.ButtonStyle.primary,
-                       custom_id="hallpanel:afk:quick")
+                       custom_id="hallpanel:afk:quick", row=0)
     async def quick(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         st = load_settings()
         ok, msg = await self._cog(inter).take_afk(inter.author, float(st["afk_default_hours"]), "")
         await inter.response.send_message(msg, ephemeral=True)
 
-    @disnake.ui.button(label="Указать время / причину", emoji="⏱", style=disnake.ButtonStyle.secondary,
-                       custom_id="hallpanel:afk:custom")
+    @disnake.ui.button(label="Своё время", emoji="⏱", style=disnake.ButtonStyle.secondary,
+                       custom_id="hallpanel:afk:custom", row=0)
     async def custom(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         st = load_settings()
         cog = self._cog(inter)
@@ -270,13 +284,13 @@ class AfkPanelView(disnake.ui.View):
         ], handler))
 
     @disnake.ui.button(label="Прекратить", emoji="✅", style=disnake.ButtonStyle.success,
-                       custom_id="hallpanel:afk:stop")
+                       custom_id="hallpanel:afk:stop", row=1)
     async def stop(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         ok, msg = await self._cog(inter).stop_afk(inter.author)
         await inter.response.send_message(msg, ephemeral=True)
 
     @disnake.ui.button(label="Кто в АФК", emoji="👥", style=disnake.ButtonStyle.secondary,
-                       custom_id="hallpanel:afk:list")
+                       custom_id="hallpanel:afk:list", row=1)
     async def who(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         embed = await self._cog(inter).afk_list_embed(inter.guild)
         await inter.response.send_message(embed=embed, ephemeral=True)
@@ -634,7 +648,7 @@ class HallPanel(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         if not self._views_ready:
-            self.bot.add_view(AfkPanelView())
+            self.bot.add_view(AfkPanelView(self.bot))
             self._views_ready = True
 
     # ── команда ──
@@ -870,11 +884,12 @@ class HallPanel(commands.Cog):
             return False, "❌ Сначала выберите канал для АФК-панели."
 
         desc = st["afk_panel_text"]
-        desc += f"\n\n⏱ По умолчанию: **{fmt_hours(st['afk_default_hours'])}**"
+        desc += f"\n\n:hz_info: По умолчанию — **:hz_glowingdotblue: {fmt_hours(st['afk_default_hours'])}**."
         if st["afk_role_id"]:
-            desc += f" • Роль <@&{st['afk_role_id']}> выдаётся автоматически и снимается по окончании."
-        embed = base_embed("💤 АФК-панель", desc)
-        view = AfkPanelView()
+            desc += f"\n:hz_bluecrewmate: Статус даёт роль <@&{st['afk_role_id']}> и снимает её сам."
+        embed = base_embed(brand.E(self.bot, ":hz_glowingdotblue: АФК-статус"),
+                           brand.E(self.bot, desc))
+        view = AfkPanelView(self.bot)
 
         mid = int(st["afk_panel_message_id"] or 0)
         if mid:
