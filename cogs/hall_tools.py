@@ -33,9 +33,15 @@ from utils.roster_card import render_roster
 
 ROSTER_ROWS_PER_ROLE = 12       # строк одной роли в постере
 ROSTER_ROWS = 12                # строк списка в одном поле эмбеда
-ROSTER_CROWN = "hz_ownership"   # корона в заголовке состава
-ROSTER_STAR = "hz_starblue"     # скромная метка участника в списке
-ROSTER_INFO = "hz_info"
+# значок должности по старшинству: берём первый, который реально есть на сервере
+ROSTER_TIER = (
+    ("hz_crownicon", "hz_ownership", "hz_bluestaffbadge"),
+    ("hz_starids", "hz_starblue", "hz_verifiedblue"),
+    ("hz_gradientarrowright", "hz_glowingdotblue", "hz_membericon"),
+)
+ROSTER_DOT = ("hz_glowingdotblue", "hz_bluetick", "hz_verifiedblue")   # метка участника
+# должность, где участников не больше, встаёт в колонки — так список похож на лестницу, а не на лог
+ROSTER_INLINE_MAX = 4
 ROSTER_MAX_SECTIONS = 14        # секций в постере (картинка не должна расти бесконечно)
 ROSTER_MAX_ROLES = 40           # сколько ролей авто-список может показать
 ROSTER_MAX_POSTER_ROWS = 45     # всего строк с аватарами в постере — ограничение на высоту и память
@@ -900,10 +906,6 @@ class HallTools(commands.Cog):
         self.roster_loop.start()
         self.afk_loop.start()
 
-    def E(self, text: str) -> str:
-        """Токены бренд-пака (`:hz_starblue:`) → живые эмодзи сервера; незнакомые тихо исчезают."""
-        return brand.E(self.bot, text)
-
     def cog_unload(self):
         self.reminder_loop.cancel()
         self.leave_loop.cancel()
@@ -1157,6 +1159,32 @@ class HallTools(commands.Cog):
             embed=panel_embed(inter.guild), view=HallPanel(inter.author.id), ephemeral=True
         )
 
+    # ── Аудит эмодзи ──
+    @commands.slash_command(name="hz_emojis", description="Какие эмодзи пака видит бот на этом сервере",
+                            dm_permission=False)
+    async def hz_emojis(self, inter: disnake.ApplicationCommandInteraction):
+        """Служебная проверка стиля: id эмодзи меняются при каждой загрузке пака, а имя, которого
+        на сервере нет, молча исчезает из текста. Здесь видно, какими знаками можно пользоваться.
+        """
+        if not is_admin(inter.author):
+            return await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
+        pack = sorted((e for e in inter.guild.emojis if e.name and e.name.lower().startswith("hz_")),
+                      key=lambda e: e.name.lower())
+        lines = [f"{e} `{e.name}`" + (" · GIF" if e.animated else "") for e in pack]
+        pages, cur = [], ""
+        for line in lines or ["на сервере нет эмодзи с префиксом `hz_`"]:
+            if len(cur) + len(line) + 1 > 1900:
+                pages.append(cur)
+                cur = ""
+            cur += line + "\n"
+        if cur:
+            pages.append(cur)
+        await inter.response.send_message(
+            f"**Эмодзи пака на сервере: {len(pack)}**\n{pages[0] if pages else ''}", ephemeral=True
+        )
+        for page in pages[1:]:
+            await inter.followup.send(page, ephemeral=True)
+
     # ── Состав ──
     def roster_sections(self, guild: disnake.Guild, s) -> List[Tuple[str, List[disnake.Member]]]:
         """Роли по порядку; участник показывается только в первой из его ролей."""
@@ -1241,34 +1269,46 @@ class HallTools(commands.Cog):
         )
 
     def build_roster_embed(self, sections) -> disnake.Embed:
-        """Состав текстом: одна должность = своё поле, участники — строки со скромной звездой.
+        """Состав текстом: лестница должностей, у каждой должности свой знак по старшинству.
 
-        Одной простынёй список быть не может: роль не отделена от роли, а перенос режет её
-        посередине. Поэтому режем по должностям, не более ROSTER_ROWS строк в поле.
+        Простынёй список быть не может: роль не отделена от роли, а перенос режет её
+        посередине. Поэтому одна должность = одно поле, не более ROSTER_ROWS строк в поле,
+        а должности, где людей мало, встают в колонки. Старшинство читается по знаку
+        заголовка (корона → звезда → стрелка), участник помечен скромной точкой; в подвале
+        — легенда этих знаков. Знаки берём только те, что реально есть на сервере: если
+        эмодзи нет, его аналог, а сырой токен текстом показывать нельзя.
         """
         name = load_config().get("bot_name", "Hall FAMQ")
         total = len({m.id for _, ms in sections for m in ms})
+        crown, star, arrow = (brand.pick(self.bot, *tier) for tier in ROSTER_TIER)
+        dot = brand.pick(self.bot, *ROSTER_DOT)
+        legend = "\n".join(f"{mark} {what}" for mark, what in
+                           ((crown, "старшие"), (star, "костяк"), (arrow, "состав"), (dot, "участник"))
+                           if mark)
+        desc = f"Всего: **{total}**  ·  от старших к младшим  ·  обновляется само"
         e = make_embed(
-            self.E(f":{ROSTER_CROWN}: Состав семьи {name}"),
-            self.E(f"Всего: **{total}**  ·  от старших к младшим  ·  обновляется само"),
+            f"{crown} Состав семьи {name}".strip(),
+            f"{desc}\n{legend}" if legend else desc,
         )
-        star = self.E(f":{ROSTER_STAR}:")
         spent, dropped = 0, False
-        for title, members in sections:
-            lines = [f"{star} {m.mention}".strip() for m in members] or [f"{star} пока никого".strip()]
-            for start in range(0, len(lines), ROSTER_ROWS):
-                chunk = "\n".join(lines[start:start + ROSTER_ROWS])
-                label = f"{title} · {len(members)}" if start == 0 else f"{title} · продолжение"
+        for rank, (title, members) in enumerate(sections):
+            tier = (crown, star, arrow)[0 if rank == 0 else (1 if rank < 4 else 2)]
+            lines = [f"{dot} {m.mention}".strip() for m in members] or [f"{dot} пока никого".strip()]
+            slim = len(members) <= ROSTER_INLINE_MAX
+            rows = ROSTER_INLINE_MAX if slim else ROSTER_ROWS
+            for start in range(0, len(lines), rows):
+                chunk = "\n".join(lines[start:start + rows])
+                label = f"{tier} {title} · {len(members)}".strip() if start == 0 \
+                    else f"{title} · продолжение"
                 if len(label) > 256 or len(chunk) > 1024 or spent + len(chunk) > 5600 or len(e.fields) >= 25:
                     dropped = True
                     break
                 spent += len(chunk) + len(label)
-                e.add_field(name=label, value=chunk, inline=False)
+                e.add_field(name=label, value=chunk, inline=slim)
             if dropped:
                 break
         if dropped and len(e.fields) < 25:
-            e.add_field(name="…", inline=False, value=self.E(
-                f":{ROSTER_INFO}: часть списка не влезла — смотри картинку и список ролей сервера"))
+            e.add_field(name="…", inline=False, value=f"{brand.pick(self.bot, 'hz_info')} часть списка не влезла — смотри картинку и список ролей сервера".strip())
         return e
 
     async def update_roster(self, guild: disnake.Guild, force: bool = False) -> bool:

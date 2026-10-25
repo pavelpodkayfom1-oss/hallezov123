@@ -27,7 +27,7 @@ import disnake
 from disnake.ext import commands, tasks
 
 import database as db
-from utils import cdn_assets, state_backup
+from utils import brand, cdn_assets, state_backup
 from utils.embeds import note_embed as _note_embed
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -65,7 +65,12 @@ _CUSTOM_RE = re.compile(r"^<a?:\w{2,32}:\d+>$")
 
 
 def E(text: Optional[str]) -> str:
-    """Заменяет :имя: на эмодзи сервера (если такое есть). Готовые <:имя:id> не трогает."""
+    """Заменяет :имя: на эмодзи сервера. Готовые <:имя:id> не трогает.
+
+    Раньше неизвестный токен оставался в тексте служебной записью — и кандидаты видели её
+    прямо в карточке. Теперь такого не бывает: если эмодзи на сервере нет, берётся аналог
+    из brand.ALIAS, а если нет и его — токен просто исчезает.
+    """
     if not text:
         return text or ""
     if _BOT is None:
@@ -73,7 +78,7 @@ def E(text: Optional[str]) -> str:
     table = {e.name.lower(): str(e) for e in _BOT.emojis}
     if not table:
         return text
-    return _EMOJI_RE.sub(lambda m: table.get(m.group(1).lower(), m.group(0)), text)
+    return _EMOJI_RE.sub(lambda m: brand.found(table, m.group(1)), text)
 
 
 def pe(s: Optional[str]):
@@ -124,6 +129,9 @@ def pm(name: str, fallback: str = "") -> str:
             except Exception:
                 _EMOJI_MAP = {}
         out = _EMOJI_MAP.get(low) or _EMOJI_MAP.get(name) or ""
+    if not out and low in brand.ALIAS:
+        # GIF-стрелки грузятся не на каждый сервер — берём их статичный аналог, а не пустоту
+        out = pm(brand.ALIAS[low])
     if not out:
         out = fallback
     # до готовности бота живых эмодзи не видно — не держим в кэше пустой результат
