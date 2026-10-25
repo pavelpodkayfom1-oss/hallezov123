@@ -487,7 +487,8 @@ DEFAULT_SHOP = [
 DEFAULTS: Dict[str, Any] = {
     "channels": {"panel": 0, "review": 0, "orders": 0, "points_panel": 0, "cdn": 0, "rules": 0},
     "staff_roles": [],
-    "published": {"apply": [0, 0], "points": [0, 0]},
+    "published": {"apply": [0, 0], "points": [0, 0], "rules": [0, 0]},
+    "rules_style": "old",   # "old" — прежний вид правил, "new" — новый (кнопки в /hr → Правила)
     "design": {
         "title": "⚜️ НАБОР В HALLEZ FAMQ",
         "description": (
@@ -802,6 +803,41 @@ XT = {
                    "> :hz_bluetick:  Слушай руководство.",
                    ""),
 }
+
+
+# Новый вид правил: только эмодзи, которые точно есть на сервере (emoji_map.json), правила пронумерованы.
+RULES_TEXT_NEW = (
+    "*:red_crown:  Уважение  ·  Порядок  ·  Развитие  :red_crown:*\n\n"
+    "### :hz_megaphone:  ОБЩЕНИЕ\n"
+    ":number1:  Уважаем друг друга. Оскорбления, спам и токсичность — **запрещены**\n"
+    ":number2:  Внутренние конфликты решаем **не в общем чате**\n"
+    ":number3:  Скриншоты семейного чата **не выносим** за пределы семьи\n\n"
+    "### :hz_pcicon:  В ИГРЕ\n"
+    ":number1:  Правила сервера **всегда выше** семейных правил\n"
+    ":number2:  Читы и багоюз — **мгновенное исключение**\n"
+    "> *Исключение: если человек использовал их ранее, но полностью прекратил и больше не собирается*\n\n"
+    "### :hz_winterstar:  АКТИВНОСТЬ\n"
+    ":number1:  На контракты и разборки выходим **по зову руководства**\n"
+    ":number2:  На разборках по возможности пишем экран (**Fraps**) и храним запись **минимум 48 часов**\n"
+    ":number3:  Действуем по командам руководства, не разбегаемся и не действуем самовольно\n"
+    ":number4:  Союзы и войны — **только через руководство**\n"
+    ":number5:  Максимум союзов — **4**\n\n"
+    "### :hz_house:  РЕСУРСЫ\n"
+    ":number1:  Семейный склад — **не для личной продажи или заработка**\n"
+    ":number2:  Взял семейную машину — **заправь и верни на место**\n"
+    ":number3:  Личный транспорт можно передать семье: **G → Семейный транспорт**\n\n"
+    "### :hz_moderator:  РАНГИ\n"
+    ":number1:  Повышение — за **активность, вклад и посещаемость**\n"
+    ":number2:  Дружба и личные отношения — не причина для повышения\n"
+    ":number3:  Руководство не использует свои права в личных целях\n\n"
+    "### :hz_warn:  НАКАЗАНИЯ\n"
+    "🟢  **Предупреждение** — опоздание или пропуск контракта\n"
+    "🟡  **Понижение / отстранение на 3–7 дней** — неподчинение командиру, семейные ресурсы "
+    "в личных целях, провокации и ссоры\n"
+    "🔴  **Исключение** — слив информации, читы или багоюз\n\n"
+    "### :hz_book:  ГЛАВНОЕ\n"
+    "**Будь активным  ·  Играй честно  ·  Уважай своих  ·  Слушай руководство**"
+)
 
 
 def X(key: str, **kw) -> str:
@@ -2781,7 +2817,16 @@ class ChannelsView(AdminView):
 
 # ───── Правила семьи ─────
 
-def rules_embed(with_file: bool = False):
+def _rules_text(style: Optional[str] = None) -> str:
+    """Текст правил: «old» — прежний (его можно править в «✍️ Тексты»), «new» — новое оформление."""
+    style = style or S.get("rules_style") or "old"
+    if style == "new":
+        base = {f"e_{k}": em(k) for k in EMOJI_SLOTS}
+        return fmt(RULES_TEXT_NEW, **base)
+    return X("rules_post")
+
+
+def rules_embed(with_file: bool = False, style: Optional[str] = None):
     """Пост с правилами: текст из «✍️ Тексты» → «Правила семьи (пост)», снизу широкий баннер HALLEZ.
 
     with_file=True — для реальной отправки: вернёт (эмбед, файл), если баннер ещё не на CDN.
@@ -2789,7 +2834,7 @@ def rules_embed(with_file: bool = False):
     """
     fam = (get_cfg().get("bot_name") or "HALLEZ").upper()
     emb = disnake.Embed(title=f"{pm('red_crown', '👑')}  ПРАВИЛА СЕМЬИ  ·  {fam}",
-                        description=X("rules_post"), color=main_color())
+                        description=_rules_text(style), color=main_color())
     if with_file:
         return emb, put_banner(emb, RULES_BANNER_ASSET)
     path = os.path.join(ASSETS_DIR, RULES_BANNER_ASSET)
@@ -2804,8 +2849,10 @@ class RulesView(AdminView):
         super().__init__(author_id)
         self.add_item(HrChannelSelect(self.pick_channel, placeholder="Канал, куда положить правила",
                                       channel_types=[disnake.ChannelType.text], row=0))
-        self.add_item(HrButton(self.send_rules, label="Отправить в канал",
-                               style=disnake.ButtonStyle.success, emoji="📨", row=1))
+        self.add_item(HrButton(self.send_new, label="Отправить новый",
+                               style=disnake.ButtonStyle.success, emoji="✨", row=1))
+        self.add_item(HrButton(self.send_old, label="Вернуть старый",
+                               style=disnake.ButtonStyle.primary, emoji="↩️", row=1))
         self.add_item(HrButton(self.swap_emoji, label="Эмодзи", style=disnake.ButtonStyle.secondary,
                                emoji="🎭", row=1))
         self.add_item(_back_button(author_id))
@@ -2817,6 +2864,9 @@ class RulesView(AdminView):
     def embed(self) -> disnake.Embed:
         e = rules_embed()
         cid = S["channels"].get("rules") or 0
+        cur = "новый" if S.get("rules_style") == "new" else "старый"
+        e.description += (f"\n\n​\n*Сейчас используется: **{cur}** вид. «Отправить новый» / «Вернуть старый» "
+                          "удаляют прошлый пост правил и публикуют выбранный.*")
         e.description += ("\n\n​\n*Канал для отправки: " + (f"<#{cid}>" if cid else "не выбран") +
                           ".\nТекст правится в «✍️ Тексты» → «Правила семьи (пост)».*")
         return e
@@ -2827,22 +2877,39 @@ class RulesView(AdminView):
             save_settings()
         await inter.response.edit_message(embed=self.embed(), view=self)
 
-    async def send_rules(self, inter):
+    async def send_new(self, inter):
+        await self._publish(inter, "new")
+
+    async def send_old(self, inter):
+        await self._publish(inter, "old")
+
+    async def _publish(self, inter, style: str):
         cid = S["channels"].get("rules") or 0
         if not cid:
             return await inter.response.send_message(embed=note_embed("❌ Сначала выберите канал."), ephemeral=True)
         ch = await get_channel(cid)
         if not isinstance(ch, disnake.TextChannel):
             return await inter.response.send_message(embed=note_embed("❌ Канал недоступен боту."), ephemeral=True)
+        await inter.response.defer(ephemeral=True)
+        old = S["published"].get("rules") or [0, 0]
         try:
-            emb, file = rules_embed(with_file=True)
-            if file:
-                await ch.send(embed=emb, file=file)
-            else:
-                await ch.send(embed=emb)
+            emb, file = rules_embed(with_file=True, style=style)
+            msg = await (ch.send(embed=emb, file=file) if file else ch.send(embed=emb))
         except disnake.HTTPException as ex:
-            return await inter.response.send_message(embed=note_embed(f"❌ Не отправлено: {str(ex)[:80]}"), ephemeral=True)
-        await inter.response.send_message(embed=note_embed(f"✅ Правила отправлены в {ch.mention}"), ephemeral=True)
+            return await inter.followup.send(embed=note_embed(f"❌ Не отправлено: {str(ex)[:80]}"), ephemeral=True)
+        # прошлый пост убираем только после того, как новый ушёл
+        if old and old[0] and old[1]:
+            try:
+                oc = await get_channel(old[0])
+                if oc:
+                    await (await oc.fetch_message(old[1])).delete()
+            except Exception:
+                pass
+        S["rules_style"] = style
+        S["published"]["rules"] = [ch.id, msg.id]
+        save_settings()
+        await inter.followup.send(embed=note_embed(
+            f"✅ {'Новый' if style == 'new' else 'Старый'} вид правил отправлен в {ch.mention}"), ephemeral=True)
 
 
 # ───── Эмодзи ─────
