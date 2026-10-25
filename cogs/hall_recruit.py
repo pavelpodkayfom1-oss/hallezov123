@@ -2486,7 +2486,7 @@ class DesignModal(disnake.ui.Modal):
         T_ = disnake.ui.TextInput
         super().__init__(title="Оформление панели заявки", custom_id="hr:design", components=[
             T_(label="Заголовок («сброс» = стандарт)", custom_id="title", value=d["title"], max_length=200),
-            T_(label="Текст: :эмодзи:, **жирный**, «сброс» = стандарт", custom_id="description",
+            T_(label="Текст (:эмодзи:, **жирный**, «сброс»)", custom_id="description",
                value=d["description"], style=disnake.TextInputStyle.paragraph, max_length=3500),
             T_(label="Подпись внизу", custom_id="footer", value=d["footer"], max_length=100),
             T_(label="Цвет (HEX, например 990000)", custom_id="color", value=str(d["color"]).replace("0x", ""), max_length=8),
