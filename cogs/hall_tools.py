@@ -26,11 +26,16 @@ import disnake
 from disnake.ext import commands, tasks
 
 from database import DB_PATH
+from utils import brand
 from utils.checks import load_config
 from utils.embeds import note_embed
 from utils.roster_card import render_roster
 
 ROSTER_ROWS_PER_ROLE = 12       # строк одной роли в постере
+ROSTER_ROWS = 12                # строк списка в одном поле эмбеда
+ROSTER_CROWN = "hz_ownership"   # корона в заголовке состава
+ROSTER_STAR = "hz_starblue"     # скромная метка участника в списке
+ROSTER_INFO = "hz_info"
 ROSTER_MAX_SECTIONS = 14        # секций в постере (картинка не должна расти бесконечно)
 ROSTER_MAX_ROLES = 40           # сколько ролей авто-список может показать
 ROSTER_MAX_POSTER_ROWS = 45     # всего строк с аватарами в постере — ограничение на высоту и память
@@ -895,6 +900,10 @@ class HallTools(commands.Cog):
         self.roster_loop.start()
         self.afk_loop.start()
 
+    def E(self, text: str) -> str:
+        """Токены бренд-пака (`:hz_starblue:`) → живые эмодзи сервера; незнакомые тихо исчезают."""
+        return brand.E(self.bot, text)
+
     def cog_unload(self):
         self.reminder_loop.cancel()
         self.leave_loop.cancel()
@@ -1232,34 +1241,34 @@ class HallTools(commands.Cog):
         )
 
     def build_roster_embed(self, sections) -> disnake.Embed:
+        """Состав текстом: одна должность = своё поле, участники — строки со скромной звездой.
+
+        Одной простынёй список быть не может: роль не отделена от роли, а перенос режет её
+        посередине. Поэтому режем по должностям, не более ROSTER_ROWS строк в поле.
+        """
         name = load_config().get("bot_name", "Hall FAMQ")
         total = len({m.id for _, ms in sections for m in ms})
         e = make_embed(
-            f"👥 Состав семьи {name}",
-            f"Весь состав по должностям, от старших к младшим. Обновляется автоматически.\n"
-            f"Всего: **{total}**",
+            self.E(f":{ROSTER_CROWN}: Состав семьи {name}"),
+            self.E(f"Всего: **{total}**  ·  от старших к младшим  ·  обновляется само"),
         )
-        # лимит Discord на эмбед — 6000 символов, поэтому пачем секции в поля с запасом
-        chunks, cur = [], ""
+        star = self.E(f":{ROSTER_STAR}:")
+        spent, dropped = 0, False
         for title, members in sections:
-            lines = [f"**⚜️ {title} • {len(members)}**"]
-            lines += [f"• {m.mention}" for m in members] or ["• — пока никого —"]
-            for line in lines:
-                if len(cur) + len(line) + 1 > 950 and cur:
-                    chunks.append(cur)
-                    cur = ""
-                cur += line + "\n"
-        if cur:
-            chunks.append(cur)
-        spent = 0
-        for chunk in chunks:
-            if len(e.fields) >= 25 or spent + len(chunk) > 5400:
-                if len(e.fields) < 25:
-                    e.add_field(name="\u200b", value="…часть списка не влезла — смотрите картинку и список ролей сервера",
-                                inline=False)
+            lines = [f"{star} {m.mention}".strip() for m in members] or [f"{star} пока никого".strip()]
+            for start in range(0, len(lines), ROSTER_ROWS):
+                chunk = "\n".join(lines[start:start + ROSTER_ROWS])
+                label = f"{title} · {len(members)}" if start == 0 else f"{title} · продолжение"
+                if len(label) > 256 or len(chunk) > 1024 or spent + len(chunk) > 5600 or len(e.fields) >= 25:
+                    dropped = True
+                    break
+                spent += len(chunk) + len(label)
+                e.add_field(name=label, value=chunk, inline=False)
+            if dropped:
                 break
-            spent += len(chunk)
-            e.add_field(name="\u200b", value=chunk.strip(), inline=False)
+        if dropped and len(e.fields) < 25:
+            e.add_field(name="…", inline=False, value=self.E(
+                f":{ROSTER_INFO}: часть списка не влезла — смотри картинку и список ролей сервера"))
         return e
 
     async def update_roster(self, guild: disnake.Guild, force: bool = False) -> bool:
