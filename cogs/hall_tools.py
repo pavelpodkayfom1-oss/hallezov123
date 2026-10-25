@@ -17,7 +17,6 @@ import io
 import json
 import time
 import asyncio
-import hashlib
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
@@ -29,24 +28,22 @@ from database import DB_PATH
 from utils import brand
 from utils.checks import load_config
 from utils.embeds import note_embed
-from utils.roster_card import render_roster
 
-ROSTER_ROWS_PER_ROLE = 12       # строк одной роли в постере
 ROSTER_ROWS = 12                # строк списка в одном поле эмбеда
-# значок должности по старшинству: берём первый, который реально есть на сервере
+# значок должности по старшинству — цветные стрелки бренд-пака: чем ниже по иерархии, тем
+# спокойнее цвет. В списке берётся первый знак, который реально есть на сервере (см. /hz_emojis)
 ROSTER_TIER = (
-    ("hz_crownicon", "hz_ownership", "hz_bluestaffbadge"),
-    ("hz_starids", "hz_starblue", "hz_verifiedblue"),
-    ("hz_gradientarrowright", "hz_glowingdotblue", "hz_membericon"),
+    ("hz_animatedarrowyellow", "hz_crownicon", "hz_starids"),
+    ("hz_animatedarrowgreen", "hz_bluetick", "hz_starblue"),
+    ("hz_animatedarrowblue", "hz_starblue", "hz_verifiedblue"),
+    ("hz_animatedarrowpurple", "hz_gradientarrowright", "hz_glowingdotblue"),
 )
 ROSTER_DOT = ("hz_glowingdotblue", "hz_bluetick", "hz_verifiedblue")   # метка участника
+ROSTER_WARN = ("hz_animatedarrowred", "hz_info")             # знак у поля «не влезло»
 # должность, где участников не больше, встаёт в колонки — так список похож на лестницу, а не на лог
 ROSTER_INLINE_MAX = 4
-ROSTER_MAX_SECTIONS = 14        # секций в постере (картинка не должна расти бесконечно)
 ROSTER_MAX_ROLES = 40           # сколько ролей авто-список может показать
-ROSTER_MAX_POSTER_ROWS = 45     # всего строк с аватарами в постере — ограничение на высоту и память
 ROSTER_FLUSH_DELAY = 20         # секунд ожидания после смены ролей: пачим залпом, без спама правками
-ROSTER_POSTER_COOLDOWN = 300    # не перерисовываем картинку чаще, чем раз в 5 минут
 
 SETTINGS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hall_settings.json"
@@ -80,7 +77,6 @@ DEFAULTS = {
     "roster_message_id": 0,
     "roster_auto": True,          # список ролей берём из иерархии сервера
     "roster_skip_roles": [],      # роли, которые авто-список должен пропустить
-    "roster_poster_keys": {},     # guild_id -> отпечаток картинки, чтобы после рестарта не грузить аватары
     "roster_roles": [],           # [{"role_id": int, "title": str}]
     "afk_enabled": True,
     "afk_default_hours": 3,
@@ -897,8 +893,6 @@ class HallTools(commands.Cog):
         self.bot = bot
         self._views_added = False
         self._roster_hash: dict = {}        # guild_id -> отпечаток поста
-        self._poster_ts: dict = {}          # guild_id -> когда последний раз перерисовывали
-        self._poster_lock = asyncio.Lock()
         self._roster_dirty: set = set()     # guild_id, ждущие внепланового обновления
         self._roster_task = None
         self.reminder_loop.start()
@@ -1209,90 +1203,26 @@ class HallTools(commands.Cog):
             sections.append((title, members))
         return sections
 
-    def poster_plan(self, sections) -> List[Tuple[str, List[Tuple[str, Optional[disnake.Member]]]]]:
-        """Что влезет в постер: ограничиваем высоту картинки, а значит и память с трафиком."""
-        plan, left = [], ROSTER_MAX_POSTER_ROWS
-        for title, members in sections[:ROSTER_MAX_SECTIONS]:
-            if left <= 0:
-                break
-            take = members[: min(ROSTER_ROWS_PER_ROLE, left)]
-            rows = [(m.display_name, m) for m in take]
-            hidden = len(members) - len(take)
-            if hidden:
-                if len(rows) == left:  # строку «и ещё…» тоже учитываем в высоте
-                    rows.pop()
-                    hidden += 1
-                rows.append((f"и ещё {hidden}…", None))
-            plan.append((title, rows))
-            left -= len(rows)
-        return plan
-
-    def poster_key(self, sections) -> str:
-        """Отпечаток постера по именам: если он не изменился, картинку не перерисовываем.
-
-        Храним его в настройках — после рестарта бот не выкачивает аватары заново.
-        """
-        plan = [(t, [n for n, _ in rows]) for t, rows in self.poster_plan(sections)]
-        return hashlib.sha1(repr(plan).encode("utf-8")).hexdigest()[:16]
-
-    async def roster_poster(self, sections) -> Optional[bytes]:
-        """Картинка состава. Аватары тянем только когда постер реально нужен."""
-        plan = self.poster_plan(sections)
-        members = [m for _, rows in plan for _, m in rows if m is not None]
-        if not members:
-            return None
-        sem = asyncio.Semaphore(5)
-
-        async def grab(m):
-            if m.avatar is None:
-                return None
-            async with sem:
-                try:
-                    return await m.avatar.read()
-                except Exception:
-                    return None
-
-        avatars = dict(zip([m.id for m in members], await asyncio.gather(*(grab(m) for m in members))))
-        rendered = [
-            (title, [(name, avatars.get(m.id) if m else None) for name, m in rows])
-            for title, rows in plan
-        ]
-        shown = sum(len([1 for _, m in rows if m is not None]) for _, rows in plan)
-        total = len({m.id for _, ms in sections for m in ms})
-        name = load_config().get("bot_name", "Hallez FAMQ")
-        stamp = datetime.now(timezone.utc).strftime("%d.%m.%Y")
-        note = f"Всего участников: {total}  ·  {stamp}"
-        if shown < total:
-            note += f"  ·  на картинке {shown}, полный список в тексте выше"
-        return await asyncio.to_thread(
-            render_roster, f"Состав семьи {name}", "Список по должностям, обновляется автоматически", rendered, note
-        )
-
     def build_roster_embed(self, sections) -> disnake.Embed:
-        """Состав текстом: лестница должностей, у каждой должности свой знак по старшинству.
+        """Состав текстом: лестница должностей, старшинство читается по цвету стрелки.
 
         Простынёй список быть не может: роль не отделена от роли, а перенос режет её
         посередине. Поэтому одна должность = одно поле, не более ROSTER_ROWS строк в поле,
-        а должности, где людей мало, встают в колонки. Старшинство читается по знаку
-        заголовка (корона → звезда → стрелка), участник помечен скромной точкой; в подвале
-        — легенда этих знаков. Знаки берём только те, что реально есть на сервере: если
-        эмодзи нет, его аналог, а сырой токен текстом показывать нельзя.
+        а должности, где людей мало, встают в колонки. Знак берём тот, что реально есть на
+        сервере (см. /hz_emojis): не было стрелки — её аналог, а сырой токен показывать нельзя.
         """
         name = load_config().get("bot_name", "Hall FAMQ")
         total = len({m.id for _, ms in sections for m in ms})
-        crown, star, arrow = (brand.pick(self.bot, *tier) for tier in ROSTER_TIER)
+        marks = [brand.pick(self.bot, *tier) for tier in ROSTER_TIER]
         dot = brand.pick(self.bot, *ROSTER_DOT)
-        legend = "\n".join(f"{mark} {what}" for mark, what in
-                           ((crown, "старшие"), (star, "костяк"), (arrow, "состав"), (dot, "участник"))
-                           if mark)
-        desc = f"Всего: **{total}**  ·  от старших к младшим  ·  обновляется само"
         e = make_embed(
-            f"{crown} Состав семьи {name}".strip(),
-            f"{desc}\n{legend}" if legend else desc,
+            f"{marks[0]} Состав семьи {name}".strip(),
+            f"Всего: **{total}**  ·  от старших к младшим  ·  обновляется само",
         )
         spent, dropped = 0, False
         for rank, (title, members) in enumerate(sections):
-            tier = (crown, star, arrow)[0 if rank == 0 else (1 if rank < 4 else 2)]
+            tier = marks[0] if rank == 0 else \
+                marks[1] if rank < 4 else marks[2] if rank < 8 else marks[3]
             lines = [f"{dot} {m.mention}".strip() for m in members] or [f"{dot} пока никого".strip()]
             slim = len(members) <= ROSTER_INLINE_MAX
             rows = ROSTER_INLINE_MAX if slim else ROSTER_ROWS
@@ -1308,7 +1238,8 @@ class HallTools(commands.Cog):
             if dropped:
                 break
         if dropped and len(e.fields) < 25:
-            e.add_field(name="…", inline=False, value=f"{brand.pick(self.bot, 'hz_info')} часть списка не влезла — смотри картинку и список ролей сервера".strip())
+            note = f"{brand.pick(self.bot, *ROSTER_WARN)} часть списка не влезла — полный состав в списке ролей сервера"
+            e.add_field(name="…", inline=False, value=note.strip())
         return e
 
     async def update_roster(self, guild: disnake.Guild, force: bool = False) -> bool:
@@ -1322,8 +1253,9 @@ class HallTools(commands.Cog):
         if not sections:
             return False
         embed = self.build_roster_embed(sections)
-        key = self.poster_key(sections)
-        digest = json.dumps(embed.to_dict(), sort_keys=True, ensure_ascii=False) + f"#{key}"
+        digest = json.dumps(embed.to_dict(), sort_keys=True, ensure_ascii=False)
+        if not force and digest == self._roster_hash.get(guild.id):
+            return False
         msg = None
         if s["roster_message_id"]:
             try:
@@ -1332,56 +1264,15 @@ class HallTools(commands.Cog):
                 msg = None
             except disnake.HTTPException:
                 return False
-        old = next((a for a in (msg.attachments if msg else []) if a.filename == "roster.jpg"), None)
-        keys = dict(s.get("roster_poster_keys") or {})
-        stored = str(keys.get(str(guild.id)) or "")
-        fresh = stored == key and old is not None
-        poster_pending = stored != key
-        if msg is None:
-            poster_pending = True  # поста нет (его удалили) — перерисовываем картинку и заводим заново
-        if not force and not poster_pending and digest == self._roster_hash.get(guild.id):
-            return False
-
-        now = time.time()
-        file = None
-        has_image = False
-        if fresh:
-            embed.set_image(url=old.url)
-            has_image = True
-        else:
-            may_render = force or msg is None or now - self._poster_ts.get(guild.id, 0.0) >= ROSTER_POSTER_COOLDOWN
-            if may_render:
-                async with self._poster_lock:
-                    poster = await self.roster_poster(sections)
-                if poster:
-                    file = disnake.File(io.BytesIO(poster), filename="roster.jpg")
-                    embed.set_image(url="attachment://roster.jpg")
-                    has_image = True
-            elif old is not None:
-                # картинка устарела, но перерисовку держит кулдаун — правим только текст
-                embed.set_image(url=old.url)
-                has_image = True
-
-        keep = [old] if file is None and old is not None and has_image else []
         try:
             if msg is None:
-                if file is None:
-                    msg = await channel.send(embed=embed)
-                else:
-                    msg = await channel.send(embed=embed, file=file)
+                msg = await channel.send(embed=embed)
                 set_setting("roster_message_id", msg.id)
-            elif file is not None:
-                await msg.edit(embed=embed, file=file, attachments=[])
             else:
-                await msg.edit(embed=embed, attachments=keep)
+                # attachments=[] — на старых постах картинка состава ещё прикреплена, снимаем
+                await msg.edit(embed=embed, attachments=[])
         except disnake.HTTPException:
             return False
-        # отпечаток картинки пишем только когда пост реально обновился —
-        # иначе получится, что картинка «свежая», а на посте старая
-        if file is not None:
-            keys[str(guild.id)] = key
-            set_setting("roster_poster_keys", keys)
-            self._poster_ts[guild.id] = now
         self._roster_hash[guild.id] = digest
         return True
 
