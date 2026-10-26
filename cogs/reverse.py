@@ -28,7 +28,7 @@ FILE_COGS = {
     "teg_settings.json": ("cogs.teg_panel",),
     "logs_settings.json": ("cogs.famq_logs",),
     "panel_settings.json": ("cogs.famq_logs", "cogs.web_panel"),
-    "panel_state.json": ("cogs.web_panel",),
+    "panel_state.json": ("cogs.web_panel", "cogs.admin_hub"),
     "emoji_map.json": ("cogs.hall_recruit", "cogs.promotions"),
 }
 MAX_SHOTS = 5
