@@ -44,7 +44,7 @@ ROSTER_ROLE_SIGNS = (
     (("owner", "владет", "основат", "head of family", "босс", "boss"),
      ("red_crown", "hz_ownership", "hz_crownicon")),
     (("vice", "deputy", "зам", "депут"),
-     ("hz_bluethumbsup", "hz_starblue", "hz_bluetick")),
+     ("hz_joobiperfect", "hz_bluethumbsup", "hz_bluetick")),
     (("leader", "лидер", "глава", "старший", "head"),
      ("hz_starids", "hz_bluestarshiny", "hz_starblue")),
     (("mod", "модер", "админ", "staff", "командир"),
