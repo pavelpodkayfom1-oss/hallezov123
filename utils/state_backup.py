@@ -98,7 +98,8 @@ def _signature() -> str:
 def _snap_dirs() -> list:
     if not BACKUP_DIR.is_dir():
         return []
-    stamp = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
+    # хвост `_2` — снимки, сделанные в ту же секунду: без него второй затёр бы первый
+    stamp = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}(_\d{1,2})?$")
     return sorted(d for d in BACKUP_DIR.iterdir() if d.is_dir() and stamp.match(d.name))
 
 
@@ -118,8 +119,13 @@ def snapshot(force: bool = False) -> Optional[Path]:
         return None
 
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    dest = BACKUP_DIR / datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    dest.mkdir(parents=True, exist_ok=True)
+    base = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    dest = BACKUP_DIR / base
+    n = 2
+    while dest.exists():          # иначе снимок, сделанный в эту же секунду, стёр бы предыдущий
+        dest = BACKUP_DIR / f"{base}_{n}"
+        n += 1
+    dest.mkdir(parents=True)
     manifest = {}
     for path in state_files():
         copy = dest / path.name
@@ -177,6 +183,64 @@ def guard_after_deploy() -> list:
         except Exception as error:
             print(f"⚠️ Не удалось восстановить {name}: {error}", file=sys.stderr, flush=True)
     return LAST_RESTORE
+
+
+def _manifest(src: Path) -> dict:
+    return {p.name: sha1_of(p) for p in sorted(src.iterdir()) if p.is_file()}
+
+
+def _differs_from_live(src: Path) -> bool:
+    """True, если снимок — это не то, что сейчас лежит в живых файлах.
+
+    Сначала сравниваем размер (бесплатно), и только при совпадении считаем SHA1: на
+    диске 0.25 vCPU хеш десятка файлов — это секунды, а размеры после правки настроек
+    расходятся почти всегда.
+    """
+    for f in sorted(src.iterdir()):
+        if not f.is_file():
+            continue
+        live = BASE_DIR / f.name
+        if not live.exists() or live.stat().st_size != f.stat().st_size:
+            return True
+        if sha1_of(live) != sha1_of(f):
+            return True
+    return False
+
+
+def candidates(limit: int = 5) -> list:
+    """Снимки, которые реально от чего-то отличаются, от свежего к старому."""
+    return [d for d in reversed(_snap_dirs()) if _differs_from_live(d)][:limit]
+
+
+def restore(name: str) -> dict:
+    """Поднимает снимок поверх живых файлов.
+
+    Обратимо: состояние, которое было живым до отката, сначала уходит в новый снимок,
+    поэтому «откат отката» — это просто /reverse ещё раз. Отпечатки в state_sig.json
+    перезаписываются на поднятый снимок, иначе guard_after_deploy() на следующем старте
+    вернул бы то, от чего мы только что откатились.
+    """
+    src = BACKUP_DIR / name
+    if not src.is_dir():
+        raise FileNotFoundError(name)
+    saved = snapshot(force=True)
+    manifest = _manifest(src)
+    for f in sorted(src.iterdir()):
+        if not f.is_file():
+            continue
+        live = BASE_DIR / f.name
+        if live.exists() and sha1_of(live) != manifest[f.name]:
+            junk = BACKUP_DIR / REJECT_DIR / datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            junk.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(live, junk / f.name)
+        shutil.copy2(f, live)
+        _drop_cache(live)
+    (BACKUP_DIR / SIG_NAME).write_text(
+        json.dumps({"at": name, "files": manifest}, ensure_ascii=False, indent=1),
+        encoding="utf-8")
+    # чтобы фон не снял дубль этого же состояния через минуту
+    (BACKUP_DIR / "last.sig").write_text(_signature(), encoding="utf-8")
+    return {"restored": sorted(manifest), "saved_to": saved.name if saved else None}
 
 
 async def run() -> None:
