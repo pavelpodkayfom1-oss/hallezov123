@@ -24,6 +24,7 @@
 рестарта, а при спрятывании чистится и глобальный реестр команд: Discord показывает его в
 меню всегда, даже когда у сервера свой список.
 """
+import asyncio
 import inspect
 import json
 from pathlib import Path
@@ -633,11 +634,21 @@ class AdminHub(commands.Cog):
         На старте main.py перезаписывает только списки серверов, а команды, которые этот бот
         когда-то зарегистрировал глобально, остаются в меню навсегда: скрытая команда
         перестаёт быть скрытой. После старта сверяем ещё и глобальный реестр.
+
+        Сверку ведём с чтения живого списка и не сразу: своя перезапись у main.py и наша
+        падают в один bucket /commands, и за второй Discord отвечает 429 с очередью на
+        несколько минут. Если в списке и так нет дублей — не пишем ничего.
         """
         if self.bot is None or not flag_on():
             return
         apply_visibility(self.bot)
+        await asyncio.sleep(25)
         try:
+            left, checked = await _stragglers(self.bot)
+            if checked and not left:
+                print("⚡ Панель: дублей в живом списке Discord нет — перезапись не нужна",
+                      flush=True)
+                return
             await resync(self.bot)
         except Exception as error:
             print(f"⚠️ Панель: дубли не перезаписать в Discord "

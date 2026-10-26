@@ -547,6 +547,7 @@ class WebPanel(commands.Cog):
         state = _read_state()
         disabled = [c for c in state.get("disabled_cogs", []) if isinstance(c, str)]
         loaded = name in self.bot.extensions
+        names_before = {c.name for c in self.bot.application_commands}
 
         try:
             if action == "disable":
@@ -573,8 +574,12 @@ class WebPanel(commands.Cog):
         _write_state(state)
         now = name in self.bot.extensions
         print(f"🧩 Панель: {message}", flush=True)
-        if now != loaded or action == "reload":
+        # Перезапись списка — дорогая: на /commands летит 429 с очередью на несколько
+        # минут, поэтому дёргаем её только когда набор команд реально поменялся.
+        if {c.name for c in self.bot.application_commands} != names_before:
             message += ". " + await self._resync_menu()
+        elif now != loaded or action == "reload":
+            message += ". Список команд не менялся — Discord не перезаписываем"
         return _json({"ok": True, "message": message, "loaded": now})
 
     async def _resync_menu(self) -> str:
