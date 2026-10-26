@@ -2262,9 +2262,21 @@ class DashView(AdminView):
         add(HrButton(self.d_rules, label="Правила", style=B.secondary, emoji="📜", row=1))
         add(HrButton(self.d_swap, label="Эмодзи в текстах", style=B.secondary, emoji="🎭", row=1))
         add(HrButton(self.d_preview, label="Предпросмотр", style=B.secondary, emoji="👁️", row=2))
+        add(HrButton(self.d_reset, label="Сброс текста панели", style=B.secondary, emoji="↩️", row=2))
         add(HrButton(self.d_toggle, label="Закрыть набор" if is_open else "Открыть набор",
                      style=B.danger if is_open else B.success, emoji="🔒" if is_open else "🔓", row=2))
         add(HrButton(self.d_publish, label="Опубликовать", style=B.success, emoji="🚀", row=2))
+
+    async def d_reset(self, inter):
+        """Стандартное оформление одним кликом: возвращает заголовок, текст, подпись и шаги
+        из кода и сразу перерисовывает панель в канале."""
+        await inter.response.defer(ephemeral=True)
+        S["design"] = copy.deepcopy(DEFAULTS["design"])
+        save_settings()
+        ok, text = await publish_panel("apply")
+        await inter.followup.send(embed=note_embed(
+            ("✅ Вернул стандартный текст и обновил панель. " if ok
+             else "✅ Вернул стандартный текст, но панель не обновилась: ") + text), ephemeral=True)
 
     async def d_form(self, inter):
         await inter.response.edit_message(embed=form_embed(), view=FormView(inter.author.id))
