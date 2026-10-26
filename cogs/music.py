@@ -74,7 +74,7 @@ def _library_text() -> str:
     files = _library()
     if not files:
         return (f"Библиотека пуста: в {MEDIA_DIR} нет ни одного файла.\n"
-                "Нажми «📥 Закинуть трек» на панели и прикрепи mp3.")
+                "Нажми «📥 Закинуть трек» на панели и перетащи mp3 в окно.")
     lines = [f"`{i + 1}.` {os.path.splitext(f)[0]}" for i, f in enumerate(files[:25])]
     extra = f"\n…и ещё {len(files) - 25}" if len(files) > 25 else ""
     return "🎧 Библиотека семьи\n" + "\n".join(lines) + extra
@@ -183,6 +183,41 @@ class MusicModal(disnake.ui.Modal):
         await cog.handle_play(inter, inter.text_values["query"].strip())
 
 
+class UploadModal(disnake.ui.Modal):
+    """Окно с зоной «Перетащите файлы сюда или выберите» — сюда кидают mp3."""
+
+    def __init__(self):
+        super().__init__(
+            title="Закинуть трек в библиотеку",
+            custom_id="music_upload_modal",
+            components=[
+                disnake.ui.Label(
+                    "Файл с музыкой",
+                    disnake.ui.FileUpload(custom_id="tracks", min_values=1, max_values=5),
+                    description=f"Прикрепи 1–5 треков (mp3, ogg, m4a, wav, flac), каждый до {MAX_TRACK_MB} МБ.",
+                )
+            ],
+        )
+
+    async def callback(self, inter: disnake.ModalInteraction):
+        await inter.response.defer(ephemeral=True)
+        files = inter.resolved_values.get("tracks") or []
+        lines = []
+        for att in files:
+            try:
+                name = await _save_track(att)
+            except Exception as e:
+                lines.append(f"❌ {e}")
+            else:
+                lines.append(f"✅ **{os.path.splitext(name)[0]}**")
+        _trim()
+        if not lines:
+            lines.append("❌ Файлы не пришли, попробуй ещё раз.")
+        if any(l.startswith("✅") for l in lines):
+            lines.append("\nТеперь нажми **«Включить музыку»** и выбери трек из списка.")
+        await inter.followup.send(embed=note_embed("\n".join(lines)), ephemeral=True)
+
+
 class TalkView(disnake.ui.View):
     """Показывается после 'Позвать в войс' — кнопка для выбора музыки."""
 
@@ -234,12 +269,12 @@ def _play_panel_embed() -> disnake.Embed:
     if files:
         text = (f"В библиотеке **{len(files)}** треков. Выбери трек из списка ниже — бот зайдёт "
                 "к тебе в войс и сразу включит.\n\n"
-                "Нет нужного? Нажми **«📥 Загрузить трек»** и прикрепи mp3 — "
+                "Нет нужного? Нажми **«📥 Загрузить трек»** и перетащи mp3 в окно — "
                 "или введи название / прямую ссылку на звук через **«🔎»**.")
     else:
         text = ("Библиотека пока пустая.\n\n"
-                "Нажми **«📥 Загрузить трек»** и прикрепи mp3 (можно сразу несколько раз подряд), "
-                "потом снова открой эту панель.")
+                "Нажми **«📥 Загрузить трек»** и перетащи mp3 в окно (до 5 файлов сразу), "
+                "потом снова нажми «Включить музыку».")
     return disnake.Embed(title="🎵 Музыка", description=text, color=_color())
 
 
@@ -363,8 +398,6 @@ class Music(commands.Cog):
         self.bot = bot
         self.players: dict[int, GuildPlayer] = {}
         self._last_play: dict[int, float] = {}
-        # кто нажал «📥 Закинуть трек»: id → (канал, когда)
-        self._pending: dict[int, tuple[int, float]] = {}
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -375,43 +408,12 @@ class Music(commands.Cog):
             _log(f"библиотека: {len(_library())} треков в {MEDIA_DIR}")
 
     # ---------- библиотека без слэш-команд ----------
-    ASK_SECONDS = 90
-
     async def ask_file(self, inter):
-        """Кнопка «Закинуть трек»: ждём вложение ответом в этом же канале."""
-        self._pending[inter.author.id] = (inter.channel.id, time.time())
-        await inter.response.send_message(
-            embed=note_embed("📥 Прикрепи mp3 к сообщению здесь — заберу его в библиотеку. "
-                             f"Жду {self.ASK_SECONDS} сек."), ephemeral=True)
+        """Кнопка «Закинуть трек»: открываем окно с зоной загрузки файлов."""
+        await inter.response.send_modal(UploadModal())
 
     async def show_library(self, inter):
         await inter.response.send_message(embed=note_embed(_library_text()), ephemeral=True)
-
-    @commands.Cog.listener()
-    async def on_message(self, message):
-        if message.author.bot:
-            return
-        stamp = self._pending.get(message.author.id)
-        if not stamp or stamp[0] != message.channel.id:
-            return
-        if time.time() - stamp[1] > self.ASK_SECONDS:
-            self._pending.pop(message.author.id, None)
-            return
-        if not message.attachments:
-            return
-        self._pending.pop(message.author.id, None)
-        try:
-            name = await _save_track(message.attachments[0])
-        except Exception as e:
-            answer = f"❌ {e}"
-        else:
-            _trim()
-            stem = os.path.splitext(name)[0]
-            answer = f"🎧 В библиотеке: **{stem}** — заходи в войс и `/play {stem}`"
-        try:
-            await message.reply(embed=note_embed(answer), mention_author=False)
-        except Exception:
-            pass
 
     # ---------- helpers ----------
     def get_player(self, guild: disnake.Guild) -> GuildPlayer:
@@ -637,7 +639,7 @@ class Music(commands.Cog):
                 "Зайдите в голосовой канал и нажмите **«Включить музыку»**.\n"
                 "Бот спросит название из библиотеки семьи (или ссылку на звук), зайдёт к вам "
                 "в войс и поставит трек.\n\n"
-                "Треки кладутся кнопкой **«📥 Закинуть трек»** — просто прикрепи mp3. "
+                "Треки кладутся кнопкой **«📥 Закинуть трек»** — просто перетащи mp3 в окно. "
                 "«🎧 Треки» покажет, что уже есть.\n\n"
                 "Управление: ⏯ пауза • ⏭ скип • ⏹ стоп • 📜 очередь • 🔉🔊 громкость"
             ),
