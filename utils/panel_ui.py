@@ -25,9 +25,12 @@ html,body{margin:0;min-height:100%}
 html{scrollbar-width:thin;scrollbar-color:#35353f transparent}
 body{
   background:
-    radial-gradient(1100px 620px at 88% -12%, rgba(153,0,0,.26), transparent 62%),
-    radial-gradient(760px 520px at -8% 8%, rgba(210,58,58,.14), transparent 60%),
-    linear-gradient(180deg, #101014, var(--bg) 42%);
+    radial-gradient(880px 460px at 12% -14%, rgba(153,0,0,.32), transparent 62%),
+    radial-gradient(700px 420px at 98% -6%, rgba(210,58,58,.16), transparent 58%),
+    linear-gradient(rgba(255,255,255,.021) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.021) 1px, transparent 1px),
+    linear-gradient(180deg, #0d0d11, var(--bg) 55%);
+  background-size:auto, auto, 100% 36px, 36px 100%, auto;
   background-attachment:fixed;color:var(--text);
   font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   -webkit-font-smoothing:antialiased
@@ -66,27 +69,46 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* каркас */
-.shell{display:grid;grid-template-columns:236px 1fr;min-height:100vh}
-.side{background:linear-gradient(180deg,rgba(255,255,255,.03),transparent 30%),rgba(19,19,24,.82);backdrop-filter:blur(10px);border-right:1px solid var(--line);padding:1.1rem .8rem;display:flex;flex-direction:column;gap:.3rem;position:sticky;top:0;height:100vh}
-.brand{display:flex;gap:.7rem;align-items:center;padding:.2rem .5rem 1rem}
-.brand .logo{width:38px;height:38px;border-radius:11px;font-size:1.1rem;margin:0;box-shadow:0 8px 20px rgba(153,0,0,.5)}
-.brand b{display:block;line-height:1.2} .brand span{font-size:.78rem;color:var(--muted)}
-.nav{display:flex;flex-direction:column;gap:.2rem}
-.nav button{background:none;border:0;text-align:left;padding:.65em .8em;border-radius:10px;cursor:pointer;color:var(--muted);transition:background .15s,color .15s,transform .12s}
-.nav button:hover{background:var(--panel2);color:var(--text);transform:translateX(2px)}
-.nav button.active{background:linear-gradient(90deg,rgba(153,0,0,.4),rgba(153,0,0,.1));color:#fff;box-shadow:inset 3px 0 0 var(--accent2)}
 .spacer{flex:1}
-.main{padding:1.7rem clamp(1rem,3vw,2.2rem);max-width:1100px;width:100%}
+.topbar{position:sticky;top:0;z-index:20;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(13,13,18,.95),rgba(13,13,18,.7));backdrop-filter:blur(14px)}
+.barline{display:flex;align-items:center;gap:.75rem;max-width:1320px;margin:0 auto;
+  padding:.7rem clamp(1rem,4vw,2.6rem)}
+.brand{display:flex;gap:.6rem;align-items:center;min-width:0}
+.brand .logo{width:34px;height:34px;border-radius:10px;font-size:.95rem;margin:0;flex:none}
+.brand b{display:block;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brand span{font-size:.72rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ok);flex:none;
+  box-shadow:0 0 0 4px rgba(46,204,113,.15)}
+.dot.off{background:var(--warn);box-shadow:0 0 0 4px rgba(243,156,18,.15)}
+.tabs{display:flex;align-items:center;gap:.35rem;max-width:1320px;margin:0 auto;
+  padding:0 clamp(1rem,4vw,2.6rem) .7rem;flex-wrap:wrap}
+.tabset{display:flex;gap:.2rem;padding:.18rem;border:1px solid var(--line);border-radius:13px;
+  background:rgba(255,255,255,.028);box-shadow:var(--edge)}
+.tabdiv{width:1px;height:26px;background:var(--line);margin:0 .35rem;flex:none}
+.tabs button{white-space:nowrap;background:none;border:0;border-radius:10px;padding:.48em .85em;
+  cursor:pointer;color:var(--muted);font-size:.89rem;display:flex;gap:.4rem;align-items:center;
+  transition:background .15s,color .15s,transform .12s,box-shadow .15s}
+.tabs button:hover{color:var(--text);background:rgba(255,255,255,.06);transform:translateY(-1px)}
+.tabs button.active{background:linear-gradient(180deg,#b30000,var(--accent));color:#fff;
+  box-shadow:0 6px 18px rgba(153,0,0,.42),var(--edge)}
+.tabs button.active i{opacity:1}
+.tabs button i{font-style:normal;opacity:.75;font-size:.95em}
+.main{padding:1.5rem clamp(1rem,4vw,2.6rem) 3rem;max-width:1320px;margin:0 auto;width:100%}
 #content>*{animation:rise .26s cubic-bezier(.2,.7,.3,1) both}
 @keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
-.head{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;margin-bottom:1.3rem;flex-wrap:wrap}
-.head h1{position:relative;padding-bottom:.35rem}
-.head h1::after{content:"";position:absolute;left:0;bottom:0;width:46px;height:3px;border-radius:99px;background:linear-gradient(90deg,var(--accent2),transparent)}
-.head p{margin:0}
+.head{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;margin-bottom:1.4rem;
+  flex-wrap:wrap;padding-bottom:.8rem;border-bottom:1px solid var(--line)}
+.head h1{position:relative;padding-left:1.05rem;font-size:1.6rem}
+.head h1::before{content:"";position:absolute;left:0;top:.32em;width:.55rem;height:.55rem;
+  border-radius:4px;background:linear-gradient(145deg,var(--accent2),var(--accent));
+  box-shadow:0 0 14px rgba(210,58,58,.6)}
+.head p{margin:.15rem 0 0;padding-left:1.05rem}
 
 /* обзор */
 .stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.8rem;margin-bottom:1.4rem}
-.stat{padding:.95rem 1rem;transition:transform .14s,border-color .16s}
+.stat{padding:.95rem 1rem;transition:transform .14s,border-color .16s;position:relative;overflow:hidden}
+.stat::before{content:"";position:absolute;left:0;top:0;width:100%;height:3px;background:linear-gradient(90deg,var(--accent2),transparent)}
 .stat:hover{transform:translateY(-2px);border-color:#3c3c47}
 .stat small{display:block;color:var(--muted);font-size:.8rem;margin-bottom:.15rem}
 .stat b{font-size:1.4rem;font-weight:650;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
@@ -190,14 +212,17 @@ dialog::backdrop{background:rgba(0,0,0,.65);backdrop-filter:blur(3px)}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
   #content>*,.toast{animation:none}
-  .btn:hover,.r:hover,.nav button:hover,.pager button:hover,.stat:hover,.guild:hover{transform:none}
+  .btn:hover,.r:hover,.tabs button:hover,.pager button:hover,.stat:hover,.guild:hover{transform:none}
 }
 
 @media (max-width:820px){
-  .shell{grid-template-columns:1fr}
-  .side{position:static;height:auto;flex-direction:row;align-items:center;overflow-x:auto;padding:.6rem;gap:.4rem;border-right:0;border-bottom:1px solid var(--line)}
-  .brand{display:none} .nav{flex-direction:row} .spacer{display:none}
-  .nav button{white-space:nowrap}
+  .barline{padding:.55rem 1rem;gap:.5rem}
+  .brand span{display:none}
+  .tabs{padding:0 1rem .55rem;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{padding:.45em .7em;font-size:.85rem}
+  .main{padding:1.1rem 1rem 2.5rem}
+  .head{margin-bottom:1.1rem}
   .split{grid-template-columns:1fr}
   .files{flex-direction:row;overflow-x:auto}
   .files button{flex:none}
@@ -311,30 +336,53 @@ function showLogin(msg) {
 }
 
 /* ---------- каркас ---------- */
+/* группа в третьей колонке — вкладки лепятся в полосы, полоса на каждую группу */
 const PAGES = [
-  ['overview', 'Обзор'],
-  ['apps', 'Заявки'],
-  ['send', 'Сообщения'],
-  ['screens', 'Экраны'],
-  ['diag', 'Диагностика'],
-  ['audit', 'Ревизия'],
-  ['shots', 'Снимки'],
-  ['modules', 'Модули'],
-  ['settings', 'Настройки'],
-  ['logs', 'Логи'],
-  ['control', 'Управление'],
+  ['overview', 'Обзор', '🧭', 'Семья'],
+  ['apps', 'Заявки', '💎', 'Семья'],
+  ['send', 'Сообщения', '✉️', 'Семья'],
+  ['screens', 'Экраны', '🖥️', 'Семья'],
+  ['diag', 'Диагностика', '🩺', 'Служба'],
+  ['audit', 'Ревизия', '🔍', 'Служба'],
+  ['shots', 'Снимки', '📸', 'Служба'],
+  ['modules', 'Модули', '🧩', 'Служба'],
+  ['settings', 'Настройки', '⚙️', 'Служба'],
+  ['logs', 'Логи', '📜', 'Служба'],
+  ['control', 'Управление', '🎛️', 'Служба'],
 ];
 
 function renderShell() {
-  const nav = h('div', { class: 'nav' }, PAGES.map(([id, label]) =>
-    h('button', { 'data-page': id, onclick: () => go(id) }, label)));
-  const side = h('aside', { class: 'side' },
-    h('div', { class: 'brand' }, h('div', { class: 'logo' }, 'H'), h('div', null, h('b', null, state.botName), h('span', null, 'Панель управления'))),
-    nav,
-    h('div', { class: 'spacer' }),
-    h('button', { class: 'btn', onclick: logout }, 'Выйти')
-  );
-  $app.replaceChildren(h('div', { class: 'shell' }, side, h('main', { class: 'main', id: 'content' })));
+  const sets = [];
+  for (const p of PAGES) {
+    const last = sets[sets.length - 1];
+    if (!last || last[0] !== p[3]) sets.push([p[3], []]);
+    sets[sets.length - 1][1].push(p);
+  }
+  const tabs = h('nav', { class: 'tabs' });
+  sets.forEach(([group, pages], i) => {
+    if (i) tabs.append(h('span', { class: 'tabdiv' }));
+    tabs.append(h('div', { class: 'tabset', 'aria-label': group },
+      pages.map(([id, label, icon]) =>
+        h('button', { 'data-page': id, title: label, onclick: () => go(id) },
+          h('i', null, icon), label))));
+  });
+  const bar = h('header', { class: 'topbar' },
+    h('div', { class: 'barline' },
+      h('div', { class: 'brand' },
+        h('div', { class: 'logo' }, 'H'),
+        h('div', null, h('b', null, state.botName), h('span', null, 'Панель управления'))),
+      h('span', { class: 'dot', id: 'live', title: 'Бот на связи' }),
+      h('div', { class: 'spacer' }),
+      h('button', { class: 'btn', onclick: logout }, 'Выйти')),
+    tabs);
+  $app.replaceChildren(bar, h('main', { class: 'main', id: 'content' }));
+}
+
+function markLive(ok) {
+  const dot = document.getElementById('live');
+  if (!dot) return;
+  dot.classList.toggle('off', !ok);
+  dot.title = ok ? 'Панель отвечает, бот на связи' : 'Панель не смогла получить данные';
 }
 
 async function logout() {
@@ -350,7 +398,7 @@ async function go(page) {
   if (!PAGES.some(([id]) => id === page)) page = 'overview';
   state.page = page;
   history.replaceState(null, '', '#' + page);
-  document.querySelectorAll('.nav button').forEach((b) => b.classList.toggle('active', b.dataset.page === page));
+  document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.page === page));
   const content = document.getElementById('content');
   content.replaceChildren(h('p', { class: 'muted' }, 'Загрузка…'));
   try {
@@ -358,7 +406,9 @@ async function go(page) {
       diag: pageDiag, audit: pageAudit, shots: pageShots,
       modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
     if (state.page === page) content.replaceChildren(view);
+    markLive(true);
   } catch (e) {
+    markLive(false);
     if (state.page === page) content.replaceChildren(h('p', { class: 'err' }, e.message));
   }
 }
