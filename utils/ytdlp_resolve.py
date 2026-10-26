@@ -18,7 +18,7 @@ import sys
 import yt_dlp
 
 YTDL_OPTS = {
-    "format": "bestaudio/best",
+    "format": "bestaudio[ext=m4a]/bestaudio/best",
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
@@ -32,6 +32,9 @@ YTDL_OPTS = {
     "cachedir": False,
     "playlist_items": "1",
     "flat_playlist": True,
+    # По умолчанию yt-dlp прощупывает каждый формат головой файла — это и время, и буферы.
+    # Нам нужен один адрес потока, пусть отдаёт первый подходящий без проверок.
+    "check_formats": False,
 }
 
 BOT_CHECK_MARK = "not a bot"
@@ -142,6 +145,16 @@ def resolve(
     raise RuntimeError(msg[:300])
 
 
+def _peak_mb() -> int:
+    """Пик RAM этого процесса: по нему и видно, сколько резолвер добавляет к боту."""
+    try:
+        import resource
+
+        return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss // 1024
+    except Exception:
+        return 0
+
+
 def main():
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -161,9 +174,9 @@ def main():
                 bool(req.get("prefer_soundcloud", True)),
                 int(req.get("search_results", 3)),
             )
-        out = {"ok": True, "track": track}
+        out = {"ok": True, "track": track, "peak_mb": _peak_mb()}
     except Exception as e:
-        out = {"ok": False, "error": str(e)[:300]}
+        out = {"ok": False, "error": str(e)[:300], "peak_mb": _peak_mb()}
     sys.stdout.write(json.dumps(out, ensure_ascii=False))
     return 0 if out.get("ok") else 1
 

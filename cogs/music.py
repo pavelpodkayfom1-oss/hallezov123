@@ -22,7 +22,7 @@ from utils.embeds import note_embed
 
 # Кулдаун на заказ музыки (секунд на одного пользователя) и число вариантов поиска
 PLAY_COOLDOWN = 20
-SEARCH_RESULTS = 3
+SEARCH_RESULTS = 2
 # На слабом хосте поиск на YouTube (с куками) может убить бота по памяти.
 # SoundCloud лёгкий и не требует входа, поэтому ищем сначала там. Поставьте False, чтобы вернуть YouTube первым.
 PREFER_SOUNDCLOUD = True
@@ -391,7 +391,9 @@ class Music(commands.Cog):
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
-                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+                # PYTHONMALLOC=malloc: без pymalloc арены не раздуваются лишними
+                # страницами, и освобождённое сразу возвращается ОС
+                env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONMALLOC": "malloc"},
             )
         except Exception as e:
             _log(f"дочерний резолвер не запустился: {e}")
@@ -407,6 +409,9 @@ class Music(commands.Cog):
         except Exception:
             _log("резолвер вернул непонятный ответ")
             return None
+        # Пик дочернего процесса — единственная цифра, по которой видно, влезает ли хост
+        if payload.get("peak_mb"):
+            _log(f"пик резолвера: {payload['peak_mb']} МБ")
         if payload.get("ok"):
             return payload.get("track")
         raise RuntimeError(str(payload.get("error") or "Ничего не найдено")[:300])
