@@ -25,16 +25,24 @@ html,body{margin:0;min-height:100%}
 html{scrollbar-width:thin;scrollbar-color:#35353f transparent}
 body{
   background:
-    radial-gradient(880px 460px at 12% -14%, rgba(153,0,0,.32), transparent 62%),
-    radial-gradient(700px 420px at 98% -6%, rgba(210,58,58,.16), transparent 58%),
     linear-gradient(rgba(255,255,255,.021) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255,255,255,.021) 1px, transparent 1px),
     linear-gradient(180deg, #0d0d11, var(--bg) 55%);
-  background-size:auto, auto, 100% 36px, 36px 100%, auto;
+  background-size:100% 36px, 36px 100%, auto;
   background-attachment:fixed;color:var(--text);
   font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-  -webkit-font-smoothing:antialiased
+  -webkit-font-smoothing:antialiased;
+  position:relative;isolation:isolate;min-height:100vh
 }
+/* две медленные засветки за всем экраном; изоляция нужна, чтобы они легли
+   поверх фона, но под содержимое, и на живом body, и на обёртке в макете */
+body::before,body::after{content:"";position:fixed;inset:-30% -25%;z-index:-1;pointer-events:none}
+body::before{background:radial-gradient(42% 46% at 28% 26%, rgba(153,0,0,.44), transparent 70%);
+  animation:drift 28s ease-in-out infinite alternate}
+body::after{background:radial-gradient(34% 40% at 74% 66%, rgba(210,58,58,.28), transparent 72%);
+  animation:drift2 34s ease-in-out infinite alternate}
+@keyframes drift{from{transform:translate3d(-5%,-3%,0) scale(1)}to{transform:translate3d(6%,5%,0) scale(1.14)}}
+@keyframes drift2{from{transform:translate3d(5%,4%,0) scale(1.1)}to{transform:translate3d(-7%,-4%,0) scale(1)}}
 ::selection{background:rgba(210,58,58,.38)}
 h1,h2,h3{margin:0 0 .4em;font-weight:650;letter-spacing:-.015em}
 h1{font-size:1.55rem} h2{font-size:1.15rem} h3{font-size:1rem}
@@ -46,12 +54,16 @@ input,select,textarea{background:var(--panel2);border:1px solid var(--line);bord
 input:hover,select:hover,textarea:hover{border-color:#3a3a45}
 input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent2);outline-offset:1px}
 select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 16px) calc(50% + 2px),calc(100% - 11px) calc(50% + 2px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:2.1em}
-.btn{background:linear-gradient(180deg,#232329,var(--panel2));border:1px solid var(--line);border-radius:10px;padding:.5em 1em;cursor:pointer;transition:transform .12s,border-color .15s,box-shadow .15s,background .15s;box-shadow:var(--edge)}
+.btn{position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;gap:.4em;background:linear-gradient(180deg,#232329,var(--panel2));border:1px solid var(--line);border-radius:10px;padding:.5em 1em;cursor:pointer;transition:transform .14s cubic-bezier(.2,.7,.3,1),border-color .15s,box-shadow .18s,background .15s;box-shadow:var(--edge)}
+.btn::after{content:"";position:absolute;top:0;left:-60%;width:45%;height:100%;pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.16),transparent);transform:skewX(-14deg);transition:left .45s ease}
 .btn:hover{border-color:#4b4b57;transform:translateY(-1px);box-shadow:var(--edge),0 8px 20px rgba(0,0,0,.35)}
-.btn:active{transform:translateY(0)}
+.btn:hover::after{left:120%}
+.btn:active{transform:translateY(0) scale(.97);box-shadow:inset 0 2px 8px rgba(0,0,0,.5)}
 .btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
 .btn.primary{background:linear-gradient(180deg,#b30000,var(--accent));border-color:#7d0000;color:#fff}
 .btn.primary:hover{background:linear-gradient(180deg,#cc1a1a,#a80000);box-shadow:0 8px 24px rgba(153,0,0,.42)}
+.btn.primary::after{background:linear-gradient(100deg,transparent,rgba(255,255,255,.3),transparent)}
 .btn.danger{background:#3a1212;border-color:#6b1c1c;color:#ffb4b4}
 .btn.danger:hover{background:#4d1717}
 .btn.wide{width:100%}
@@ -61,10 +73,24 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 .err{color:var(--err);min-height:1.4em;margin-top:.5rem;font-size:.9rem}
 
 /* вход */
-.center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
-.login{width:100%;max-width:360px;text-align:center;display:flex;flex-direction:column;gap:.7rem;padding:2rem 1.6rem;animation:rise .3s cubic-bezier(.2,.7,.3,1) both}
-.login input{width:100%;text-align:center}
-.logo{width:54px;height:54px;border-radius:16px;background:linear-gradient(145deg,#c40000,var(--accent));display:grid;place-items:center;font-size:1.6rem;font-weight:700;margin:0 auto .3rem;box-shadow:0 10px 28px rgba(153,0,0,.45),var(--edge)}
+.center{min-height:100vh;display:grid;place-items:center;padding:1rem}
+.login{position:relative;overflow:hidden;width:100%;max-width:380px;text-align:center;display:flex;flex-direction:column;gap:.75rem;padding:2.3rem 1.7rem;border-radius:20px;animation:rise .34s cubic-bezier(.2,.7,.3,1) both}
+/* по верхнему краю карточки бежит свет — экран входа otherwise совсем мёртвый */
+.login::before{content:"";position:absolute;inset:0 0 auto;height:2px;background:linear-gradient(90deg,transparent,var(--accent2),transparent);background-size:220% 100%;animation:sweep 5.5s linear infinite}
+@keyframes sweep{from{background-position:120% 0}to{background-position:-120% 0}}
+.login>*{animation:pop .42s cubic-bezier(.2,.7,.3,1) both}
+.login>*:nth-child(2){animation-delay:.06s}
+.login>*:nth-child(3){animation-delay:.12s}
+.login>*:nth-child(4){animation-delay:.18s}
+.login>*:nth-child(5){animation-delay:.24s}
+.login>*:nth-child(6){animation-delay:.3s}
+@keyframes pop{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
+.login h1{font-size:1.4rem;background:linear-gradient(180deg,#fff,#d5d5df);-webkit-background-clip:text;background-clip:text;color:transparent}
+.login input{width:100%;text-align:center;letter-spacing:.16em;font-size:1.02rem;padding:.7em .8em;border-radius:12px}
+.login input:focus{box-shadow:0 0 0 4px rgba(210,58,58,.18)}
+.login .btn{margin-top:.35rem;padding:.7em 1em;font-weight:600}
+.logo{width:54px;height:54px;border-radius:16px;background:linear-gradient(145deg,#c40000,var(--accent));display:grid;place-items:center;font-size:1.6rem;font-weight:700;margin:0 auto .3rem;box-shadow:0 10px 28px rgba(153,0,0,.45),var(--edge);animation:breathe 4.6s ease-in-out infinite}
+@keyframes breathe{0%,100%{box-shadow:0 10px 28px rgba(153,0,0,.45),var(--edge)}50%{box-shadow:0 12px 42px rgba(210,58,58,.62),var(--edge)}}
 .spinner{width:34px;height:34px;border:3px solid var(--line);border-top-color:var(--accent2);border-radius:50%;margin:0 auto;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -91,7 +117,8 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
   transition:background .15s,color .15s,transform .12s,box-shadow .15s}
 .tabs button:hover{color:var(--text);background:rgba(255,255,255,.06);transform:translateY(-1px)}
 .tabs button.active{background:linear-gradient(180deg,#b30000,var(--accent));color:#fff;
-  box-shadow:0 6px 18px rgba(153,0,0,.42),var(--edge)}
+  box-shadow:0 6px 18px rgba(153,0,0,.42),var(--edge);animation:tabglow 3.6s ease-in-out infinite}
+@keyframes tabglow{0%,100%{box-shadow:0 6px 18px rgba(153,0,0,.42),var(--edge)}50%{box-shadow:0 8px 26px rgba(210,58,58,.6),var(--edge)}}
 .tabs button.active i{opacity:1}
 .tabs button i{font-style:normal;opacity:.75;font-size:.95em}
 .main{padding:1.5rem clamp(1rem,4vw,2.6rem) 3rem;max-width:1320px;margin:0 auto;width:100%}
@@ -211,8 +238,9 @@ dialog::backdrop{background:rgba(0,0,0,.65);backdrop-filter:blur(3px)}
 
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
-  #content>*,.toast{animation:none}
+  #content>*,.toast,.login,.login>*,body::before,body::after,.logo,.tabs button.active{animation:none}
   .btn:hover,.r:hover,.tabs button:hover,.pager button:hover,.stat:hover,.guild:hover{transform:none}
+  .btn::after{display:none}
 }
 
 @media (max-width:820px){
