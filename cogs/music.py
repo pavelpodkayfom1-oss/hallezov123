@@ -30,6 +30,9 @@ PREFER_SOUNDCLOUD = True
 MAX_QUEUE = 25
 # Сколько секунд ждём резолвер, пока он не завис
 EXTRACT_TIMEOUT = 120
+# На время поиска сбрасываем кэш участников: он главный потребитель RAM, а резолверу надо
+# освободить ~100 МБ, иначе контейнер упирается в лимит хостинга. Выключить: MUSIC_SHED=0.
+SHED_MEMBERS = os.getenv("MUSIC_SHED", "1").strip().lower() not in ("0", "false", "off", "no")
 
 # yt-dlp импортируется только в дочернем процессе: сам по себе он занимает ~26 МБ
 # кучи и ещё столько же на разборе, а в обратную ОС память не отдаётся.
@@ -321,23 +324,70 @@ class Music(commands.Cog):
         async with self._extract_lock:
             _log(f"старт поиска: {query[:50]!r}")
             t0 = time.time()
-            track = await self._resolve_in_child(query)
-            if track is None:
-                # Резолвер не запустился (хост запрещает дочерние процессы) — работаем здесь
-                from utils.ytdlp_resolve import resolve
+            dropped = self._shed()
+            try:
+                track = await self._resolve_in_child(query)
+                if track is None:
+                    # Резолвер не запустился (хост запрещает дочерние процессы) — работаем здесь
+                    from utils.ytdlp_resolve import resolve
 
-                loop = asyncio.get_running_loop()
-                track = await loop.run_in_executor(None, lambda: resolve(
-                    query,
-                    COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
-                    PREFER_SOUNDCLOUD,
-                    SEARCH_RESULTS,
-                ))
-            _log(f"поиск завершён за {time.time() - t0:.1f} с")
+                    loop = asyncio.get_running_loop()
+                    track = await loop.run_in_executor(None, lambda: resolve(
+                        query,
+                        COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
+                        PREFER_SOUNDCLOUD,
+                        SEARCH_RESULTS,
+                    ))
+                _log(f"поиск завершён за {time.time() - t0:.1f} с")
+            except Exception as e:
+                # Без этой строки в логах хостинга тишина: причина только в ephemeral-ответе
+                _log(f"поиск не удался за {time.time() - t0:.1f} с: {str(e)[:180]}")
+                raise
+        await self._restore(dropped)
         _trim()
         track = dict(track)
         track["ts"] = time.time()
         return track
+
+    def _shed(self) -> list:
+        """Выкидывает кэш участников на время резолвера — это главный потребитель RAM.
+
+        disnake держит участников в двух местах (в гильдии и в общем кэше), поэтому чищим
+        оба и только то, что реально почистилось, потом возвращаем. Best effort: если
+        что-то из этого занято, просто идём дальше.
+        """
+        if not SHED_MEMBERS:
+            return []
+        _trim()
+        state = getattr(self.bot, "_connection", None)
+        users = getattr(state, "user_cache", None)
+        dropped = []
+        for g in list(getattr(self.bot, "guilds", [])):
+            members = getattr(g, "_members", None)
+            if not members:
+                continue
+            try:
+                if users is not None:
+                    for uid in list(members.keys()):
+                        users.pop(uid, None)
+                members.clear()
+                dropped.append(g)
+            except Exception as e:
+                _log(f"кэш участников не сбросить ({type(e).__name__})")
+        if dropped:
+            _trim()
+            _log(f"приостановил кэш участников: {len(dropped)} серверов")
+        return dropped
+
+    async def _restore(self, guilds: list):
+        """Возвращает список участников, который _shed освобождал под резолвер."""
+        for g in guilds:
+            try:
+                await asyncio.wait_for(g.chunk(), timeout=EXTRACT_TIMEOUT)
+            except Exception as e:
+                _log(f"кэш участников «{g.name}» не вернулся ({type(e).__name__})")
+        if guilds:
+            _log("кэш участников снова на месте")
 
     async def _resolve_in_child(self, query: str):
         """Возвращает трек, либо None, если дочерний процесс не смог стартовать."""
