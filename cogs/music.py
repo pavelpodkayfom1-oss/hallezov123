@@ -194,6 +194,55 @@ class TalkView(disnake.ui.View):
         await inter.response.send_modal(MusicModal())
 
 
+class TrackSelect(disnake.ui.StringSelect):
+    """Выпадающий список треков из библиотеки: выбрал — сразу играет."""
+
+    def __init__(self, files: list):
+        options = [
+            disnake.SelectOption(label=os.path.splitext(f)[0][:100], value=f[:100], emoji="🎵")
+            for f in files[:25]
+        ]
+        super().__init__(placeholder="🎧 Выбери трек из библиотеки", options=options,
+                         min_values=1, max_values=1)
+
+    async def callback(self, inter: disnake.MessageInteraction):
+        cog: "Music" = inter.bot.get_cog("Music")
+        await inter.response.defer(ephemeral=True)
+        await cog.handle_play(inter, os.path.splitext(self.values[0])[0])
+
+
+class PlayPanelView(disnake.ui.View):
+    """Появляется после «Включить музыку»: выбор трека, свой запрос и загрузка файла."""
+
+    def __init__(self):
+        super().__init__(timeout=300)
+        files = _library()
+        if files:
+            self.add_item(TrackSelect(files))
+
+    @disnake.ui.button(label="Загрузить трек", emoji="📥", style=disnake.ButtonStyle.primary, row=1)
+    async def upload(self, button, inter: disnake.MessageInteraction):
+        await inter.bot.get_cog("Music").ask_file(inter)
+
+    @disnake.ui.button(label="По названию / ссылке", emoji="🔎", style=disnake.ButtonStyle.secondary, row=1)
+    async def by_name(self, button, inter: disnake.MessageInteraction):
+        await inter.response.send_modal(MusicModal())
+
+
+def _play_panel_embed() -> disnake.Embed:
+    files = _library()
+    if files:
+        text = (f"В библиотеке **{len(files)}** треков. Выбери трек из списка ниже — бот зайдёт "
+                "к тебе в войс и сразу включит.\n\n"
+                "Нет нужного? Нажми **«📥 Загрузить трек»** и прикрепи mp3 — "
+                "или введи название / прямую ссылку на звук через **«🔎»**.")
+    else:
+        text = ("Библиотека пока пустая.\n\n"
+                "Нажми **«📥 Загрузить трек»** и прикрепи mp3 (можно сразу несколько раз подряд), "
+                "потом снова открой эту панель.")
+    return disnake.Embed(title="🎵 Музыка", description=text, color=_color())
+
+
 class MusicPanelView(disnake.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -205,7 +254,7 @@ class MusicPanelView(disnake.ui.View):
         if not inter.author.voice or not inter.author.voice.channel:
             return await inter.response.send_message(
                 embed=note_embed("❌ Сначала зайдите в голосовой канал, сэр."), ephemeral=True)
-        await inter.response.send_modal(MusicModal())
+        await inter.response.send_message(embed=_play_panel_embed(), view=PlayPanelView(), ephemeral=True)
 
     @disnake.ui.button(label="Позвать в войс", emoji="🎙", style=disnake.ButtonStyle.primary,
                        custom_id="music:join", row=0)
