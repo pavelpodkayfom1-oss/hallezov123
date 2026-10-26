@@ -61,6 +61,63 @@ def _rss_mb() -> int:
     return -1
 
 
+def _mem_pressure() -> str:
+    """Что реально занято в контейнере: своя память против кэша диска.
+
+    Панель хостинга считает весь контейнер, а не только бота: 95 МБ RSS и «257 из 256»
+    живут одновременно. Пока не видно, сколько из этого file-кэш (его можно сбросить), а
+    сколько — чужая память, рестарт при поиске остаётся гаданием.
+    """
+    def num(path):
+        try:
+            with open(path) as f:
+                return int(f.read().split()[0])
+        except Exception:
+            return None
+
+    def stat(path, *keys):
+        try:
+            with open(path) as f:
+                lines = f.read().splitlines()
+        except Exception:
+            return {}
+        out = {}
+        for line in lines:
+            parts = line.split()
+            if len(parts) == 2 and parts[0] in keys:
+                try:
+                    out[parts[0]] = int(parts[1])
+                except ValueError:
+                    pass
+        return out
+
+    mb = lambda v: -1 if v is None else v // (1024 * 1024)
+    used = num("/sys/fs/cgroup/memory.current")
+    if used is not None:
+        s = stat("/sys/fs/cgroup/memory.stat", "anon", "file")
+        return (f"контейнер {mb(used)}/{mb(num('/sys/fs/cgroup/memory.max'))} МБ, "
+                f"своя {mb(s.get('anon'))} + кэш {mb(s.get('file'))}")
+    used = num("/sys/fs/cgroup/memory/memory.usage_in_bytes")
+    if used is not None:
+        limit = num("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+        if limit is not None and limit > 10**12:
+            limit = None
+        s = stat("/sys/fs/cgroup/memory/memory.stat", "rss", "cache")
+        return (f"контейнер {mb(used)}/{mb(limit)} МБ, "
+                f"своя {mb(s.get('rss'))} + кэш {mb(s.get('cache'))}")
+    return "контейнер не виден"
+
+
+def _drop_caches() -> bool:
+    """Сбросить читаемый кэш страниц, чтобы резолвер стартовал с запасом. Только root."""
+    try:
+        with open("/proc/sys/vm/drop_caches", "w") as f:
+            f.write("1")
+        return True
+    except Exception:
+        return False
+
+
 def _log(msg: str):
     print(f"[music] {msg} | RSS={_rss_mb()} МБ", flush=True)
 
@@ -384,6 +441,9 @@ class Music(commands.Cog):
             },
             ensure_ascii=False,
         ).encode("utf-8")
+        _log(f"перед резолвером: {_mem_pressure()}")
+        if _drop_caches():
+            _log(f"кэш сброшен: {_mem_pressure()}")
         try:
             proc = await asyncio.create_subprocess_exec(
                 sys.executable,
