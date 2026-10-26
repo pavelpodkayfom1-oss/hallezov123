@@ -1,18 +1,18 @@
-"""Музыка в голосовом: очередь треков, панель заказов и поиск через yt-dlp.
+"""Музыка в голосовом: очередь треков, панель заказов и библиотека семьи.
 
-Раньше этот файл назывался cogs/_music.py — с подчёркиванием, и main.py его не грузил.
-Поиск специально живёт в дочернем процессе (utils/ytdlp_resolve.py): yt-dlp на пике ест
-60-100 МБ, а у хостинга 256 МБ на всё. Поэтому сам ког yt-dlp не импортирует и порядок
-очереди держит в памяти, а не на диске. Нужен ffmpeg: на хостинге его нет в PATH, поэтому
-берётся статический бинарник из imageio-ffmpeg (см. _ffmpeg_exe). YouTube требует
-cookies.txt рядом с main.py, поэтому по умолчанию ищем на SoundCloud (PREFER_SOUNDCLOUD).
+Разбор YouTube выключен совсем: yt-dlp на пике ест 60-100 МБ, а у хостинга 256 МБ на
+всё — бот умирал посреди поиска. Теперь трек берётся из папки `media/` рядом с main.py
+её наполняют командой /music_add, куда mp3 прикладывается прямо в сообщении) либо
+сразу играется по прямой ссылке на звук. ffmpeg при этом читает поток сам, второй
+процесс с тяжёлым парсером не нужен и памяти хватает. Нужен ffmpeg: на хостинге его нет
+в PATH, поэтому берётся статический бинарник из imageio-ffmpeg (см. _ffmpeg_exe).
 """
 import asyncio
-import json
 import os
-import sys
+import re
 import time
 from collections import deque
+from urllib.parse import unquote, urlparse
 
 import disnake
 from disnake.ext import commands
@@ -20,20 +20,17 @@ from disnake.ext import commands
 from utils.checks import load_config
 from utils.embeds import note_embed
 
-# Кулдаун на заказ музыки (секунд на одного пользователя) и число вариантов поиска
+# Кулдаун на заказ музыки (секунд на одного пользователя)
 PLAY_COOLDOWN = 20
-SEARCH_RESULTS = 2
-# На слабом хосте поиск на YouTube (с куками) может убить бота по памяти.
-# SoundCloud лёгкий и не требует входа, поэтому ищем сначала там. Поставьте False, чтобы вернуть YouTube первым.
-PREFER_SOUNDCLOUD = True
 # Сколько треков максимум может стоять в очереди
 MAX_QUEUE = 25
-# Сколько секунд ждём резолвер, пока он не завис
-EXTRACT_TIMEOUT = 120
+# Больше этого файла в библиотеку не кладём: диск 3 ГБ, а файл грузится в память
+MAX_TRACK_MB = 20
+AUDIO_EXT = (".mp3", ".ogg", ".oga", ".opus", ".m4a", ".aac", ".wav", ".flac")
 
-# yt-dlp импортируется только в дочернем процессе: сам по себе он занимает ~26 МБ
-# кучи и ещё столько же на разборе, а в обратную ОС память не отдаётся.
-RESOLVER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "utils", "ytdlp_resolve.py")
+# Библиотека лежит рядом с main.py и в git не попадает (в .gitignore там "*"),
+# поэтому треки переживают деплой и рестарты.
+MEDIA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "media")
 
 
 def _trim():
@@ -61,70 +58,26 @@ def _rss_mb() -> int:
     return -1
 
 
-def _mem_pressure() -> str:
-    """Что реально занято в контейнере: своя память против кэша диска.
-
-    Панель хостинга считает весь контейнер, а не только бота: 95 МБ RSS и «257 из 256»
-    живут одновременно. Пока не видно, сколько из этого file-кэш (его можно сбросить), а
-    сколько — чужая память, рестарт при поиске остаётся гаданием.
-    """
-    def num(path):
-        try:
-            with open(path) as f:
-                return int(f.read().split()[0])
-        except Exception:
-            return None
-
-    def stat(path, *keys):
-        try:
-            with open(path) as f:
-                lines = f.read().splitlines()
-        except Exception:
-            return {}
-        out = {}
-        for line in lines:
-            parts = line.split()
-            if len(parts) == 2 and parts[0] in keys:
-                try:
-                    out[parts[0]] = int(parts[1])
-                except ValueError:
-                    pass
-        return out
-
-    mb = lambda v: -1 if v is None else v // (1024 * 1024)
-    used = num("/sys/fs/cgroup/memory.current")
-    if used is not None:
-        s = stat("/sys/fs/cgroup/memory.stat", "anon", "file")
-        return (f"контейнер {mb(used)}/{mb(num('/sys/fs/cgroup/memory.max'))} МБ, "
-                f"своя {mb(s.get('anon'))} + кэш {mb(s.get('file'))}")
-    used = num("/sys/fs/cgroup/memory/memory.usage_in_bytes")
-    if used is not None:
-        limit = num("/sys/fs/cgroup/memory/memory.limit_in_bytes")
-        if limit is not None and limit > 10**12:
-            limit = None
-        s = stat("/sys/fs/cgroup/memory/memory.stat", "rss", "cache")
-        return (f"контейнер {mb(used)}/{mb(limit)} МБ, "
-                f"своя {mb(s.get('rss'))} + кэш {mb(s.get('cache'))}")
-    return "контейнер не виден"
-
-
-def _drop_caches() -> bool:
-    """Сбросить читаемый кэш страниц, чтобы резолвер стартовал с запасом. Только root."""
-    try:
-        with open("/proc/sys/vm/drop_caches", "w") as f:
-            f.write("1")
-        return True
-    except Exception:
-        return False
-
-
 def _log(msg: str):
     print(f"[music] {msg} | RSS={_rss_mb()} МБ", flush=True)
 
 
-# Необязательно: если рядом с main.py лежит cookies.txt, он используется для YouTube.
-# Этот файл лежит в cogs/, поэтому поднимаемся на папку выше — к main.py.
-COOKIES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cookies.txt")
+def _library() -> list:
+    """Что лежит в библиотеке семьи, готовое к воспроизведению."""
+    try:
+        return sorted(f for f in os.listdir(MEDIA_DIR) if f.lower().endswith(AUDIO_EXT))
+    except FileNotFoundError:
+        return []
+
+
+def _safe_name(name: str) -> str:
+    """Имя файла с Discord: без путей, точек подряд и мусора — по нему потом ищем трек."""
+    stem = os.path.splitext(os.path.basename(name))[0]
+    stem = re.sub(r"[^\w\- ]+", "_", stem, flags=re.UNICODE).strip()
+    stem = re.sub(r"\s+", " ", stem)
+    return (stem or "track")[:80]
+
+
 FFMPEG_BEFORE = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
 # -vn -sn -dn: ffmpeg не декодирует видео и субтитры — меньше буферов на слабом хосте
 FFMPEG_OPTS = "-vn -sn -dn"
@@ -163,6 +116,8 @@ def _color(key: str = "embed_color") -> int:
 
 
 def _fmt_duration(sec) -> str:
+    if sec is None:
+        return "—"
     if not sec:
         return "live"
     sec = int(sec)
@@ -321,8 +276,6 @@ class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.players: dict[int, GuildPlayer] = {}
-        # Только один поиск yt-dlp за раз: иначе на слабом хосте памяти не хватает
-        self._extract_lock = asyncio.Semaphore(1)
         self._last_play: dict[int, float] = {}
 
     @commands.Cog.listener()
@@ -331,8 +284,7 @@ class Music(commands.Cog):
         if not getattr(self.bot, "_music_view_added", False):
             self.bot.add_view(MusicPanelView())
             self.bot._music_view_added = True
-            # путь в лог: «требует вход» означает, что файла просто нет по этому пути
-            _log(f"cookies: {'есть' if os.path.exists(COOKIES_FILE) else 'нет'} — {COOKIES_FILE}")
+            _log(f"библиотека: {len(_library())} треков в {MEDIA_DIR}")
 
     # ---------- helpers ----------
     def get_player(self, guild: disnake.Guild) -> GuildPlayer:
@@ -401,105 +353,56 @@ class Music(commands.Cog):
         await inter.response.send_message(embed=note_embed(f"🔊 Громкость: **{int(p.volume * 100)}%**"), ephemeral=True)
 
     async def _extract(self, query: str) -> dict:
-        """Ищет трек. Разбор — в дочернем процессе, чтобы yt-dlp не съедал память бота."""
-        async with self._extract_lock:
-            _log(f"старт поиска: {query[:50]!r}")
-            t0 = time.time()
-            try:
-                track = await self._resolve_in_child(query)
-                if track is None:
-                    # Резолвер не запустился (хост запрещает дочерние процессы) — работаем здесь
-                    from utils.ytdlp_resolve import resolve
+        """Находит трек: прямая ссылка на звук играется как есть, остальное ищем в media/."""
+        query = query.strip()
+        if not query:
+            raise RuntimeError("Пустой запрос")
+        if query.lower().startswith(("http://", "https://")):
+            return self._from_link(query)
+        path = self._find_track(query)
+        return {
+            "title": os.path.splitext(os.path.basename(path))[0][:120],
+            "stream_url": path,
+            "webpage_url": query,
+            "duration": None,
+            "thumbnail": None,
+            "ts": time.time(),
+        }
 
-                    loop = asyncio.get_running_loop()
-                    track = await loop.run_in_executor(None, lambda: resolve(
-                        query,
-                        COOKIES_FILE,
-                        PREFER_SOUNDCLOUD,
-                        SEARCH_RESULTS,
-                    ))
-                _log(f"поиск завершён за {time.time() - t0:.1f} с")
-            except Exception as e:
-                # Без этой строки в логах хостинга тишина: причина только в ephemeral-ответе
-                _log(f"поиск не удался за {time.time() - t0:.1f} с: {str(e)[:180]}")
-                raise
-        _trim()
-        track = dict(track)
-        track["ts"] = time.time()
-        return track
+    @staticmethod
+    def _from_link(url: str) -> dict:
+        """Ссылка, которая ведёт прямо на аудиофайл: ffmpeg съест её сам."""
+        name = unquote(os.path.basename(urlparse(url).path))
+        stem = os.path.splitext(name)[0] if name.lower().endswith(AUDIO_EXT) else ""
+        return {
+            "title": (stem or url)[:120],
+            "stream_url": url,
+            "webpage_url": url,
+            "duration": None,
+            "thumbnail": None,
+            "ts": time.time(),
+        }
 
-    async def _resolve_in_child(self, query: str):
-        """Возвращает трек, либо None, если дочерний процесс не смог стартовать."""
-        request = json.dumps(
-            {
-                "query": query,
-                # путь передаём всегда: есть файл или нет — решает резолвер, иначе в ошибке
-                # останется бессмысленное «путь не передан» вместо адреса
-                "cookies": COOKIES_FILE,
-                "prefer_soundcloud": PREFER_SOUNDCLOUD,
-                "search_results": SEARCH_RESULTS,
-            },
-            ensure_ascii=False,
-        ).encode("utf-8")
-        _log(f"перед резолвером: {_mem_pressure()}")
-        if _drop_caches():
-            _log(f"кэш сброшен: {_mem_pressure()}")
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                sys.executable,
-                RESOLVER,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-                # PYTHONMALLOC=malloc: без pymalloc арены не раздуваются лишними
-                # страницами, и освобождённое сразу возвращается ОС
-                env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONMALLOC": "malloc"},
-            )
-        except Exception as e:
-            _log(f"дочерний резолвер не запустился: {e}")
-            return None
-        # Сэмплер пика: если контейнер не выдержит и процесс снимут, цифра из JSON не
-        # дойдёт никогда. VmHWM читаем у живого ребёнка и пишем каждый новый максимум.
-        peak = {"mb": 0}
-
-        async def sample():
-            path = f"/proc/{proc.pid}/status"
-            while True:
-                await asyncio.sleep(0.5)
-                try:
-                    with open(path) as f:
-                        head = f.read()
-                except Exception:
-                    return
-                for line in head.splitlines():
-                    if line.startswith("VmHWM:"):
-                        try:
-                            mb = int(line.split()[1]) // 1024
-                        except (IndexError, ValueError):
-                            return
-                        if mb > peak["mb"]:
-                            peak["mb"] = mb
-                            _log(f"резолвер ест {mb} МБ")
-
-        watcher = asyncio.ensure_future(sample())
-        try:
-            out = (await asyncio.wait_for(proc.communicate(request), timeout=EXTRACT_TIMEOUT))[0]
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            raise RuntimeError(f"Поиск завис ({EXTRACT_TIMEOUT} сек), трек не взят.")
-        finally:
-            watcher.cancel()
-        # Пик дочернего процесса — единственная цифра, по которой видно, влезает ли хост
-        _log(f"пик резолвера: {peak['mb']} МБ, бот сейчас {_rss_mb()} МБ")
-        try:
-            payload = json.loads(out.decode("utf-8", "replace"))
-        except Exception:
-            _log("резолвер вернул непонятный ответ")
-            return None
-        if payload.get("ok"):
-            return payload.get("track")
-        raise RuntimeError(str(payload.get("error") or "Ничего не найдено")[:300])
+    @staticmethod
+    def _find_track(query: str) -> str:
+        """Трек из библиотеки: сначала точное имя, потом подстрока в имени файла."""
+        files = _library()
+        if not files:
+            raise RuntimeError(f"Библиотека пуста: в {MEDIA_DIR} нет ни одного файла, "
+                               "закинь трек командой /music_add")
+        want = re.sub(r"\s+", " ", query.lower()).strip()
+        stems = {os.path.splitext(f)[0].lower(): f for f in files}
+        hit = stems.get(want)
+        if hit is None:
+            hits = sorted(f for s, f in stems.items() if want in s)
+            if not hits:
+                raise RuntimeError(f"Нет трека «{query}» в библиотеке "
+                                   f"(всего {len(files)}, список — /music_list)")
+            if len(hits) > 1:
+                raise RuntimeError("Похоже сразу на несколько: "
+                                   + ", ".join(os.path.splitext(h)[0] for h in hits[:6]))
+            hit = hits[0]
+        return os.path.join(MEDIA_DIR, hit)
 
     # ---------- core ----------
     async def handle_play(self, inter, query: str):
@@ -549,7 +452,8 @@ class Music(commands.Cog):
 
         track = p.queue.popleft()
         try:
-            if time.time() - track["ts"] > 600:  # ссылка на стрим могла протухнуть
+            if track["webpage_url"].startswith("http") and time.time() - track["ts"] > 600:
+                # ссылка на чужой стрим могла протухнуть, файл с диска — нет
                 fresh = await self._extract(track["webpage_url"])
                 track.update(fresh)
             source = disnake.PCMVolumeTransformer(
@@ -579,9 +483,11 @@ class Music(commands.Cog):
         vc.play(source, after=after)
 
         if p.text_channel:
+            link = track["webpage_url"]
+            shown = f"[{track['title']}]({link})" if link.startswith("http") else f"**{track['title']}**"
             embed = disnake.Embed(
                 title="🎶 Сейчас играет",
-                description=f"[{track['title']}]({track['webpage_url']})",
+                description=shown,
                 color=_color(),
             )
             embed.add_field(name="Длительность", value=_fmt_duration(track["duration"]))
@@ -602,7 +508,9 @@ class Music(commands.Cog):
             title="🎧 Музыкальная панель",
             description=(
                 "Зайдите в голосовой канал и нажмите **«Включить музыку»**.\n"
-                "Бот спросит, какую музыку включить, зайдёт к вам в войс и поставит трек.\n\n"
+                "Бот спросит название из библиотеки семьи (или ссылку на звук), зайдёт к вам "
+                "в войс и поставит трек.\n\n"
+                "Треки кладутся командой `/music_add` — просто прикрепи mp3 к сообщению.\n\n"
                 "Управление: ⏯ пауза • ⏭ скип • ⏹ стоп • 📜 очередь • 🔉🔊 громкость"
             ),
             color=_color(),
@@ -610,10 +518,52 @@ class Music(commands.Cog):
         await inter.channel.send(embed=embed, view=MusicPanelView())
         await inter.response.send_message(embed=note_embed("✅ Панель отправлена."), ephemeral=True)
 
-    @commands.slash_command(name="play", description="Включить музыку (название или ссылка)")
+    @commands.slash_command(name="play", description="Включить трек из библиотеки (имя или прямая ссылка)")
     async def play_cmd(self, inter: disnake.ApplicationCommandInteraction, запрос: str):
         await inter.response.defer(ephemeral=True)
         await self.handle_play(inter, запрос.strip())
+
+    @commands.slash_command(name="music_add", description="Закинуть трек в библиотеку: прикрепи mp3")
+    async def add_cmd(self, inter: disnake.ApplicationCommandInteraction, файл: disnake.Attachment):
+        ext = os.path.splitext(файл.filename)[1].lower()
+        if ext not in AUDIO_EXT:
+            return await inter.response.send_message(
+                embed=note_embed(f"❌ `{файл.filename}` — не звук. Подходят: "
+                                 + ", ".join(AUDIO_EXT)), ephemeral=True)
+        if файл.size > MAX_TRACK_MB * 1024 * 1024:
+            return await inter.response.send_message(
+                embed=note_embed(f"❌ Файл больше {MAX_TRACK_MB} МБ — на этом хостинге не влезет."),
+                ephemeral=True)
+        await inter.response.defer(ephemeral=True)
+        name = _safe_name(файл.filename) + ext
+        path = os.path.join(MEDIA_DIR, name)
+        try:
+            data = await файл.read()
+            os.makedirs(MEDIA_DIR, exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(data)
+        except Exception as e:
+            return await inter.followup.send(
+                embed=note_embed(f"❌ Не сохранил: `{str(e)[:160]}`"), ephemeral=True)
+        del data
+        _trim()
+        _log(f"в библиотеку добавлен {name} ({len(os.listdir(MEDIA_DIR))} файлов)")
+        await inter.followup.send(
+            embed=note_embed(f"📥 Готово: **{os.path.splitext(name)[0]}**.\n"
+                             f"Стоя в голосовом, напиши `/play {os.path.splitext(name)[0]}`"),
+            ephemeral=True)
+
+    @commands.slash_command(name="music_list", description="Что есть в библиотеке семьи")
+    async def list_cmd(self, inter: disnake.ApplicationCommandInteraction):
+        files = _library()
+        if not files:
+            return await inter.response.send_message(
+                embed=note_embed(f"Библиотека пуста. Прикрепи mp3 к команде `/music_add`,"
+                                 f" и трек появится в {MEDIA_DIR}"), ephemeral=True)
+        lines = [f"`{i + 1}.` {os.path.splitext(f)[0]}" for i, f in enumerate(files[:25])]
+        extra = f"\n…и ещё {len(files) - 25}" if len(files) > 25 else ""
+        await inter.response.send_message(
+            embed=note_embed("🎧 Библиотека семьи\n" + "\n".join(lines) + extra), ephemeral=True)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
