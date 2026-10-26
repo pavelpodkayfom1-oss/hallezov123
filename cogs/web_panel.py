@@ -3,6 +3,11 @@
 Работает внутри процесса бота (aiohttp уже есть в requirements.txt), поэтому
 отдельный сервер или база не нужны. Возможности:
   • обзор: пинг, аптайм, память, серверы, статистика БД
+  • заявки: список, анкета, история, принять/отказать/обзвон прямо из браузера
+  • сообщения: текст в канал, ЛС и рассылка
+  • команды: экраны админ-хаба без Discord
+  • диагностика: сутки работы, память против лимита хостинга, молчуны
+  • снимки: откат файлов настроек с показом отличий
   • модули (cogs): включить / отключить / перезагрузить, выбор переживает перезапуск
   • редактор JSON-файлов настроек с проверкой и резервной копией (.bak)
   • логи: консоль бота и файл bot.log
@@ -301,6 +306,28 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/files/{name}", self.h_file_get)
             app.router.add_put("/api/files/{name}", self.h_file_put)
             app.router.add_get("/api/logs", self.h_logs)
+            app.router.add_get("/api/apps", self.h_apps)
+            app.router.add_get("/api/apps/{app_id}", self.h_app_detail)
+            app.router.add_post("/api/apps/{app_id}/act", self.h_app_act)
+            app.router.add_get("/api/staff", self.h_staff)
+            app.router.add_get("/api/channels", self.h_channels)
+            app.router.add_get("/api/members", self.h_members)
+            app.router.add_get("/api/voices", self.h_voices)
+            app.router.add_post("/api/send", self.h_send)
+            app.router.add_post("/api/dm", self.h_dm)
+            app.router.add_post("/api/broadcast", self.h_broadcast)
+            app.router.add_get("/api/commands", self.h_commands)
+            app.router.add_post("/api/commands/run", self.h_command_run)
+            app.router.add_post("/api/commands/press", self.h_command_press)
+            app.router.add_post("/api/commands/modal", self.h_command_modal)
+            app.router.add_get("/api/diag/day", self.h_diag_day)
+            app.router.add_get("/api/diag/system", self.h_diag_system)
+            app.router.add_get("/api/diag/silents", self.h_diag_silents)
+            app.router.add_get("/api/audit/channels", self.h_audit_channels)
+            app.router.add_get("/api/audit/emojis", self.h_audit_emojis)
+            app.router.add_get("/api/snapshots", self.h_snapshots)
+            app.router.add_get("/api/snapshots/{name}", self.h_snapshot_get)
+            app.router.add_post("/api/snapshots/{name}/restore", self.h_snapshot_restore)
             app.router.add_get("/api/presence", self.h_presence_get)
             app.router.add_post("/api/presence", self.h_presence_set)
             app.router.add_post("/api/bot/restart", self.h_restart)
@@ -512,6 +539,205 @@ class WebPanel(commands.Cog):
         _write_state(state)
         print(f"🧩 Панель: {message}", flush=True)
         return _json({"ok": True, "message": message, "loaded": name in self.bot.extensions})
+
+    # ---- взрослые разделы ----
+    # Всё дело лежит в utils/web_tools.py: тут только разбор запроса. Импорт на месте,
+    # чтобы отсутствующий файл не ронял панель на старте, а честно показывал ошибку.
+    @staticmethod
+    def _tools():
+        try:
+            from utils import web_tools
+        except Exception as e:
+            return None, f"Раздел не заведён: utils/web_tools.py не загружается ({e})"
+        return web_tools, None
+
+    @staticmethod
+    def _fail(res: Dict[str, Any]) -> bool:
+        return bool(res.get("error"))
+
+    async def h_apps(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(await tools.apps_list(request.query.get("status"),
+                                          request.query.get("q"),
+                                          request.query.get("limit") or 60))
+
+    async def h_app_detail(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        if not request.match_info["app_id"].isdigit():
+            return _json({"error": "Непонятный номер заявки"})
+        return _json(await tools.app_detail(self.bot, int(request.match_info["app_id"])))
+
+    async def h_app_act(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        body = await _body(request)
+        action = str(body.get("action") or "")
+        if action not in ("review", "interview", "accept", "reject"):
+            return _json({"error": "Неизвестное действие с заявкой"}, 400)
+        app_id = int(request.match_info["app_id"]) if request.match_info["app_id"].isdigit() else 0
+        res = await tools.app_action(self.bot, app_id, action, int(body.get("actor") or 0),
+                                    str(body.get("reason") or "")[:500],
+                                    str(body.get("voice") or "")[:120])
+        who = res.get("error") or " → ".join(res.get("steps", []))[:200]
+        print(f"🗂 Панель: заявка #{app_id} {action}: {who}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_staff(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(tools.staff_list(self.bot))
+
+    async def h_channels(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(tools.channel_rows(self.bot, request.query.get("q", "")))
+
+    async def h_members(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(tools.member_rows(self.bot, request.query.get("q", ""),
+                                      request.query.get("limit") or 50))
+
+    async def h_voices(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(tools.voice_choices(self.bot))
+
+    async def h_send(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        body = await _body(request)
+        res = await tools.post_channel(self.bot, body.get("channel"),
+                                      str(body.get("text") or ""), str(body.get("title") or ""),
+                                      str(body.get("color") or ""), bool(body.get("ping")))
+        print(f"✉️ Панель: в {res.get('where', '?')}: {str(res.get('error') or res.get('link'))[:120]}",
+              flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_dm(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        body = await _body(request)
+        res = await tools.post_dm(self.bot, body.get("user"), str(body.get("text") or ""),
+                                 str(body.get("title") or ""), str(body.get("color") or ""))
+        print(f"✉️ Панель: ЛС {res.get('where', '?')}: {str(res.get('error') or res.get('link'))[:120]}",
+              flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_broadcast(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        body = await _body(request)
+        res = await tools.broadcast(self.bot, body.get("users"), str(body.get("text") or ""),
+                                   str(body.get("title") or ""), str(body.get("color") or ""),
+                                   dry=bool(body.get("dry", True)))
+        print(f"📣 Панель: рассылка {'накидка' if res.get('dry') else 'отправлена'}: "
+              f"{str(res.get('error') or res.get('sent') or res.get('would'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_commands(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(tools.command_rows())
+
+    async def h_command_run(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        body = await _body(request)
+        res = await tools.run_screen(self.bot, str(body.get("ref") or ""), body.get("actor"),
+                                    body.get("channel"))
+        print(f"🧭 Панель: экран {res.get('cmd') or body.get('ref')}: "
+              f"{str(res.get('error') or res.get('kind'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_command_press(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        body = await _body(request)
+        values = body.get("values") if isinstance(body.get("values"), list) else []
+        res = await tools.press(self.bot, body.get("token"), body.get("index"), body.get("actor"),
+                               [str(v) for v in values])
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_command_modal(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        body = await _body(request)
+        fields = body.get("fields") if isinstance(body.get("fields"), dict) else {}
+        res = await tools.submit_modal(self.bot, body.get("token"),
+                                      {str(k): str(v) for k, v in fields.items()},
+                                      body.get("actor"))
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_diag_day(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        hours = request.query.get("hours") or 24
+        return _json(await tools.day_report(int(hours) if hours.isdigit() else 24))
+
+    async def h_diag_system(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(tools.system_report(self.bot))
+
+    async def h_diag_silents(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        days = request.query.get("days") or 7
+        return _json(await tools.silents(self.bot, int(days) if days.isdigit() else 7))
+
+    async def h_audit_channels(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        limit = request.query.get("limit") or 40
+        return _json(await tools.channel_audit(self.bot, int(limit) if limit.isdigit() else 40))
+
+    async def h_audit_emojis(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(tools.emoji_audit(self.bot))
+
+    async def h_snapshots(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(tools.snapshot_rows())
+
+    async def h_snapshot_get(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(tools.snapshot_diff(request.match_info["name"]))
+
+    async def h_snapshot_restore(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        res = await tools.snapshot_restore(request.match_info["name"], self.bot)
+        print(f"↩️ Панель: откат к {request.match_info['name']}: "
+              f"{str(res.get('error') or res.get('steps'))[:200]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
 
     # ---- файлы настроек ----
     def _json_files(self) -> List[Path]:

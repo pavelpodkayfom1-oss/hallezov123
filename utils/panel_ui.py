@@ -116,7 +116,41 @@ input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid v
 .form label{display:flex;flex-direction:column;gap:.25rem;font-size:.85rem;color:var(--muted)}
 .card.danger-zone{border-color:#5a1b1b}
 
-dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:1.3rem;max-width:420px;width:calc(100% - 2rem)}
+/* заявки, сообщения, экраны, диагностика */
+.pager{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.8rem}
+.pager button{background:var(--panel2);border:1px solid var(--line);border-radius:99px;padding:.35em .9em;cursor:pointer;color:var(--muted);font-size:.85rem}
+.pager button.active{border-color:var(--accent2);color:#fff;background:rgba(153,0,0,.25)}
+.rows{display:flex;flex-direction:column;gap:.4rem}
+.r{display:flex;gap:.7rem;align-items:center;padding:.6rem .85rem;background:var(--panel);border:1px solid var(--line);border-radius:10px;cursor:pointer;text-align:left;width:100%}
+.r:hover{border-color:#44444f}
+.r.sel{border-color:var(--accent2);background:rgba(153,0,0,.14)}
+.r .grow{flex:1;min-width:0}
+.r b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.r small{display:block;color:var(--muted);font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:.35rem .8rem;font-size:.9rem}
+.kv dt{color:var(--muted)} .kv dd{margin:0;word-break:break-word}
+.timeline{display:flex;flex-direction:column;gap:.45rem;margin:.4rem 0 0;padding:0;list-style:none}
+.timeline li{border-left:2px solid var(--line);padding-left:.7rem;font-size:.87rem}
+.timeline li span{color:var(--muted);font-size:.78rem}
+.steps{margin:.4rem 0 0;padding-left:1.1rem;font-size:.88rem}
+.warnline{color:var(--warn);font-size:.85rem}
+.embed{border-left:4px solid var(--accent);background:var(--panel2);border-radius:8px;padding:.7rem .9rem;margin-bottom:.6rem}
+.embed b{display:block;margin-bottom:.25rem}
+.embed .fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.35rem .8rem;margin-top:.5rem;font-size:.85rem}
+.embed .fields i{font-style:normal;color:var(--muted);display:block}
+.embed img{max-width:220px;border-radius:8px;margin-top:.5rem;display:block}
+.btns{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem}
+.bar{height:9px;border-radius:99px;background:#2a2a32;overflow:hidden;margin:.35rem 0 .6rem}
+.bar i{display:block;height:100%;background:var(--accent2)}
+.bar i.warn{background:var(--warn)} .bar i.ok{background:var(--ok)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}
+textarea.msg{min-height:130px;width:100%;resize:vertical;font-family:inherit}
+.picks{max-height:230px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:.5rem;display:flex;flex-direction:column;gap:.2rem}
+.picks label{display:flex;gap:.5rem;align-items:center;font-size:.86rem;color:var(--text);cursor:pointer}
+.diff .was{color:var(--muted);font-size:.78rem}
+.diff del{text-decoration:none;color:#ff8a80} .diff ins{text-decoration:none;color:#8be0a8}
+
+dialog{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:var(--radius);padding:1.3rem;max-width:520px;width:calc(100% - 2rem)}
 dialog::backdrop{background:rgba(0,0,0,.65)}
 #toasts{position:fixed;right:1rem;bottom:1rem;display:flex;flex-direction:column;gap:.5rem;z-index:50}
 .toast{background:var(--panel2);border:1px solid var(--line);border-left:4px solid var(--accent2);border-radius:9px;padding:.65rem .9rem;max-width:340px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
@@ -242,6 +276,12 @@ function showLogin(msg) {
 /* ---------- каркас ---------- */
 const PAGES = [
   ['overview', 'Обзор'],
+  ['apps', 'Заявки'],
+  ['send', 'Сообщения'],
+  ['screens', 'Экраны'],
+  ['diag', 'Диагностика'],
+  ['audit', 'Ревизия'],
+  ['shots', 'Снимки'],
   ['modules', 'Модули'],
   ['settings', 'Настройки'],
   ['logs', 'Логи'],
@@ -277,7 +317,9 @@ async function go(page) {
   const content = document.getElementById('content');
   content.replaceChildren(h('p', { class: 'muted' }, 'Загрузка…'));
   try {
-    const view = await ({ overview: pageOverview, modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
+    const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, screens: pageScreens,
+      diag: pageDiag, audit: pageAudit, shots: pageShots,
+      modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
     if (state.page === page) content.replaceChildren(view);
   } catch (e) {
     if (state.page === page) content.replaceChildren(h('p', { class: 'err' }, e.message));
@@ -552,6 +594,485 @@ async function pageControl() {
         h('div', { class: 'row' }, restart, stop)
       )
     )
+  );
+}
+
+/* ---------- общие кусочки новых разделов ---------- */
+function spinner(text) { return h('p', { class: 'muted' }, text || 'Загрузка…'); }
+
+function chip(text, kind) { return h('span', { class: 'chip ' + (kind || '') }, text); }
+
+function kv(pairs) {
+  const dl = h('dl', { class: 'kv' });
+  pairs.filter((p) => p[1] !== null && p[1] !== undefined && p[1] !== '').forEach(([k, v]) => {
+    dl.append(h('dt', null, k), h('dd', null, String(v)));
+  });
+  return dl;
+}
+
+function lines(list, cls) {
+  const ul = h('ul', { class: cls || 'steps' });
+  list.filter(Boolean).forEach((t) => ul.append(h('li', null, String(t))));
+  return ul;
+}
+
+async function staffBox(label, selected) {
+  const sel = h('select', null);
+  const people = await api('/api/staff');
+  if (!people.length) return h('p', { class: 'warnline' }, 'На сервере никто не числится сотрудником — панели не от кого будет действовать.');
+  people.forEach((p) => sel.append(h('option', { value: p.id }, p.name + (p.top_role ? ' · ' + p.top_role : ''))));
+  if (selected) sel.value = selected;
+  return h('label', null, label, sel);
+}
+
+function linkRow(url, text) {
+  return h('a', { href: url, target: '_blank', rel: 'noopener noreferrer', class: 'btn' }, text || 'Открыть в Discord');
+}
+
+/* ---------- Заявки ---------- */
+const APP_STATUS = [['open', 'открытые'], ['', 'все'], ['pending', 'новые'], ['in_review', 'на рассмотрении'],
+  ['accepted', 'принятые'], ['rejected', 'отказ']];
+
+async function pageApps() {
+  const q = h('input', { type: 'search', placeholder: 'Ник, статика, ID…' });
+  const status = h('select', null, APP_STATUS.map(([v, l]) => h('option', { value: v }, l)));
+  status.value = 'open';
+  const counts = h('div', { class: 'pager' });
+  const listBox = h('div', { class: 'rows' });
+  const detail = h('div', { class: 'card' }, spinner('Выбери заявку.'));
+  let picked = 0;
+
+  function pick(id) {
+    picked = id;
+    document.querySelectorAll('[data-app]').forEach((b) => b.classList.toggle('sel', +b.dataset.app === id));
+    detail.replaceChildren(spinner('Читаю заявку…'));
+    api('/api/apps/' + id).then(renderDetail).catch((e) => detail.replaceChildren(h('p', { class: 'err' }, e.message)));
+  }
+
+  async function load() {
+    let d;
+    try { d = await api('/api/apps?status=' + encodeURIComponent(status.value) + '&q=' + encodeURIComponent(q.value.trim())); }
+    catch (e) { listBox.replaceChildren(h('p', { class: 'err' }, e.message)); return; }
+    counts.replaceChildren(...Object.entries(d.counts || {}).map(([k, v]) => h('span', { class: 'chip' }, k + ': ' + v)));
+    listBox.replaceChildren(...(d.apps.length ? d.apps.map((a) => {
+      const b = h('button', { class: 'r' + (a.id === picked ? ' sel' : ''), 'data-app': a.id, onclick: () => pick(a.id) },
+        h('div', { class: 'grow' }, h('b', null, a.nick + ' · ' + (a.static_id || 'без статики')),
+          h('small', null, '#' + a.id + ' · ' + a.status_label + ' · ' + (a.created_at || '').slice(0, 16).replace('T', ' '))),
+        chip(a.closed ? 'закрыта' : a.status_label, a.closed ? 'off' : 'ok'));
+      return b;
+    }) : [h('p', { class: 'muted' }, 'Ничего не нашлось.')]));
+  }
+
+  function answersNode(a) {
+    const out = [];
+    (function walk(node, prefix) {
+      if (node === null || node === undefined) return;
+      if (Array.isArray(node)) { node.forEach((v, i) => walk(v, prefix + ' ' + (i + 1))); return; }
+      if (typeof node === 'object') { Object.entries(node).forEach(([k, v]) => walk(v, prefix.length ? prefix + ' · ' + k : k)); return; }
+      out.push([prefix || 'ответ', String(node)]);
+    })(a, '');
+    return out.length ? kv(out) : h('p', { class: 'muted small' }, 'Ответов в базе нет.');
+  }
+
+  async function renderDetail(d) {
+    detail.replaceChildren();
+    const head = h('div', { class: 'row' }, h('h2', null, '#' + d.id + ' ' + d.nick),
+      chip(d.status_label, d.closed ? 'off' : 'ok'), d.repeat ? chip('повтор') : null,
+      d.in_family === true ? chip('в составе') : null, d.link ? linkRow(d.link) : null);
+    detail.append(head, kv([
+      ['Статика', d.static_id], ['Возраст', d.age], ['ID', d.user_id], ['Заявка', (d.created_at || '').replace('T', ' ')],
+      ['Рекрутер', d.reviewer], ['Раньше был в', d.prev_families], ['Почему к нам', d.why],
+      ['Причина отказа', d.reason], ['Ранг в семье', d.member_rank],
+    ]));
+    detail.append(h('div', { class: 'section-title' }, 'Анкета'), answersNode(d.answers));
+    detail.append(h('div', { class: 'section-title' }, 'История'),
+      d.history && d.history.length ? h('ul', { class: 'timeline' }, d.history.map((x) =>
+        h('li', null, x.label, ' · ', String(x.actor || 'discord'), h('span', null, ' ' + (x.at || '').slice(0, 16).replace('T', ' ')),
+          x.note ? h('span', null, ' — ' + x.note) : null))) : h('p', { class: 'muted small' }, 'История пуста.'));
+
+    if (d.closed) { detail.append(h('p', { class: 'muted small' }, 'Заявка закрыта — менять уже нечего.')); return; }
+
+    const staff = await staffBox('Действует как', null);
+    const voices = await api('/api/voices').catch(() => []);
+    const voice = voices.length ? h('label', null, 'Куда звать на обзвон',
+      h('select', null, voices.map((v) => h('option', { value: v.id }, v.name)))) : null;
+    const reason = h('input', { type: 'text', maxlength: '500', placeholder: 'Причина отказа (уходит кандидату в ЛС)' });
+    const out = h('div');
+    const act = async (action) => {
+      out.replaceChildren(spinner('Делаю…'));
+      const body = { action, actor: staff.querySelector('select').value, reason: reason.value.trim() };
+      if (voice) body.voice = voice.querySelector('select').value;
+      try {
+        const r = await api('/api/apps/' + d.id + '/act', { method: 'POST', body });
+        out.replaceChildren(h('div', { class: 'section-title' }, 'Что произошло'), lines(r.steps),
+          r.warnings && r.warnings.length ? h('p', { class: 'warnline' }, r.warnings.join(' · ')) : null);
+        load();
+      } catch (e) { out.replaceChildren(h('p', { class: 'err' }, e.message)); }
+    };
+    detail.append(h('div', { class: 'section-title' }, 'Действие'),
+      h('div', { class: 'form' }, staff, voice, reason,
+        h('div', { class: 'btns' },
+          h('button', { class: 'btn', onclick: () => act('review') }, 'Взять'),
+          h('button', { class: 'btn', onclick: () => act('interview') }, 'На обзвон'),
+          h('button', { class: 'btn primary', onclick: () => act('accept') }, 'Принять'),
+          h('button', { class: 'btn danger', onclick: () => act('reject') }, 'Отказать')),
+        out));
+  }
+
+  q.addEventListener('input', () => { clearTimeout(q._t); q._t = setTimeout(load, 300); });
+  status.addEventListener('change', load);
+  await load();
+  return h('div', null,
+    pageHead('Заявки', 'Анкеты, история каждой заявки и те же действия, что делает карточка в Discord.',
+      h('button', { class: 'btn', onclick: load }, 'Обновить')),
+    h('div', { class: 'toolbar' }, q, status), counts,
+    h('div', { class: 'split', style: 'grid-template-columns:minmax(260px,340px) 1fr;margin-top:.9rem' }, listBox, detail)
+  );
+}
+
+/* ---------- Сообщения ---------- */
+function msgForm(needPing) {
+  const title = h('input', { type: 'text', maxlength: '256', placeholder: 'Заголовок (пусто — обычный текст)' });
+  const color = h('input', { type: 'text', maxlength: '9', placeholder: 'Цвет, например 990000', value: '990000' });
+  const text = h('textarea', { class: 'msg', placeholder: 'Текст сообщения…' });
+  const ping = h('input', { type: 'checkbox' });
+  const box = h('div', { class: 'form' }, title, color, text);
+  if (needPing) box.append(h('label', { class: 'row small' }, ping, 'Отметить @everyone'));
+  return { box, title, color, text, ping };
+}
+
+function resultBox() {
+  const box = h('div');
+  box.show = (r) => box.replaceChildren(
+    r.link ? linkRow(r.link, 'Сообщение в Discord') : null,
+    r.where ? chip(r.where) : null,
+    r.sent !== undefined ? h('p', null, 'Дошло: ' + r.sent + ', не дошло: ' + r.failed_total) : null,
+    r.failed && r.failed.length ? lines(r.failed, 'steps') : null,
+    r.hint ? h('p', { class: 'warnline small' }, r.hint) : null,
+  );
+  box.err = (e) => box.replaceChildren(h('p', { class: 'err' }, e.message));
+  box.busy = () => box.replaceChildren(spinner('Отправляю…'));
+  return box;
+}
+
+async function pageSend() {
+  const cq = h('input', { type: 'search', placeholder: 'Имя канала…' });
+  const chBox = h('div', { class: 'picks' });
+  let channelId = '';
+  async function loadChannels() {
+    const d = await api('/api/channels?q=' + encodeURIComponent(cq.value.trim()));
+    chBox.replaceChildren(...d.rows.map((c) => h('label', null,
+      h('input', { type: 'radio', name: 'chan', value: c.id, checked: c.id === channelId, onchange: () => { channelId = c.id; } }),
+      h('span', null,
+        (c.kind === 'ветка' ? '🧵 ' : '#') + c.name + (c.can_write === false ? ' (нет прав)' : ''),
+        c.is_review ? chip('канал заявок', 'err') : null)
+    )));
+    if (!d.rows.length) chBox.append(h('p', { class: 'muted small' }, 'Не нашлось ни одного канала.'));
+  }
+
+  const mq = h('input', { type: 'search', placeholder: 'Ник или ID…' });
+  const mBox = h('div', { class: 'picks' });
+  let dmUser = '';
+  const chosen = new Set();
+  async function loadMembers() {
+    const d = await api('/api/members?q=' + encodeURIComponent(mq.value.trim()) + '&limit=60');
+    mBox.replaceChildren(...d.rows.map((m) => {
+      const one = h('label', null, h('span', null, m.name + (m.top ? ' · ' + m.top : '') + (m.voice ? ' · 🎙 ' + m.voice : '')));
+      const radio = h('input', { type: 'radio', name: 'dmuser', value: m.id, checked: m.id === dmUser, onchange: () => { dmUser = m.id; } });
+      const check = h('input', { type: 'checkbox', value: m.id, onchange: (e) => { e.target.checked ? chosen.add(m.id) : chosen.delete(m.id); } });
+      one.prepend(radio, check);
+      return one;
+    }));
+    if (!d.rows.length) mBox.append(h('p', { class: 'muted small' }, 'Никого не нашлось.'));
+  }
+
+  const f1 = msgForm(true), r1 = resultBox();
+  f1.box.append(h('button', { class: 'btn primary', onclick: async () => {
+    r1.busy();
+    try { r1.show(await api('/api/send', { method: 'POST', body: { channel: channelId, text: f1.text.value, title: f1.title.value, color: f1.color.value, ping: f1.ping.checked } })); }
+    catch (e) { r1.err(e); }
+  } }, 'Отправить в канал'), h('p', { class: 'muted small' }, 'Сначала выбери канал слева.'));
+
+  const f2 = msgForm(false), r2 = resultBox();
+  f2.box.append(h('button', { class: 'btn primary', onclick: async () => {
+    r2.busy();
+    try { r2.show(await api('/api/dm', { method: 'POST', body: { user: dmUser, text: f2.text.value, title: f2.title.value, color: f2.color.value } })); }
+    catch (e) { r2.err(e); }
+  } }, 'Отправить в ЛС'));
+
+  const f3 = msgForm(false), r3 = resultBox();
+  const mark = h('small', { class: 'muted' }, 'Отмечено: 0');
+  const upd = () => { mark.textContent = 'Отмечено: ' + chosen.size; };
+  f3.box.append(h('div', { class: 'row' }, h('button', { class: 'btn', onclick: async () => {
+    upd();
+    r3.busy();
+    try { r3.show(await api('/api/broadcast', { method: 'POST', body: { users: [...chosen], text: f3.text.value, title: f3.title.value, color: f3.color.value, dry: true } })); }
+    catch (e) { r3.err(e); }
+  } }, 'Проверить без отправки'),
+  h('button', { class: 'btn danger', onclick: async () => {
+    if (!(await confirmBox('Рассылка в ЛС?', 'Сообщение уйдёт ' + chosen.size + ' людям. Отменить отправку нельзя.', 'Разослать', true))) return;
+    r3.busy();
+    try { r3.show(await api('/api/broadcast', { method: 'POST', body: { users: [...chosen], text: f3.text.value, title: f3.title.value, color: f3.color.value, dry: false } })); }
+    catch (e) { r3.err(e); }
+  } }, 'Разослать'), mark));
+
+  cq.addEventListener('input', () => { clearTimeout(cq._t); cq._t = setTimeout(loadChannels, 300); });
+  mq.addEventListener('input', () => { clearTimeout(mq._t); mq._t = setTimeout(loadMembers, 300); });
+  await Promise.all([loadChannels(), loadMembers()]);
+
+  return h('div', null,
+    pageHead('Сообщения', 'Панель пишет от имени бота: в канал, в ЛС и рассылкой по составу.'),
+    h('div', { class: 'grid2' },
+      h('div', { class: 'card form' }, h('h2', null, 'В канал'),
+        h('label', null, 'Поиск канала', cq), chBox, f1.box, r1),
+      h('div', { class: 'card form' }, h('h2', null, 'В ЛС'),
+        h('label', null, 'Кого', mq), mBox, f2.box, r2,
+        h('div', { class: 'section-title' }, 'Рассылка'), f3.box, r3)
+    )
+  );
+}
+
+/* ---------- Экраны команд ---------- */
+function embedNode(e) {
+  const box = h('div', { class: 'embed', style: 'border-left-color:' + (e.color || '#990000') });
+  if (e.author) box.append(h('small', { class: 'muted' }, e.author));
+  if (e.title) box.append(h('b', null, e.title));
+  if (e.text) box.append(h('div', null, e.text));
+  if (e.fields && e.fields.length) box.append(h('div', { class: 'fields' },
+    e.fields.map((f) => h('div', null, h('i', null, f.name), f.value))));
+  if (e.image) box.append(h('img', { src: e.image, alt: '', referrerpolicy: 'no-referrer' }));
+  if (e.footer) box.append(h('small', { class: 'muted' }, e.footer));
+  return box;
+}
+
+function screenNode(res, actorSel, refresh) {
+  const box = h('div');
+  if (res.kind === 'deleted') box.append(h('p', { class: 'muted' }, 'Ответ удалён.'));
+  if (res.content) box.append(h('div', { class: 'card small mono' }, res.content));
+  (res.embeds || []).forEach((e) => box.append(embedNode(e)));
+  (res.extra || []).forEach((x) => box.append(h('div', { class: 'card small' }, String(x.content || ''))));
+  if (res.hint) box.append(h('p', { class: 'warnline small' }, res.hint));
+
+  const post = async (path, body, busy) => {
+    if (busy) busy.replaceChildren(spinner('Думаю…'));
+    try { refresh(await api(path, { method: 'POST', body })); }
+    catch (e) { toast(e.message, 'err'); }
+  };
+
+  if (res.token && (res.components || []).length) {
+    const pick = {};
+    const ctr = h('div', { class: 'btns' });
+    res.components.forEach((c) => {
+      if (c.kind === 'button') {
+        ctr.append(h('button', { class: 'btn', disabled: c.disabled, onclick: () =>
+          post('/api/commands/press', { token: res.token, index: c.index, actor: actorSel.value }, ctr) },
+          (c.emoji ? c.emoji + ' ' : '') + (c.label || 'кнопка')));
+      } else if (c.kind === 'select') {
+        const sel = h('select', null, (c.options || []).map((o) => h('option', { value: o.value }, (o.emoji ? o.emoji + ' ' : '') + o.label)));
+        pick[c.index] = sel;
+        ctr.append(h('div', { class: 'row' }, h('small', { class: 'muted' }, c.label), sel,
+          h('button', { class: 'btn', onclick: () =>
+            post('/api/commands/press', { token: res.token, index: c.index, actor: actorSel.value, values: [sel.value] }, ctr) }, 'Выбрать')));
+      } else if (c.kind === 'input') {
+        ctr.append(h('p', { class: 'muted small' }, 'Поле «' + (c.label || '') + '» — его заполняют в форме ниже.'));
+      }
+    });
+    box.append(h('div', { class: 'section-title' }, 'Кнопки экрана'), ctr);
+  }
+
+  if (res.modal) {
+    const m = res.modal, inputs = {};
+    const form = h('div', { class: 'form' }, ...m.fields.map((f) => {
+      const el = f.multiline ? h('textarea', { class: 'msg', maxlength: String(f.max) }) : h('input', { type: 'text', maxlength: String(f.max) });
+      inputs[f.id] = el;
+      return h('label', null, f.label || f.id, el);
+    }));
+    form.append(h('button', { class: 'btn primary', onclick: (ev) => {
+      const fields = {};
+      Object.entries(inputs).forEach(([k, el]) => { fields[k] = el.value; });
+      post('/api/commands/modal', { token: m.token, actor: actorSel.value, fields }, form);
+    } }, 'Отправить форму'));
+    box.append(h('div', { class: 'section-title' }, m.title || 'Форма'), form);
+  }
+  return box;
+}
+
+async function pageScreens() {
+  const d = await api('/api/commands').catch((e) => ({ error: e.message }));
+  if (d.error) return h('div', null, pageHead('Экраны', null), h('p', { class: 'err' }, d.error));
+  const staff = await api('/api/staff');
+  const actorSel = h('select', null, staff.map((p) => h('option', { value: p.id }, p.name)));
+  const chans = await api('/api/channels');
+  const chanSel = h('select', null, chans.rows.filter((c) => c.can_write !== false)
+    .map((c) => h('option', { value: c.id }, (c.kind === 'ветка' ? '🧵 ' : '#') + c.name)));
+  const out = h('div', { class: 'card' }, h('p', { class: 'muted' }, 'Открой экран — его ответ появится здесь, как в Discord.'));
+  const refresh = (res) => out.replaceChildren(screenNode(res, actorSel, refresh));
+
+  const nav = h('div', { class: 'grid2' }, d.sections.map((s) => h('div', { class: 'card form' },
+    h('h2', null, s.icon + ' ' + s.title),
+    ...s.screens.map((x) => h('button', { class: 'btn', onclick: async () => {
+      out.replaceChildren(spinner('Экран думает…'));
+      try { refresh(await api('/api/commands/run', { method: 'POST', body: { ref: x.ref, actor: actorSel.value, channel: chanSel.value } })); }
+      catch (e) { out.replaceChildren(h('p', { class: 'err' }, e.message)); }
+    } }, (s.icon || '') + ' ' + x.label + ' · ' + x.cmd)))));
+
+  return h('div', null,
+    pageHead('Экраны команд', 'Команды бота работают отсюда: экран получает тот же ответ, что и в Discord, и его кнопки живые.',
+      h('button', { class: 'btn', onclick: () => go('screens') }, 'Обновить')),
+    h('div', { class: 'toolbar' }, h('label', null, 'От чьего имени', actorSel), h('label', null, 'Куда отвечать', chanSel),
+      d.hidden && d.hidden.length ? chip('скрытых дублей: ' + d.hidden.length, 'off') : null),
+    nav, h('div', { class: 'section-title' }, 'Ответ'), out
+  );
+}
+
+/* ---------- Диагностика ---------- */
+function bar(pct) {
+  return h('div', { class: 'bar' }, h('i', { class: pct >= 85 ? '' : pct >= 70 ? 'warn' : 'ok', style: 'width:' + Math.min(100, pct) + '%' }));
+}
+
+async function pageDiag() {
+  const sys = await api('/api/diag/system').catch((e) => ({ error: e.message }));
+  const sysBox = h('div', { class: 'card form' });
+  if (sys.error) sysBox.append(h('p', { class: 'err' }, sys.error));
+  else {
+    const m = sys.memory;
+    sysBox.append(h('h2', null, 'Память'),
+      h('div', null, h('b', null, m.container + ' / ' + m.limit + ' МБ контейнера'), bar(m.percent),
+        h('small', { class: 'muted' }, m.percent + '% · ' + m.verdict)),
+      kv([['Бот', m.bot + ' МБ'], ['Пик бота', m.peak + ' МБ'], ['Свободно', m.free + ' МБ'],
+        ['Кэш-файлы', m.page_cache + ' МБ'], ['Аптайм', sys.uptime], ['Пинг', sys.latency_ms + ' мс'],
+        ['Серверов', sys.guilds], ['Ког', sys.cogs_on.length]]),
+      h('div', { class: 'section-title' }, 'Процессы'),
+      lines(sys.processes.map((p) => p.name + ' · ' + p.pid + ' · ' + p.mb + ' МБ')),
+      h('div', { class: 'section-title' }, 'Кэш disnake'),
+      kv([['Участников', sys.cache.members], ['Сообщений', sys.cache.messages]]),
+      sys.children && sys.children.length ? h('p', { class: 'muted small' }, 'Дочерние процессы: ' + sys.children.length) : null);
+  }
+
+  const hours = h('select', null, [['1', 'за час'], ['24', 'за сутки'], ['72', 'за 3 дня'], ['168', 'за неделю']]
+    .map(([v, l]) => h('option', { value: v }, l)));
+  hours.value = '24';
+  const dayBox = h('div', { class: 'card form' });
+  async function loadDay() {
+    dayBox.replaceChildren(spinner());
+    const d = await api('/api/diag/day?hours=' + hours.value);
+    dayBox.replaceChildren(h('h2', null, 'Что произошло'), h('div', { class: 'pager' },
+      ...Object.entries(d.counts || {}).map(([k, v]) => h('span', { class: 'chip' }, k + ': ' + v)),
+      ...Object.entries(d.totals || {}).map(([k, v]) => h('span', { class: 'chip ok' }, k + ': ' + v))),
+      h('div', { class: 'rows' }, d.rows.map((r) => h('div', { class: 'r' },
+        h('div', { class: 'grow' }, h('b', null, r.what + ' · ' + (r.who || '—')), h('small', null, String(r.state || ''))),
+        h('small', { class: 'muted' }, String(r.at || '').slice(0, 16).replace('T', ' '))))));
+  }
+
+  const days = h('select', null, [['7', 'за 7 дней'], ['30', 'за 30 дней'], ['90', 'за 90 дней']].map(([v, l]) => h('option', { value: v }, l)));
+  const silBox = h('div', { class: 'card form' });
+  async function loadSil() {
+    silBox.replaceChildren(spinner('Считаем голосовое…'));
+    let d;
+    try { d = await api('/api/diag/silents?days=' + days.value); } catch (e) { silBox.replaceChildren(h('p', { class: 'err' }, e.message)); return; }
+    silBox.replaceChildren(h('h2', null, 'Молчуны по голосовому'),
+      h('p', { class: 'muted small' }, 'Проверено ' + d.checked + ' человек, срок — ' + d.period + '. Без голоса и без отпуска.'),
+      h('div', { class: 'rows' }, d.silent.length ? d.silent.map((s) => h('div', { class: 'r' },
+        h('div', { class: 'grow' }, h('b', null, s.nick + ' · ' + (s.static_id || 'без статики')),
+          h('small', null, (s.on_server ? 'на сервере' : 'нет на сервере') + ' · ' + (s.rank || '?') + ' ранг')),
+        chip(s.name || 'ЛС не найти'))) : [h('p', { class: 'muted' }, 'Молчунов нет.')]));
+  }
+
+  hours.addEventListener('change', loadDay);
+  days.addEventListener('change', loadSil);
+  await Promise.all([loadDay(), loadSil()]);
+
+  return h('div', null,
+    pageHead('Диагностика', 'Хватает ли памяти, что произошло в семье и кто молчит в голосовом.',
+      h('button', { class: 'btn', onclick: () => go('diag') }, 'Обновить')),
+    h('div', { class: 'grid2' }, sysBox,
+      h('div', { class: 'form' }, h('label', null, 'Отчёт', hours), dayBox, h('label', null, 'Молчуны', days), silBox))
+  );
+}
+
+/* ---------- Ревизия ---------- */
+async function pageAudit() {
+  const limit = h('select', null, [['20', '20 последних'], ['40', '40 последних'], ['80', '80 последних']].map(([v, l]) => h('option', { value: v }, l)));
+  const chBox = h('div', { class: 'card form' });
+  async function loadCh() {
+    chBox.replaceChildren(spinner());
+    let d;
+    try { d = await api('/api/audit/channels?limit=' + limit.value); } catch (e) { chBox.replaceChildren(h('p', { class: 'err' }, e.message)); return; }
+    chBox.replaceChildren(h('h2', null, 'Служебные каналы'),
+      h('div', { class: 'rows' }, d.rows.map((r) => h('div', { class: 'r' },
+        h('div', { class: 'grow' }, h('b', null, r.channel + (r.name ? ' · ' + r.name : '')), h('small', null, r.state)),
+        r.cards !== undefined ? chip('заявок ' + r.cards + ' / служебного ' + r.service, /раздувает/.test(r.state) ? 'err' : 'ok') : chip('—', 'off')))));
+  }
+
+  const emBox = h('div', { class: 'card form' });
+  async function loadEm() {
+    emBox.replaceChildren(spinner());
+    let d;
+    try { d = await api('/api/audit/emojis'); } catch (e) { emBox.replaceChildren(h('p', { class: 'err' }, e.message)); return; }
+    emBox.replaceChildren(h('h2', null, 'Имена эмодзи'),
+      h('div', { class: 'pager' }, h('span', { class: 'chip' }, 'файлов: ' + d.scanned),
+        h('span', { class: 'chip' }, 'на сервере: ' + d.server), h('span', { class: 'chip' }, 'упомянуто: ' + d.referenced),
+        h('span', { class: 'chip ' + (d.missing_total ? 'err' : 'ok') }, 'выдуманных: ' + d.missing_total),
+        h('span', { class: 'chip off' }, 'не используется: ' + d.unused_total)),
+      h('p', { class: 'muted small' }, 'Выдуманное имя не роняет бота — эмодзи просто исчезает из текста, и на экране остаётся пустое место.'),
+      d.missing.length ? h('div', { class: 'rows' }, d.missing.map((m) => h('div', { class: 'r' },
+        h('div', { class: 'grow' }, h('b', null, ':' + m.token + ':'), h('small', null, m.where.join(', '))),
+        chip('×' + m.count, 'err')))) : h('p', { class: 'muted' }, 'Все имена живые.'),
+      d.unused.length ? h('details', null, h('summary', null, 'Эмодзи сервера, которые нигде не упоминаются'),
+        h('p', { class: 'muted small mono' }, d.unused.join(', '))) : null);
+  }
+
+  limit.addEventListener('change', loadCh);
+  await Promise.all([loadCh(), loadEm()]);
+  return h('div', null,
+    pageHead('Ревизия', 'Не загазован ли канал заявок и не осталось ли в коде имён эмодзи, которых нет на сервере.',
+      h('button', { class: 'btn', onclick: () => go('audit') }, 'Обновить')),
+    h('div', { class: 'toolbar' }, h('label', null, 'Глубина', limit)),
+    h('div', { class: 'grid2' }, chBox, emBox)
+  );
+}
+
+/* ---------- Снимки ---------- */
+async function pageShots() {
+  const d = await api('/api/snapshots').catch((e) => ({ error: e.message }));
+  if (d.error) return h('div', null, pageHead('Снимки', null), h('p', { class: 'err' }, d.error));
+  const list = h('div', { class: 'rows' });
+  const detail = h('div', { class: 'card' }, spinner('Выбери снимок, чтобы увидеть, что вернётся.'));
+
+  async function open(name) {
+    document.querySelectorAll('[data-snap]').forEach((b) => b.classList.toggle('sel', b.dataset.snap === name));
+    detail.replaceChildren(spinner('Сравниваю с живыми файлами…'));
+    let s;
+    try { s = await api('/api/snapshots/' + encodeURIComponent(name)); }
+    catch (e) { detail.replaceChildren(h('p', { class: 'err' }, e.message)); return; }
+    detail.replaceChildren();
+    detail.append(h('div', { class: 'row' }, h('h2', null, s.name), chip(s.at || '')),
+      h('p', { class: 'muted small' }, s.note),
+      h('div', { class: 'section-title' }, 'Что изменится'),
+      s.changes.length ? h('div', { class: 'rows diff' }, s.changes.map((c) => h('div', { class: 'r' },
+        h('div', { class: 'grow' }, h('b', null, c.path || c.name || ''), h('small', { class: 'was' }, (c.file || '') + ' · было: ' + String(c.was ?? '—'))),
+        chip(c.kind, c.kind === 'исчезнет' ? 'err' : c.kind === 'вернётся' ? 'ok' : '')))) : h('p', { class: 'muted' }, 'Отличий нет.'),
+      h('div', { class: 'section-title' }, 'Откат'),
+      h('button', { class: 'btn danger', onclick: async () => {
+        if (!(await confirmBox('Вернуть этот снимок?', 'Файлы настроек лягут как были в ' + (s.at || name) + '. Текущее состояние уйдёт в новый снимок, так что можно вернуть обратно.', 'Откатить', true))) return;
+        try {
+          const r = await api('/api/snapshots/' + encodeURIComponent(name) + '/restore', { method: 'POST', body: {} });
+          detail.append(h('div', { class: 'section-title' }, 'Готово'), lines(r.steps),
+            r.warnings && r.warnings.length ? h('p', { class: 'warnline' }, r.warnings.join(' · ')) : null);
+          toast('Откат прошёл', 'ok');
+        } catch (e) { toast(e.message, 'err'); }
+      } }, 'Откатить к этому снимку'));
+  }
+
+  list.replaceChildren(...d.rows.map((r) => h('button', { class: 'r', 'data-snap': r.name, onclick: () => open(r.name) },
+    h('div', { class: 'grow' }, h('b', null, r.at || r.name), h('small', null, r.name)),
+    chip(r.files + ' файлов · ' + r.kb + ' КБ'), r.live ? chip('самый свежий', 'ok') : null)));
+
+  return h('div', null,
+    pageHead('Снимки', 'Панель сама снимает состояние настроек. Откат обратим: то, что живёт сейчас, уходит в новый снимок.',
+      h('button', { class: 'btn', onclick: () => go('shots') }, 'Обновить')),
+    h('p', { class: 'muted small' }, 'Храним ' + d.keep + ' последних снимков, всего папок: ' + d.total + '.'),
+    h('div', { class: 'split', style: 'grid-template-columns:minmax(260px,340px) 1fr' }, list, detail)
   );
 }
 

@@ -1,5 +1,6 @@
 import aiosqlite
 import os
+import sys
 from typing import Optional, List, Dict, Any
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "hallez_famq.db")
@@ -80,7 +81,119 @@ async def init_db():
         )
         """)
         await _init_loyalty(db)
+        await _init_history(db)
         await db.commit()
+
+
+# ───────────────────────── ИСТОРИЯ ЗАЯВОК ─────────────────────────
+# Кто и когда перевёл заявку в следующий статус. Пока такие записи пишет только
+# update_application_status, поэтому таблица опциональна: если её ещё нет (база
+# создана до апдейта), основной запрос не должен из-за этого падать.
+async def _init_history(db):
+    await db.execute("""
+    CREATE TABLE IF NOT EXISTS app_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        app_id INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        actor TEXT,
+        note TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )""")
+    await db.execute("CREATE INDEX IF NOT EXISTS ix_app_history_app ON app_history (app_id)")
+
+
+def _log_status_args(app_id: int, status: str, reviewer_id: Optional[int],
+                     reason: Optional[str], actor: Optional[str]):
+    """Кто подписан в истории: текстом actor (веб-панель) или id того, кто нажал кнопку."""
+    who = str(actor) if actor else (str(reviewer_id) if reviewer_id else None)
+    return (app_id, status, who, reason)
+
+
+async def application_history(app_id: int) -> List[Dict[str, Any]]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        try:
+            async with db.execute(
+                "SELECT status, actor, note, created_at FROM app_history "
+                "WHERE app_id = ? ORDER BY id",
+                (app_id,)
+            ) as cursor:
+                return [dict(r) for r in await cursor.fetchall()]
+        except Exception:
+            return []
+
+
+async def list_applications(status: Optional[str] = None, q: Optional[str] = None,
+                           limit: int = 100) -> List[Dict[str, Any]]:
+    """Заявки для веб-панели: свежие сверху. status — один статус или 'open' (не закрытые)."""
+    where, args = [], []
+    if status == 'open':
+        where.append("status NOT IN ('accepted','rejected')")
+    elif status:
+        where.append("status = ?")
+        args.append(status)
+    if q:
+        like = f"%{q}%"
+        where.append("(nick LIKE ? OR static_id LIKE ? OR CAST(user_id AS TEXT) LIKE ? OR CAST(id AS TEXT) LIKE ?)")
+        args += [like, like, like, like]
+    sql = "SELECT * FROM applications"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY id DESC LIMIT ?"
+    args.append(max(1, min(int(limit), 500)))
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(sql, args) as cursor:
+            return [dict(r) for r in await cursor.fetchall()]
+
+
+async def report_since(hours: int = 24) -> Dict[str, Any]:
+    """Сводка за последние N часов: заявки, состав, варны, повышения, баллы."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+
+        async def rows(sql, args=()):
+            try:
+                async with db.execute(sql, args) as cur:
+                    return [dict(r) for r in await cur.fetchall()]
+            except Exception:
+                return []
+
+        apps = await rows(
+            "SELECT id, nick, static_id, status, created_at, closed_at FROM applications "
+            "WHERE created_at >= datetime('now', ?) OR closed_at >= datetime('now', ?) "
+            "ORDER BY id DESC LIMIT 100", (f'-{int(hours)} hours',) * 2)
+        members = await rows(
+            "SELECT user_id, nick, static_id, rank, joined_at FROM family_members "
+            "WHERE joined_at >= datetime('now', ?) ORDER BY joined_at DESC LIMIT 100",
+            (f'-{int(hours)} hours',))
+        warns = await rows(
+            "SELECT id, user_id, admin_id, reason FROM warns "
+            "WHERE created_at >= datetime('now', ?) ORDER BY id DESC LIMIT 100",
+            (f'-{int(hours)} hours',))
+        promos = await rows(
+            "SELECT id, nick, target_rank, status FROM promotions "
+            "WHERE created_at >= datetime('now', ?) OR closed_at >= datetime('now', ?) "
+            "ORDER BY id DESC LIMIT 100", (f'-{int(hours)} hours',) * 2)
+        points = await rows(
+            "SELECT user_id, delta, reason, created_at FROM rp_log "
+            "WHERE created_at >= datetime('now', ?) ORDER BY id DESC LIMIT 100",
+            (f'-{int(hours)} hours',))
+        totals = await rows(
+            "SELECT SUM(status IN ('accepted','rejected')) AS closed, "
+            "SUM(status = 'accepted') AS accepted, SUM(status = 'rejected') AS rejected, "
+            "SUM(status NOT IN ('accepted','rejected')) AS waiting "
+            "FROM applications WHERE created_at >= datetime('now', ?)",
+            (f'-{int(hours)} hours',))
+    return {
+        "hours": int(hours),
+        "applications": apps,
+        "new_members": members,
+        "warns": warns,
+        "promotions": promos,
+        "points": points,
+        "totals": totals[0] if totals else {},
+    }
 
 async def create_application(user_id: int, nick: str, static_id: str, age: int, prev_families: str, why_codex: str, thread_id: int) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
@@ -91,8 +204,16 @@ async def create_application(user_id: int, nick: str, static_id: str, age: int, 
             """,
             (user_id, nick, static_id, age, prev_families, why_codex, thread_id)
         )
+        app_id = cursor.lastrowid
+        try:
+            await db.execute(
+                "INSERT INTO app_history (app_id, status, actor, note) VALUES (?, 'new', 'Discord', NULL)",
+                (app_id,)
+            )
+        except Exception:
+            pass
         await db.commit()
-        return cursor.lastrowid
+        return app_id
 
 async def get_application_by_thread(thread_id: int) -> Optional[Dict[str, Any]]:
     async with aiosqlite.connect(DB_PATH) as db:
@@ -101,7 +222,8 @@ async def get_application_by_thread(thread_id: int) -> Optional[Dict[str, Any]]:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
-async def update_application_status(app_id: int, status: str, reviewer_id: Optional[int] = None, reason: Optional[str] = None):
+async def update_application_status(app_id: int, status: str, reviewer_id: Optional[int] = None,
+                                    reason: Optional[str] = None, actor: Optional[str] = None):
     async with aiosqlite.connect(DB_PATH) as db:
         if status in ('accepted', 'rejected'):
             await db.execute(
@@ -117,6 +239,13 @@ async def update_application_status(app_id: int, status: str, reviewer_id: Optio
                 "UPDATE applications SET status = ?, reviewer_id = COALESCE(?, reviewer_id) WHERE id = ?",
                 (status, reviewer_id, app_id)
             )
+        try:
+            await db.execute(
+                "INSERT INTO app_history (app_id, status, actor, note) VALUES (?, ?, ?, ?)",
+                _log_status_args(app_id, status, reviewer_id, reason, actor)
+            )
+        except Exception as e:
+            print(f"[db] историю заявки #{app_id} не записал: {e!r}", file=sys.stderr, flush=True)
         await db.commit()
     if status == 'accepted':
         for _name, _hook in list(_ACCEPT_HOOKS.items()):
@@ -185,6 +314,16 @@ async def find_member_by_static(static_id: str) -> Optional[Dict[str, Any]]:
         async with db.execute("SELECT * FROM family_members WHERE static_id = ?", (static_id,)) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
+
+async def list_family_members() -> List[Dict[str, Any]]:
+    """Весь состав: web-панели нужно считать молчунов и показывать ранги."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT user_id, nick, static_id, rank, joined_at FROM family_members "
+            "ORDER BY rank DESC, nick ASC"
+        ) as cursor:
+            return [dict(r) for r in await cursor.fetchall()]
 
 async def add_warn(user_id: int, admin_id: int, reason: str) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
