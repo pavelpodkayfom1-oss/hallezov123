@@ -70,12 +70,38 @@ def _library() -> list:
         return []
 
 
+def _library_text() -> str:
+    files = _library()
+    if not files:
+        return (f"Библиотека пуста: в {MEDIA_DIR} нет ни одного файла.\n"
+                "Нажми «📥 Закинуть трек» на панели и прикрепи mp3.")
+    lines = [f"`{i + 1}.` {os.path.splitext(f)[0]}" for i, f in enumerate(files[:25])]
+    extra = f"\n…и ещё {len(files) - 25}" if len(files) > 25 else ""
+    return "🎧 Библиотека семьи\n" + "\n".join(lines) + extra
+
+
 def _safe_name(name: str) -> str:
     """Имя файла с Discord: без путей, точек подряд и мусора — по нему потом ищем трек."""
     stem = os.path.splitext(os.path.basename(name))[0]
     stem = re.sub(r"[^\w\- ]+", "_", stem, flags=re.UNICODE).strip()
     stem = re.sub(r"\s+", " ", stem)
     return (stem or "track")[:80]
+
+
+async def _save_track(attachment) -> str:
+    """Кладёт вложение в библиотеку и возвращает имя файла. Не звук / слишком большой — ошибка."""
+    ext = os.path.splitext(attachment.filename)[1].lower()
+    if ext not in AUDIO_EXT:
+        raise RuntimeError(f"`{attachment.filename}` — не звук. Подходят: " + ", ".join(AUDIO_EXT))
+    if attachment.size > MAX_TRACK_MB * 1024 * 1024:
+        raise RuntimeError(f"Файл больше {MAX_TRACK_MB} МБ — на этом хостинге не влезет.")
+    name = _safe_name(attachment.filename) + ext
+    data = await attachment.read()
+    os.makedirs(MEDIA_DIR, exist_ok=True)
+    with open(os.path.join(MEDIA_DIR, name), "wb") as f:
+        f.write(data)
+    _log(f"в библиотеку добавлен {name} ({len(_library())} треков)")
+    return name
 
 
 FFMPEG_BEFORE = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
@@ -271,12 +297,25 @@ class MusicPanelView(disnake.ui.View):
     async def vol_up(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").change_volume(inter, +0.1)
 
+    # ---------- ряд 4: библиотека ----------
+    @disnake.ui.button(label="Закинуть трек", emoji="📥", style=disnake.ButtonStyle.primary,
+                       custom_id="music:add", row=3)
+    async def add(self, button, inter: disnake.MessageInteraction):
+        await inter.bot.get_cog("Music").ask_file(inter)
+
+    @disnake.ui.button(label="Треки", emoji="🎧", style=disnake.ButtonStyle.secondary,
+                       custom_id="music:library", row=3)
+    async def library(self, button, inter: disnake.MessageInteraction):
+        await inter.bot.get_cog("Music").show_library(inter)
+
 
 class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.players: dict[int, GuildPlayer] = {}
         self._last_play: dict[int, float] = {}
+        # кто нажал «📥 Закинуть трек»: id → (канал, когда)
+        self._pending: dict[int, tuple[int, float]] = {}
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -285,6 +324,45 @@ class Music(commands.Cog):
             self.bot.add_view(MusicPanelView())
             self.bot._music_view_added = True
             _log(f"библиотека: {len(_library())} треков в {MEDIA_DIR}")
+
+    # ---------- библиотека без слэш-команд ----------
+    ASK_SECONDS = 90
+
+    async def ask_file(self, inter):
+        """Кнопка «Закинуть трек»: ждём вложение ответом в этом же канале."""
+        self._pending[inter.author.id] = (inter.channel.id, time.time())
+        await inter.response.send_message(
+            embed=note_embed("📥 Прикрепи mp3 к сообщению здесь — заберу его в библиотеку. "
+                             f"Жду {self.ASK_SECONDS} сек."), ephemeral=True)
+
+    async def show_library(self, inter):
+        await inter.response.send_message(embed=note_embed(_library_text()), ephemeral=True)
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot:
+            return
+        stamp = self._pending.get(message.author.id)
+        if not stamp or stamp[0] != message.channel.id:
+            return
+        if time.time() - stamp[1] > self.ASK_SECONDS:
+            self._pending.pop(message.author.id, None)
+            return
+        if not message.attachments:
+            return
+        self._pending.pop(message.author.id, None)
+        try:
+            name = await _save_track(message.attachments[0])
+        except Exception as e:
+            answer = f"❌ {e}"
+        else:
+            _trim()
+            stem = os.path.splitext(name)[0]
+            answer = f"🎧 В библиотеке: **{stem}** — заходи в войс и `/play {stem}`"
+        try:
+            await message.reply(embed=note_embed(answer), mention_author=False)
+        except Exception:
+            pass
 
     # ---------- helpers ----------
     def get_player(self, guild: disnake.Guild) -> GuildPlayer:
@@ -388,8 +466,8 @@ class Music(commands.Cog):
         """Трек из библиотеки: сначала точное имя, потом подстрока в имени файла."""
         files = _library()
         if not files:
-            raise RuntimeError(f"Библиотека пуста: в {MEDIA_DIR} нет ни одного файла, "
-                               "закинь трек командой /music_add")
+            raise RuntimeError(f"Библиотека пуста: в {MEDIA_DIR} нет ни одного файла. "
+                               "Нажми «📥 Закинуть трек» на музыкальной панели")
         want = re.sub(r"\s+", " ", query.lower()).strip()
         stems = {os.path.splitext(f)[0].lower(): f for f in files}
         hit = stems.get(want)
@@ -397,7 +475,7 @@ class Music(commands.Cog):
             hits = sorted(f for s, f in stems.items() if want in s)
             if not hits:
                 raise RuntimeError(f"Нет трека «{query}» в библиотеке "
-                                   f"(всего {len(files)}, список — /music_list)")
+                                   f"(всего {len(files)}, список — кнопка «🎧 Треки»)")
             if len(hits) > 1:
                 raise RuntimeError("Похоже сразу на несколько: "
                                    + ", ".join(os.path.splitext(h)[0] for h in hits[:6]))
@@ -510,7 +588,8 @@ class Music(commands.Cog):
                 "Зайдите в голосовой канал и нажмите **«Включить музыку»**.\n"
                 "Бот спросит название из библиотеки семьи (или ссылку на звук), зайдёт к вам "
                 "в войс и поставит трек.\n\n"
-                "Треки кладутся командой `/music_add` — просто прикрепи mp3 к сообщению.\n\n"
+                "Треки кладутся кнопкой **«📥 Закинуть трек»** — просто прикрепи mp3. "
+                "«🎧 Треки» покажет, что уже есть.\n\n"
                 "Управление: ⏯ пауза • ⏭ скип • ⏹ стоп • 📜 очередь • 🔉🔊 громкость"
             ),
             color=_color(),
@@ -525,45 +604,21 @@ class Music(commands.Cog):
 
     @commands.slash_command(name="music_add", description="Закинуть трек в библиотеку: прикрепи mp3")
     async def add_cmd(self, inter: disnake.ApplicationCommandInteraction, файл: disnake.Attachment):
-        ext = os.path.splitext(файл.filename)[1].lower()
-        if ext not in AUDIO_EXT:
-            return await inter.response.send_message(
-                embed=note_embed(f"❌ `{файл.filename}` — не звук. Подходят: "
-                                 + ", ".join(AUDIO_EXT)), ephemeral=True)
-        if файл.size > MAX_TRACK_MB * 1024 * 1024:
-            return await inter.response.send_message(
-                embed=note_embed(f"❌ Файл больше {MAX_TRACK_MB} МБ — на этом хостинге не влезет."),
-                ephemeral=True)
         await inter.response.defer(ephemeral=True)
-        name = _safe_name(файл.filename) + ext
-        path = os.path.join(MEDIA_DIR, name)
         try:
-            data = await файл.read()
-            os.makedirs(MEDIA_DIR, exist_ok=True)
-            with open(path, "wb") as f:
-                f.write(data)
+            name = await _save_track(файл)
         except Exception as e:
-            return await inter.followup.send(
-                embed=note_embed(f"❌ Не сохранил: `{str(e)[:160]}`"), ephemeral=True)
-        del data
+            return await inter.followup.send(embed=note_embed(f"❌ {e}"), ephemeral=True)
         _trim()
-        _log(f"в библиотеку добавлен {name} ({len(os.listdir(MEDIA_DIR))} файлов)")
+        stem = os.path.splitext(name)[0]
         await inter.followup.send(
-            embed=note_embed(f"📥 Готово: **{os.path.splitext(name)[0]}**.\n"
-                             f"Стоя в голосовом, напиши `/play {os.path.splitext(name)[0]}`"),
+            embed=note_embed(f"📥 Готово: **{stem}**.\n"
+                             f"Стоя в голосовом, напиши `/play {stem}`"),
             ephemeral=True)
 
     @commands.slash_command(name="music_list", description="Что есть в библиотеке семьи")
     async def list_cmd(self, inter: disnake.ApplicationCommandInteraction):
-        files = _library()
-        if not files:
-            return await inter.response.send_message(
-                embed=note_embed(f"Библиотека пуста. Прикрепи mp3 к команде `/music_add`,"
-                                 f" и трек появится в {MEDIA_DIR}"), ephemeral=True)
-        lines = [f"`{i + 1}.` {os.path.splitext(f)[0]}" for i, f in enumerate(files[:25])]
-        extra = f"\n…и ещё {len(files) - 25}" if len(files) > 25 else ""
-        await inter.response.send_message(
-            embed=note_embed("🎧 Библиотека семьи\n" + "\n".join(lines) + extra), ephemeral=True)
+        await self.show_library(inter)
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
