@@ -30,18 +30,35 @@ from utils.checks import load_config
 from utils.embeds import note_embed
 
 ROSTER_ROWS = 12                # строк списка в одном поле эмбеда
-# значок должности по старшинству — цветные стрелки бренд-пака: чем ниже по иерархии, тем
-# спокойнее цвет. В списке берётся первый знак, который реально есть на сервере (см. /hz_emojis)
+# цвет стрелки — старшинство: чем ниже по иерархии, тем спокойнее цвет. В списке берётся
+# первый знак, который реально есть на сервере (см. /hz_emojis)
 ROSTER_TIER = (
     ("hz_animatedarrowyellow", "hz_crownicon", "hz_starids"),
     ("hz_animatedarrowgreen", "hz_bluetick", "hz_starblue"),
     ("hz_animatedarrowblue", "hz_starblue", "hz_verifiedblue"),
     ("hz_animatedarrowpurple", "hz_gradientarrowright", "hz_glowingdotblue"),
 )
-ROSTER_DOT = ("hz_glowingdotblue", "hz_bluetick", "hz_verifiedblue")   # метка участника
+# значок должности по смыслу — из того же пака. Порядок важен: «High Recruit» — это
+# рекрут, а не «high», а «Vice-Leader» — заместитель, а не лидер.
+ROSTER_ROLE_SIGNS = (
+    (("owner", "владет", "основат", "head of family", "босс", "boss"),
+     ("red_crown", "hz_ownership", "hz_crownicon")),
+    (("vice", "deputy", "зам", "депут"),
+     ("hz_bluethumbsup", "hz_starblue", "hz_bluetick")),
+    (("leader", "лидер", "глава", "старший", "head"),
+     ("hz_starids", "hz_bluestarshiny", "hz_starblue")),
+    (("mod", "модер", "админ", "staff", "командир"),
+     ("hz_shield", "hz_modshieldicon", "hz_bluemoderator")),
+    (("recruit", "рекрут", "нович", "trial", "испытан", "стажёр", "стажер"),
+     ("hz_joobithink", "hz_joobiohno", "hz_info")),
+    (("high", "топ", "актив"), ("hz_joobistars", "hz_bluestarshiny", "hz_booster")),
+    (("soldier", "солдат", "боец", "capo", "капо"),
+     ("hz_bluestaffbadge", "hz_bluemoderator", "hz_legit")),
+    (("family", "семь", "member", "crew", "участник"),
+     ("hz_bluecrewmate", "hz_joobicat", "hz_bluetick")),
+)
+ROSTER_ROLE_DEFAULT = ("hz_joobicat", "hz_bluecrewmate", "hz_bluetick")
 ROSTER_WARN = ("hz_animatedarrowred", "hz_info")             # знак у поля «не влезло»
-# должность, где участников не больше, встаёт в колонки — так список похож на лестницу, а не на лог
-ROSTER_INLINE_MAX = 4
 ROSTER_MAX_ROLES = 40           # сколько ролей авто-список может показать
 ROSTER_FLUSH_DELAY = 20         # секунд ожидания после смены ролей: пачим залпом, без спама правками
 
@@ -559,6 +576,18 @@ def roster_auto_roles(guild: disnake.Guild, s) -> List[disnake.Role]:
         if len(out) >= ROSTER_MAX_ROLES:
             break
     return out
+
+
+def roster_role_sign(bot, title: str) -> str:
+    """Значок должности по смыслу: ищем в названии ключевое слово и берём первый эмодзи,
+    который реально есть на сервере. Роли он называет сам, так что угадываем по подстроке."""
+    low = (title or "").lower()
+    for keys, names in ROSTER_ROLE_SIGNS:
+        if any(k in low for k in keys):
+            hit = brand.pick(bot, *names)
+            if hit:
+                return hit
+    return brand.pick(bot, *ROSTER_ROLE_DEFAULT)
 
 
 # ───────────────────────── Панель /hall ─────────────────────────
@@ -1204,17 +1233,17 @@ class HallTools(commands.Cog):
         return sections
 
     def build_roster_embed(self, sections) -> disnake.Embed:
-        """Состав текстом: лестница должностей, старшинство читается по цвету стрелки.
+        """Состав текстом: должность подписана знаком по смыслу, старшинство читается по
+        цвету стрелки у каждого ника — наверху жёлтые, ниже зелёные, синие, фиолетовые.
 
         Простынёй список быть не может: роль не отделена от роли, а перенос режет её
-        посередине. Поэтому одна должность = одно поле, не более ROSTER_ROWS строк в поле,
-        а должности, где людей мало, встают в колонки. Знак берём тот, что реально есть на
-        сервере (см. /hz_emojis): не было стрелки — её аналог, а сырой токен показывать нельзя.
+        посередине. Поэтому одна должность = одно поле во всю ширину, не более ROSTER_ROWS
+        строк в поле. Знак берём тот, что реально есть на сервере (см. /hz_emojis): не было
+        стрелки — её аналог, а сырой токен показывать нельзя.
         """
         name = load_config().get("bot_name", "Hall FAMQ")
         total = len({m.id for _, ms in sections for m in ms})
         marks = [brand.pick(self.bot, *tier) for tier in ROSTER_TIER]
-        dot = brand.pick(self.bot, *ROSTER_DOT)
         e = make_embed(
             f"{marks[0]} Состав семьи {name}".strip(),
             f"Всего: **{total}**  ·  от старших к младшим  ·  обновляется само",
@@ -1223,18 +1252,18 @@ class HallTools(commands.Cog):
         for rank, (title, members) in enumerate(sections):
             tier = marks[0] if rank == 0 else \
                 marks[1] if rank < 4 else marks[2] if rank < 8 else marks[3]
-            lines = [f"{dot} {m.mention}".strip() for m in members] or [f"{dot} пока никого".strip()]
-            slim = len(members) <= ROSTER_INLINE_MAX
-            rows = ROSTER_INLINE_MAX if slim else ROSTER_ROWS
-            for start in range(0, len(lines), rows):
-                chunk = "\n".join(lines[start:start + rows])
-                label = f"{tier} {title} · {len(members)}".strip() if start == 0 \
+            sign = roster_role_sign(self.bot, title)
+            lines = [f"{tier} {m.mention}".strip() for m in members] or \
+                [f"{tier} пока никого".strip()]
+            for start in range(0, len(lines), ROSTER_ROWS):
+                chunk = "\n".join(lines[start:start + ROSTER_ROWS])
+                label = f"{sign} {title} · {len(members)}".strip() if start == 0 \
                     else f"{title} · продолжение"
                 if len(label) > 256 or len(chunk) > 1024 or spent + len(chunk) > 5600 or len(e.fields) >= 25:
                     dropped = True
                     break
                 spent += len(chunk) + len(label)
-                e.add_field(name=label, value=chunk, inline=slim)
+                e.add_field(name=label, value=chunk, inline=False)
             if dropped:
                 break
         if dropped and len(e.fields) < 25:
