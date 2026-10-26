@@ -492,16 +492,16 @@ DEFAULTS: Dict[str, Any] = {
     "design": {
         "title": "⚜️ НАБОР В HALLEZ FAMQ",
         "description": (
-            "Мы открываем двери для амбициозных, адекватных и стрессоустойчивых игроков семьи "
-            "**Hallez FAMQ** — **Loyalty • Power • Respect**.\n\n"
-            "### :hz_bluethumbsup: Что мы ждём от тебя\n"
-            "**:hz_legit: Адекватность** — дисциплина и уважение к субординации\n"
-            "**:hz_info: Микрофон** — и желание бывать на семейных МП\n"
-            "**:hz_bluecheckmark: Фамилия Hallez** — после испытательного срока\n\n"
-            "### :hz_starblue: Что даём взамен\n"
-            "**:hz_bluecrewmate: Коллектив** — дружный, со старшими за спиной\n"
-            "**:hz_booster: Рост** — ранги, награды и призы за активность\n\n"
-            ":hz_gradientarrowright: Жми кнопку ниже и заполни анкету — это займёт пару минут."
+            ":hz_megaphone: Мы открываем двери для амбициозных, адекватных и стрессоустойчивых "
+            "игроков семьи **Hallez FAMQ** — **Loyalty • Power • Respect**.\n\n"
+            "### :pinkghost: Что мы ждём от тебя\n"
+            ":number1: **Адекватность** — дисциплина и уважение к субординации\n"
+            ":number2: **Микрофон** — и желание бывать на семейных МП\n"
+            ":number3: **Смена фамилии на Hallez** — после испытательного срока\n\n"
+            "### :hz_shareicon: Что даём взамен\n"
+            ":number1: **Дружный коллектив** — и поддержка старших\n"
+            ":number2: **Рост** — по рангам, награды и призы за активность\n\n"
+            ":hz_followicon: Нажми кнопку ниже и заполни анкету — это займёт пару минут."
         ),
         "color": "0x990000",
         "footer": "Majestic RP • Hallez FAMQ",
@@ -1093,6 +1093,11 @@ async def ensure_cdn_assets() -> list:
 
 
 def video_path() -> Optional[str]:
+    # Готовый GIF важнее mp4: он играет в эмбеде сразу, а переделать mp4 в GIF можно только
+    # если на сервере есть ffmpeg — на слабом хостинге его обычно нет и панель уезжает с баннером.
+    ready = os.path.join(ASSETS_DIR, "video.gif")
+    if os.path.exists(ready):
+        return ready
     name = S["design"].get("video_file")
     if name:
         p = os.path.join(ASSETS_DIR, name)
@@ -1193,6 +1198,26 @@ def points_embed() -> disnake.Embed:
     emb = disnake.Embed(title=X("points_title"), description=desc, color=main_color())
     emb.set_footer(text=footer_text())
     return emb
+
+
+async def panel_payload(kind: str, limit: int):
+    """(эмбед, файл под ним, предупреждение) — одно и то же для предпросмотра и публикации.
+
+    Под текстом панели всегда что-то одно: видео-GIF, если он есть, иначе баннер.
+    """
+    emb = apply_embed() if kind == "apply" else points_embed()
+    warn = ""
+    gif = None
+    if kind == "apply" and video_path():
+        try:
+            gif = await media_gif(limit)
+        except Exception as e:
+            warn = f" ⚠️ Видео не добавлено: {e}."
+    if gif:
+        # GIF в эмбеде автоматически играет и стоит под текстом; кнопка — сразу под карточкой
+        emb.set_image(url="attachment://media.gif")
+        return emb, disnake.File(gif, filename="media.gif"), warn
+    return emb, put_banner(emb), warn
 
 
 def set_field(emb: disnake.Embed, name: str, value: str, inline: bool = True):
@@ -2304,10 +2329,11 @@ class PreviewView(AdminView):
         self.add_item(_back_button(author_id))
 
     async def p_apply(self, inter):
-        emb = apply_embed()
-        f = put_banner(emb)
+        limit = getattr(inter.guild, "filesize_limit", 10485760)
+        emb, f, warn = await panel_payload("apply", limit)
         kw = {"file": f} if f else {}
-        await inter.response.send_message("👁️ Так выглядит панель заявки:", embed=emb, view=_dis(ApplyView()), ephemeral=True, **kw)
+        await inter.response.send_message("👁️ Так выглядит панель заявки:" + warn,
+                                          embed=emb, view=_dis(ApplyView()), ephemeral=True, **kw)
 
     async def p_points(self, inter):
         emb = points_embed()
@@ -3135,20 +3161,7 @@ async def publish_panel(kind: str):
                         await (await oc.fetch_message(mid)).delete()
                     except Exception:
                         pass
-    emb = apply_embed() if kind == "apply" else points_embed()
-    warn = ""
-    gif = None
-    if kind == "apply" and video_path():
-        try:
-            gif = await media_gif(ch.guild.filesize_limit)
-        except Exception as e:
-            warn = f" ⚠️ Видео не добавлено: {e}."
-    if gif:
-        # GIF в эмбеде автоматически играет и стоит под текстом; кнопка — сразу под карточкой
-        emb.set_image(url="attachment://media.gif")
-        file = disnake.File(gif, filename="media.gif")
-    else:
-        file = put_banner(emb)
+    emb, file, warn = await panel_payload(kind, ch.guild.filesize_limit)
     view = ApplyView() if kind == "apply" else PointsView()
     try:
         msg = await ch.send(embed=emb, file=file, view=view) if file else await ch.send(embed=emb, view=view)
