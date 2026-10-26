@@ -16,3 +16,4 @@ dave.py
 
 edge-tts>=7.3.1
 Pillow
+yt-dlp
