@@ -54,6 +54,20 @@ input,select,textarea{background:var(--panel2);border:1px solid var(--line);bord
 input:hover,select:hover,textarea:hover{border-color:#3a3a45}
 input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent2);outline-offset:1px}
 select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 16px) calc(50% + 2px),calc(100% - 11px) calc(50% + 2px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:2.1em}
+/* галочки и кружки: общее правило для input превращает их в белые пятна с отступами,
+   поэтому им свой размер, своя рамка и свой вид «выбрано» */
+input[type=checkbox],input[type=radio]{appearance:none;-webkit-appearance:none;width:17px;height:17px;
+  min-width:0;flex:none;padding:0;border-radius:5px;border:1.5px solid #4d4d59;background:#101015;
+  cursor:pointer;display:grid;place-items:center;transition:border-color .14s,background .14s,box-shadow .14s}
+input[type=radio]{border-radius:50%}
+input[type=checkbox]:hover,input[type=radio]:hover{border-color:var(--accent2)}
+input[type=checkbox]:checked,input[type=radio]:checked{border-color:var(--accent2);
+  background:linear-gradient(180deg,var(--accent2),var(--accent));box-shadow:0 0 0 3px rgba(210,58,58,.14)}
+input[type=checkbox]:checked::after{content:"";width:4px;height:8px;border:2px solid #fff;border-top:0;border-left:0;
+  transform:rotate(42deg) translate(-1px,-1px)}
+input[type=radio]:checked::after{content:"";width:6px;height:6px;border-radius:50%;background:#fff}
+input[type=checkbox]:disabled,input[type=radio]:disabled{opacity:.4;cursor:not-allowed}
+.btn.dim{opacity:.5}
 .btn{position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;gap:.4em;background:linear-gradient(180deg,#232329,var(--panel2));border:1px solid var(--line);border-radius:10px;padding:.5em 1em;cursor:pointer;transition:transform .14s cubic-bezier(.2,.7,.3,1),border-color .15s,box-shadow .18s,background .15s;box-shadow:var(--edge)}
 .btn::after{content:"";position:absolute;top:0;left:-60%;width:45%;height:100%;pointer-events:none;
   background:linear-gradient(100deg,transparent,rgba(255,255,255,.16),transparent);transform:skewX(-14deg);transition:left .45s ease}
@@ -67,7 +81,9 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 .btn.danger{background:#3a1212;border-color:#6b1c1c;color:#ffb4b4}
 .btn.danger:hover{background:#4d1717}
 .btn.wide{width:100%}
-.card{background:linear-gradient(180deg,rgba(255,255,255,.028),transparent 55%),var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:1.1rem 1.2rem;box-shadow:var(--glow),var(--edge)}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.028),transparent 55%),var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:1.1rem 1.2rem;box-shadow:var(--glow),var(--edge);transition:border-color .18s,box-shadow .22s,transform .18s}
+.card:hover{border-color:#35353f}
+.grid2>.card:hover,.cols>.card:hover{transform:translateY(-2px);box-shadow:var(--glow),var(--edge),0 12px 28px rgba(0,0,0,.42)}
 .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
 .row.end{justify-content:flex-end}
 .err{color:var(--err);min-height:1.4em;margin-top:.5rem;font-size:.9rem}
@@ -105,8 +121,9 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 .brand b{display:block;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .brand span{font-size:.72rem;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);flex:none;
-  box-shadow:0 0 0 4px rgba(46,204,113,.15)}
-.dot.off{background:var(--warn);box-shadow:0 0 0 4px rgba(243,156,18,.15)}
+  box-shadow:0 0 0 4px rgba(46,204,113,.15);animation:pulse 2.9s ease-in-out infinite}
+.dot.off{background:var(--warn);box-shadow:0 0 0 4px rgba(243,156,18,.15);animation:none}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(46,204,113,.2)}50%{box-shadow:0 0 0 8px rgba(46,204,113,.04)}}
 .tabs{display:flex;align-items:center;gap:.35rem;max-width:1320px;margin:0 auto;
   padding:0 clamp(1rem,4vw,2.6rem) .7rem;flex-wrap:wrap}
 .tabset{display:flex;gap:.2rem;padding:.18rem;border:1px solid var(--line);border-radius:13px;
@@ -125,7 +142,11 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 #content>*{animation:rise .26s cubic-bezier(.2,.7,.3,1) both}
 @keyframes rise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
 .head{display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;margin-bottom:1.4rem;
-  flex-wrap:wrap;padding-bottom:.8rem;border-bottom:1px solid var(--line)}
+  flex-wrap:wrap;padding-bottom:.8rem;border-bottom:1px solid var(--line);position:relative}
+/* по разделительной линии под заголовком ходит свет — страница сразу выглядит живой */
+.head::after{content:"";position:absolute;left:0;bottom:0;height:1px;width:26%;
+  background:linear-gradient(90deg,var(--accent2),transparent);animation:headsweep 8s ease-in-out infinite alternate}
+@keyframes headsweep{from{width:16%;opacity:.55}to{width:64%;opacity:.95}}
 .head h1{position:relative;padding-left:1.05rem;font-size:1.6rem}
 .head h1::before{content:"";position:absolute;left:0;top:.32em;width:.55rem;height:.55rem;
   border-radius:4px;background:linear-gradient(145deg,var(--accent2),var(--accent));
@@ -146,7 +167,9 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 .guild img,.ava{width:42px;height:42px;border-radius:12px;background:var(--panel2);object-fit:cover;flex:none}
 .ava{display:grid;place-items:center;font-weight:650;color:var(--muted)}
 .guild b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.section-title{margin:1.7rem 0 .7rem;color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.11em;font-weight:600}
+.section-title{margin:1.7rem 0 .7rem;color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.11em;font-weight:600;display:flex;align-items:center;gap:.7rem}
+/* за заголовком блока тянется тонкая линия — границы разделов внутри карточек видны сразу */
+.section-title::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
 
 /* модули */
 .list{display:flex;flex-direction:column;gap:.5rem}
@@ -170,6 +193,10 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 
 /* настройки */
 .split{display:grid;grid-template-columns:210px 1fr;gap:1rem;align-items:start}
+/* правая колонка «Экранов»: ответ не уезжает, пока листают разделы */
+.stick{position:sticky;top:112px;align-self:start;max-height:calc(100vh - 130px);overflow:auto}
+select[size],select[multiple]{background-image:none;padding-right:.75em;min-height:0}
+select[size] option{padding:.2em .4em;border-radius:5px}
 .files{display:flex;flex-direction:column;gap:.3rem}
 .files button{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:.5em .8em;text-align:left;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:border-color .15s,background .15s}
 .files button:hover{border-color:#44444f}
@@ -219,9 +246,38 @@ select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,va
 .bar i.warn{background:linear-gradient(90deg,#b9770e,var(--warn))} .bar i.ok{background:linear-gradient(90deg,#1e8449,var(--ok))}
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1rem}
 textarea.msg{min-height:130px;width:100%;resize:vertical;font-family:inherit}
-.picks{max-height:230px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:.5rem;display:flex;flex-direction:column;gap:.2rem;background:#0f0f13}
-.picks label{display:flex;gap:.5rem;align-items:center;font-size:.86rem;color:var(--text);cursor:pointer;padding:.25rem .4rem;border-radius:7px;transition:background .12s}
-.picks label:hover{background:rgba(255,255,255,.05)}
+.picks{max-height:252px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:.35rem;
+  display:flex;flex-direction:column;gap:.14rem;background:#0f0f13}
+.picks label{display:flex;gap:.55rem;align-items:center;text-align:left;padding:.4rem .5rem;border-radius:9px;
+  border:1px solid transparent;cursor:pointer;transition:background .12s,border-color .12s}
+.picks label:hover{background:rgba(255,255,255,.055)}
+/* выбранная строка подсвечивается целиком — иначе непонятно, на что ты нажал */
+.picks label:has(input:checked){background:linear-gradient(90deg,rgba(153,0,0,.28),rgba(153,0,0,.05));border-color:#5a1d1d}
+.picks .grow{flex:1;min-width:0}
+.picks b{display:block;font-weight:600;font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.picks small{display:block;color:var(--muted);font-size:.75rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.picks .none{padding:.5rem .55rem;color:var(--muted);font-size:.85rem}
+.pickline{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.45rem;font-size:.85rem;color:var(--muted)}
+.pickline b{color:var(--text);font-weight:600}
+/* плитки «Управления»: одна карточка — одно дело, с иконкой, пояснением и результатом */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:.85rem}
+.tile{position:relative;overflow:hidden;display:flex;flex-direction:column;gap:.55rem;padding:1rem 1.05rem;
+  background:linear-gradient(180deg,rgba(255,255,255,.03),transparent 60%),var(--panel);
+  border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--glow),var(--edge);
+  transition:border-color .16s,transform .16s,box-shadow .2s}
+.tile:hover{border-color:#4b4b57;transform:translateY(-2px);box-shadow:var(--glow),var(--edge),0 12px 28px rgba(0,0,0,.42)}
+.tile::after{content:"";position:absolute;left:0;right:0;top:0;height:2px;opacity:0;
+  background:linear-gradient(90deg,transparent,var(--accent2),transparent);transition:opacity .2s}
+.tile:hover::after{opacity:.85}
+.tile .ic{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;font-size:1.05rem;
+  background:linear-gradient(145deg,rgba(210,58,58,.2),rgba(153,0,0,.08));border:1px solid #4a1d1d}
+.tile.warn-tile .ic{background:linear-gradient(145deg,rgba(243,156,18,.18),rgba(120,70,0,.08));border-color:#5a4218}
+.tile.ok-tile .ic{background:linear-gradient(145deg,rgba(46,204,113,.16),rgba(20,90,50,.07));border-color:#1d5a3a}
+.tile h3{margin:0;font-size:.97rem}
+.tile p{margin:0;color:var(--muted);font-size:.82rem;line-height:1.45;flex:1}
+.tile .out{font-size:.82rem}
+.tile .out:empty{display:none}
+.tile .row{margin-top:.15rem}
 .diff .was{color:var(--muted);font-size:.78rem}
 .diff del{text-decoration:none;color:#ff8a80;background:rgba(231,76,60,.12);border-radius:4px;padding:0 .25em}
 .diff ins{text-decoration:none;color:#8be0a8;background:rgba(46,204,113,.12);border-radius:4px;padding:0 .25em}
@@ -238,8 +294,8 @@ dialog::backdrop{background:rgba(0,0,0,.65);backdrop-filter:blur(3px)}
 
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
-  #content>*,.toast,.login,.login>*,body::before,body::after,.logo,.tabs button.active{animation:none}
-  .btn:hover,.r:hover,.tabs button:hover,.pager button:hover,.stat:hover,.guild:hover{transform:none}
+  #content>*,.toast,.login,.login>*,body::before,body::after,.logo,.tabs button.active,.dot,.head::after{animation:none}
+  .btn:hover,.r:hover,.tabs button:hover,.pager button:hover,.stat:hover,.guild:hover,.tile:hover,.grid2>.card:hover,.cols>.card:hover{transform:none}
   .btn::after{display:none}
 }
 
@@ -252,6 +308,7 @@ dialog::backdrop{background:rgba(0,0,0,.65);backdrop-filter:blur(3px)}
   .main{padding:1.1rem 1rem 2.5rem}
   .head{margin-bottom:1.1rem}
   .split{grid-template-columns:1fr}
+  .stick{position:static;max-height:none}
   .files{flex-direction:row;overflow-x:auto}
   .files button{flex:none}
   .editor{min-height:50vh}
@@ -514,7 +571,8 @@ async function pageModules() {
   function row(m) {
     const enabled = !m.disabled;
     return h('div', { class: 'card item' },
-      h('div', { class: 'grow' }, h('b', null, m.name.replace(/^cogs\./, ''), chip(m), m.protected ? h('span', { class: 'chip' }, 'системный') : null), h('span', { class: 'muted small' }, m.file)),
+      h('div', { class: 'grow' }, h('b', null, m.name.replace(/^cogs\./, ''), chip(m), m.protected ? h('span', { class: 'chip' }, 'системный') : null),
+        h('span', { class: 'muted small' }, (m.about ? m.about + ' · ' : '') + m.file)),
       h('button', { class: 'btn', disabled: m.protected || (!m.loaded && enabled === false), onclick: () => act(m, 'reload') }, m.loaded ? 'Перезагрузить' : 'Запустить'),
       h('button', { class: 'switch' + (enabled ? ' on' : ''), role: 'switch', 'aria-checked': String(enabled), 'aria-label': 'Включить или отключить ' + m.name, disabled: m.protected, onclick: () => act(m, enabled ? 'disable' : 'enable') })
     );
@@ -522,10 +580,11 @@ async function pageModules() {
 
   function render() {
     const q = search.value.trim().toLowerCase();
-    const match = (m) => !q || m.name.toLowerCase().includes(q);
+    const match = (m) => !q || m.name.toLowerCase().includes(q) || (m.file || '').toLowerCase().includes(q);
     list.replaceChildren(...data.modules.filter((m) => !m.internal && match(m)).map(row));
     internal.replaceChildren(...data.modules.filter((m) => m.internal && match(m)).map((m) =>
-      h('div', { class: 'card item dim' }, h('div', { class: 'grow' }, h('b', null, m.file), h('span', { class: 'muted small' }, 'служебный файл, автоматически не загружается')))));
+      h('div', { class: 'card item dim' }, h('div', { class: 'grow' }, h('b', null, m.file),
+        h('span', { class: 'muted small' }, (m.about || 'нутренняя кухня') + ' · его вызывают другие модули, отдельно он не запускается')))));
   }
   search.addEventListener('input', render);
   render();
@@ -663,6 +722,19 @@ async function waitForRestart(text) {
   $app.replaceChildren(h('div', { class: 'center' }, h('div', { class: 'card login' }, h('h2', null, 'Панель не отвечает'), h('p', { class: 'muted' }, 'Проверьте консоль на хостинге и запустите бота вручную, если он остановился.'))));
 }
 
+/* карточка-плитка для одного дела: иконка, пояснение, кнопки и куда показать результат */
+function tile(icon, title, help, kind, ...buttons) {
+  const out = h('div', { class: 'out' });
+  out.busy = (t) => out.replaceChildren(h('span', { class: 'muted small' }, t || 'Делаю…'));
+  out.say = (...nodes) => out.replaceChildren(...nodes.filter(Boolean));
+  out.fail = (e) => out.replaceChildren(h('span', { class: 'err' }, String(e && e.message || e)));
+  const box = h('div', { class: 'tile' + (kind ? ' ' + kind : '') },
+    h('div', { class: 'ic' }, icon), h('h3', null, title), h('p', null, help),
+    h('div', { class: 'row' }, ...buttons), out);
+  box.out = out;
+  return box;
+}
+
 async function pageControl() {
   const p = await api('/api/presence');
   const status = h('select', null, [['online', 'В сети'], ['idle', 'Не активен'], ['dnd', 'Не беспокоить'], ['invisible', 'Невидимка']].map(([v, l]) => h('option', { value: v }, l)));
@@ -692,8 +764,92 @@ async function pageControl() {
     $app.replaceChildren(h('div', { class: 'center' }, h('div', { class: 'card login' }, h('h2', null, 'Бот выключен'), h('p', { class: 'muted' }, 'Чтобы запустить его снова, нажмите Start или Restart в панели хостинга.'))));
   } }, 'Выключить бота');
 
+  /* пять плиток: дела, которых из сайта раньше не было */
+  const tReload = tile('🐣', 'Применить новый код',
+    'Перезагружает все рабочие модули: код, который ты подтянул с GitHub, вступает сразу — без рестарта процесса и без разрыва связи с Discord.', '',
+    h('button', { class: 'btn primary', onclick: async () => {
+      if (!(await confirmBox('Применить код?', 'Модули перезагрузятся по одному. Кнопки и экраны продолжат работать, но открытые ветки заявок перезапуск переживут, а их собственные кнопки — нет.', 'Применить', false))) return;
+      tReload.out.busy('Перезагружаю модули…');
+      try {
+        const d = await api('/api/bot/reload', { method: 'POST', body: {} });
+        tReload.out.say(
+          h('span', { class: 'small ' + (d.failed.length ? 'warnline' : 'muted') },
+            'Перезагружено ' + d.reloaded.length + (d.failed.length ? ' · встало колом: ' + d.failed.map((f) => f.name).join(', ') : '')),
+          d.failed.length ? h('span', { class: 'muted small' }, ' — включи их заново на «Модули» или перезапусти бота') : null);
+      } catch (e) { tReload.out.fail(e); }
+    } }, 'Применить'));
+
+  const tHide = tile('🙈', 'Спрятать дубли заново',
+    'Discord иногда показывает команды, которые «Панель семьи» уже умеет открывать. Кнопка перезаписывает список сервера и вычищает огрыстки из глобального меню.', '',
+    h('button', { class: 'btn', onclick: async () => {
+      tHide.out.busy('Перезаписываю список команд…');
+      try {
+        const d = await api('/api/commands/visibility', { method: 'POST', body: { hide: true } });
+        tHide.out.say(h('span', { class: 'muted small' }, d.message));
+      } catch (e) { tHide.out.fail(e); }
+    } }, 'Спрятать'));
+
+  const tShow = tile('👁', 'Вернуть все команды',
+    'Откатывает скрытие: каждая панель снова со своей слэш-командой. То же самое делает /reverse, но без Discord.', '',
+    h('button', { class: 'btn', onclick: async () => {
+      if (!(await confirmBox('Вернуть команды?', 'Спрятанные дубли снова полезут в меню Discord — это ровно то, что делает /reverse.', 'Вернуть', false))) return;
+      tShow.out.busy('Возвращаю…');
+      try {
+        const d = await api('/api/commands/visibility', { method: 'POST', body: { hide: false } });
+        tShow.out.say(h('span', { class: 'muted small' }, d.message));
+      } catch (e) { tShow.out.fail(e); }
+    } }, 'Вернуть'));
+
+  const tSleep = tile('💤', 'Сон по таймеру',
+    'Ночью бот только расходует трафик хостинга. Поставь таймер — он выключится сам; поднимать обратно придётся кнопкой на хостинге.', 'warn-tile',
+    h('button', { class: 'btn', onclick: () => setSleep(15) }, '15 мин'),
+    h('button', { class: 'btn', onclick: () => setSleep(60) }, '1 час'),
+    h('button', { class: 'btn', onclick: () => setSleep(0) }, 'Отменить'));
+
+  const tPerms = tile('🛡', 'Что бот не может',
+    'Смотрит права на сервере, каналы, куда ему нельзя писать, экраны с выключенным когом и то, сколько участников он вообще видит.', 'ok-tile',
+    h('button', { class: 'btn', onclick: () => check() }, 'Проверить'));
+
+  const saySleep = (until) => {
+    if (!until) { tSleep.out.say(h('span', { class: 'muted small' }, 'Сон не поставлен — бот работает, сколько нужно.')); return; }
+    const left = Math.max(0, Math.round(until - Date.now() / 1000));
+    tSleep.out.say(h('span', { class: 'warnline small' },
+      '💤 Выключится через ' + fmtUptime(left) + ' — в ' + new Date(until * 1000).toLocaleTimeString() + '.'));
+  };
+  const setSleep = async (minutes) => {
+    if (minutes && !(await confirmBox('Сон ' + minutes + ' мин?', 'Через ' + minutes + ' минут бот и панель выключатся сами. Включить обратно — только на хостинге.', 'Поставить', false))) return;
+    tSleep.out.busy(minutes ? 'Ставлю таймер…' : 'Снимаю таймер…');
+    try {
+      const r = await api('/api/bot/sleep', { method: 'POST', body: { minutes } });
+      saySleep(r.until);
+      toast(r.message, 'ok');
+    } catch (e) { tSleep.out.fail(e); }
+  };
+  const check = async () => {
+    tPerms.out.busy('Смотрю сервер…');
+    try {
+      const c = await api('/api/control/center');
+      if (c.error) { tPerms.out.say(h('span', { class: 'err' }, c.error)); return; }
+      tPerms.out.say(
+        h('span', null, c.administrator ? chip('админ сервера', 'ok') : chip('не админ', 'off')),
+        c.missing.length ? h('span', { class: 'warnline small' }, 'не умеет: ' + c.missing.join(', '))
+          : h('span', { class: 'muted small' }, 'права сервера — все нужные'),
+        c.silent_total ? h('span', { class: 'warnline small' }, 'не может писать в ' + c.silent_total + ' каналов: '
+          + c.silent.slice(0, 6).map((x) => x.name).join(', ') + (c.silent_total > 6 ? '…' : ''))
+          : h('span', { class: 'muted small' }, 'пишет во все каналы'),
+        c.dark.length ? h('span', { class: 'warnline small' }, c.dark.length + ' экранов с выключенным когом: '
+          + c.dark.slice(0, 5).join(', ') + (c.dark.length > 5 ? '…' : '')) : null,
+        c.members && c.members.note ? h('span', { class: 'warnline small' }, c.members.note)
+          : h('span', { class: 'muted small' }, 'видит весь состав: ' + c.members.seen + ' человек'));
+    } catch (e) { tPerms.out.fail(e); }
+  };
+  api('/api/bot/sleep').then((s) => saySleep(s.until)).catch(() => saySleep(null));
+
   return h('div', null,
-    pageHead('Управление', 'Статус в Discord и питание бота.'),
+    pageHead('Управление', 'Статус в Discord, питание бота и дела, которые раньше требовали консоли.',
+      h('button', { class: 'btn', onclick: () => go('control') }, 'Обновить')),
+    h('div', { class: 'tiles' }, tReload, tHide, tShow, tSleep, tPerms),
+    h('div', { class: 'section-title' }, 'Статус и питание'),
     h('div', { class: 'cols' },
       h('div', { class: 'card form' },
         h('h2', null, 'Статус бота'),
@@ -705,7 +861,7 @@ async function pageControl() {
       ),
       h('div', { class: 'card form danger-zone' },
         h('h2', null, 'Питание'),
-        h('p', { class: 'muted small' }, 'Перезапуск помогает, если бот завис или вы изменили настройки, которые читаются только при старте.'),
+        h('p', { class: 'muted small' }, 'Перезапуск помогает, если бот завис или ты изменил настройки, которые читаются только при старте. Применить код модулей можно кнопкой выше — без рестарта.'),
         h('div', { class: 'row' }, restart, stop)
       )
     )
@@ -723,6 +879,24 @@ function chanLabel(c) {
   const first = c.name.codePointAt(0);
   const plain = /\p{Letter}|\p{Number}/u.test(String.fromCodePoint(first));
   return (plain && first !== 35 ? '# ' : '') + c.name + (c.can_write === false ? ' · нет прав' : '');
+}
+
+/* вторая строка в списке каналов: где живёт и чем отличается, чтобы не гадать по имени */
+function chanSub(c) {
+  const bits = [];
+  if (c.category) bits.push('📂 ' + c.category);
+  if (c.kind && c.kind !== 'канал') bits.push(c.kind);
+  if (c.slow) bits.push('не чаще, чем раз в ' + c.slow + ' с');
+  if (c.nsfw) bits.push('18+');
+  if (c.topic) bits.push(c.topic);
+  return bits.join(' · ');
+}
+
+function memSub(m) {
+  const bits = ['ID ' + m.id];
+  if (m.voice) bits.push('🎙 ' + m.voice);
+  if (m.joined) bits.push('в составе с ' + m.joined);
+  return bits.join(' · ');
 }
 
 function kv(pairs) {
@@ -881,40 +1055,79 @@ function resultBox() {
 async function pageSend() {
   const cq = h('input', { type: 'search', placeholder: 'Имя канала…' });
   const chBox = h('div', { class: 'picks' });
+  const chLine = h('div', { class: 'pickline' });
   let channelId = '';
+  let chanRows = [];
+
+  function sayChannel() {
+    const c = chanRows.find((x) => x.id === channelId);
+    chLine.replaceChildren(h('span', null, c ? 'Пишем в ' : 'Канал не выбран — нажми на строчку.'));
+    if (c) chLine.append(h('b', null, chanLabel(c)));
+    if (c && c.can_write === false) chLine.append(chip('нет прав писать', 'err'));
+    if (c && c.is_review) chLine.append(chip('канал заявок: только про набор', 'err'));
+  }
+
   async function loadChannels() {
     const d = await api('/api/channels?q=' + encodeURIComponent(cq.value.trim()));
+    chanRows = d.rows;
     chBox.replaceChildren(...d.rows.map((c) => h('label', null,
-      h('input', { type: 'radio', name: 'chan', value: c.id, checked: c.id === channelId, onchange: () => { channelId = c.id; } }),
-      h('span', null,
-        chanLabel(c),
-        c.is_review ? chip('канал заявок', 'err') : null)
+      h('input', { type: 'radio', name: 'chan', value: c.id, checked: c.id === channelId,
+        onchange: () => { channelId = c.id; sayChannel(); } }),
+      h('span', { class: 'grow' }, h('b', null, chanLabel(c)), h('small', null, chanSub(c))),
+      c.can_write === false ? chip('нет прав', 'err') : (c.is_review ? chip('заявки', 'err') : null)
     )));
-    if (!d.rows.length) chBox.append(h('p', { class: 'muted small' }, 'Не нашлось ни одного канала.'));
+    if (!d.rows.length) chBox.append(h('div', { class: 'none' }, 'Не нашлось ни одного канала.'));
+    sayChannel();
   }
 
   const mq = h('input', { type: 'search', placeholder: 'Ник или ID…' });
   const mBox = h('div', { class: 'picks' });
+  const mLine = h('div', { class: 'pickline' });
   let dmUser = '';
+  let memRows = [];
   const chosen = new Set();
+
+  function sayMembers() {
+    const m = memRows.find((x) => x.id === dmUser);
+    mLine.replaceChildren(h('span', null, 'В ЛС одному: '), h('b', null, m ? m.name : 'не выбран'),
+      h('span', null, '· в рассылку попало '), h('b', null, chosen.size + ' чел.'));
+  }
+
   async function loadMembers() {
-    const d = await api('/api/members?q=' + encodeURIComponent(mq.value.trim()) + '&limit=60');
+    const d = await api('/api/members?q=' + encodeURIComponent(mq.value.trim()) + '&limit=120');
+    memRows = d.rows;
     mBox.replaceChildren(...d.rows.map((m) => {
-      const one = h('label', null, h('span', null, m.name + (m.top ? ' · ' + m.top : '') + (m.voice ? ' · 🎙 ' + m.voice : '')));
-      const radio = h('input', { type: 'radio', name: 'dmuser', value: m.id, checked: m.id === dmUser, onchange: () => { dmUser = m.id; } });
-      const check = h('input', { type: 'checkbox', value: m.id, onchange: (e) => { e.target.checked ? chosen.add(m.id) : chosen.delete(m.id); } });
-      one.prepend(radio, check);
+      const check = h('input', { type: 'checkbox', checked: chosen.has(m.id), value: m.id,
+        onchange: (e) => { e.target.checked ? chosen.add(m.id) : chosen.delete(m.id); sayMembers(); } });
+      const one = h('label', null,
+        h('input', { type: 'radio', name: 'dmuser', value: m.id, checked: m.id === dmUser,
+          onchange: () => { dmUser = m.id; sayMembers(); } }),
+        check,
+        h('span', { class: 'grow' }, h('b', null, m.name), h('small', null, memSub(m))),
+        chip(m.top || 'без роли', m.top ? 'ok' : 'off'));
       return one;
     }));
-    if (!d.rows.length) mBox.append(h('p', { class: 'muted small' }, 'Никого не нашлось.'));
+    if (!d.rows.length) mBox.append(h('div', { class: 'none' }, 'Никого не нашлось.'));
+    sayMembers();
   }
+
+  const mark = h('small', { class: 'muted' }, '');
+  const upd = () => { mark.textContent = 'Отмечено: ' + chosen.size; sayMembers(); };
+  const allBtn = h('button', { class: 'btn', onclick: () => {
+    memRows.forEach((m) => chosen.add(m.id));
+    loadMembers(); upd();
+  } }, 'Отметить всех в списке');
+  const noBtn = h('button', { class: 'btn', onclick: () => {
+    chosen.clear();
+    loadMembers(); upd();
+  } }, 'Снять всех');
 
   const f1 = msgForm(true), r1 = resultBox();
   f1.box.append(h('button', { class: 'btn primary', onclick: async () => {
     r1.busy();
     try { r1.show(await api('/api/send', { method: 'POST', body: { channel: channelId, text: f1.text.value, title: f1.title.value, color: f1.color.value, ping: f1.ping.checked } })); }
     catch (e) { r1.err(e); }
-  } }, 'Отправить в канал'), h('p', { class: 'muted small' }, 'Сначала выбери канал слева.'));
+  } }, 'Отправить в канал'), h('p', { class: 'muted small' }, 'Сначала выбери канал кружком в списке.'));
 
   const f2 = msgForm(false), r2 = resultBox();
   f2.box.append(h('button', { class: 'btn primary', onclick: async () => {
@@ -924,8 +1137,6 @@ async function pageSend() {
   } }, 'Отправить в ЛС'));
 
   const f3 = msgForm(false), r3 = resultBox();
-  const mark = h('small', { class: 'muted' }, 'Отмечено: 0');
-  const upd = () => { mark.textContent = 'Отмечено: ' + chosen.size; };
   f3.box.append(h('div', { class: 'row' }, h('button', { class: 'btn', onclick: async () => {
     upd();
     r3.busy();
@@ -944,16 +1155,22 @@ async function pageSend() {
   await Promise.all([loadChannels(), loadMembers()]);
 
   return h('div', null,
-    pageHead('Сообщения', 'Панель пишет от имени бота: в канал, в ЛС и рассылкой по составу.'),
+    pageHead('Сообщения', 'Панель пишет от имени бота: в канал, в ЛС и рассылкой по составу.',
+      h('button', { class: 'btn', onclick: () => go('send') }, 'Обновить')),
     h('div', { class: 'grid2' },
-      h('div', { class: 'card form' }, h('h2', null, 'В канал'),
-        h('label', null, 'Поиск канала', cq), chBox, f1.box, r1),
-      h('div', { class: 'card form' }, h('h2', null, 'В ЛС'),
-        h('label', null, 'Кого', mq), mBox, f2.box, r2,
-        h('div', { class: 'section-title' }, 'Рассылка'), f3.box, r3)
+      h('div', { class: 'card form' }, h('h2', null, '✉️ В канал'),
+        h('p', { class: 'muted small' }, 'Кружок слева — какой канал выбран. Серым помечено, куда бот писать не может.'),
+        h('label', null, 'Поиск канала', cq), chBox, chLine, f1.box, r1),
+      h('div', { class: 'card form' }, h('h2', null, '👤 В ЛС и рассылкой'),
+        h('p', { class: 'muted small' }, 'Кружок — написать одному. Галочка — взять в рассылку. Можно и то, и другое.'),
+        h('label', null, 'Кого', mq), mBox, mLine,
+        h('div', { class: 'row' }, allBtn, noBtn),
+        h('div', { class: 'section-title' }, 'Одному'), f2.box, r2,
+        h('div', { class: 'section-title' }, 'Рассылка по галочкам'), f3.box, r3)
     )
   );
 }
+
 
 /* ---------- Экраны команд ---------- */
 function embedNode(e) {
@@ -1030,22 +1247,113 @@ async function pageScreens() {
     .map((c) => h('option', { value: c.id }, chanLabel(c))));
   const out = h('div', { class: 'card' }, h('p', { class: 'muted' }, 'Открой экран — его ответ появится здесь, как в Discord.'));
   const refresh = (res) => out.replaceChildren(screenNode(res, actorSel, refresh));
+  const filter = h('input', { type: 'search', placeholder: 'Найти экран по названию…' });
 
-  const nav = h('div', { class: 'grid2' }, d.sections.map((s) => h('div', { class: 'card form' },
-    h('h2', null, (s.icon || '') + ' ' + s.title + ' · ' + s.screens.length),
-    h('div', { class: 'btns' }, s.screens.map((x) => h('button', {
-      class: 'btn', title: x.cmd, onclick: async () => {
-      out.replaceChildren(spinner('Экран думает…'));
-      try { refresh(await api('/api/commands/run', { method: 'POST', body: { ref: x.ref, actor: actorSel.value, channel: chanSel.value } })); }
-      catch (e) { out.replaceChildren(h('p', { class: 'err' }, e.message)); }
-    } }, (x.icon || '') + ' ' + x.label))))));
+  const run = (x, args) => {
+    out.replaceChildren(spinner('Экран думает…'));
+    api('/api/commands/run', { method: 'POST', body: { ref: x.ref, actor: actorSel.value, channel: chanSel.value, args: args || {} } })
+      .then(refresh).catch((e) => out.replaceChildren(h('p', { class: 'err' }, e.message)));
+  };
 
+  /* ── поля формы: экраны с аргументами раньше жили только в Discord ── */
+  let people = null, chanels = null;
+  async function optionsOf(kind) {
+    if (kind === 'member') {
+      if (!people) people = (await api('/api/members?limit=200')).rows;
+      return people.map((m) => [m.id, m.name + (m.top ? ' · ' + m.top : '')]);
+    }
+    if (!chanels) chanels = chans.rows;
+    return chanels.map((c) => [c.id, chanLabel(c) + (c.category ? ' · ' + c.category : '')]);
+  }
+
+  async function pickerNode(kind, store, name) {
+    const q = h('input', { type: 'search', placeholder: 'фильтр по имени или ID…' });
+    const sel = h('select', { size: '5' });
+    let all = [];
+    try { all = await optionsOf(kind); } catch (e) { /* список пустой, панель скажет ошибкой */ }
+    const fill = (needle) => {
+      const rows = needle ? all.filter(([id, label]) => label.toLowerCase().includes(needle) || id.includes(needle)) : all;
+      sel.replaceChildren(...(rows.length ? rows.slice(0, 150) : [['', 'никого не найдено']])
+        .map(([id, label]) => h('option', { value: id }, label)));
+      store[name] = () => sel.value;
+    };
+    q.addEventListener('input', () => fill(q.value.trim().toLowerCase()));
+    fill('');
+    return h('div', { class: 'form' }, q, sel);
+  }
+
+  async function openForm(x) {
+    const store = {};
+    const fields = h('div', { class: 'form' });
+    out.replaceChildren(h('h2', null, (x.icon || '') + ' ' + x.label),
+      h('p', { class: 'muted small' }, 'Экрану нужны аргументы — как в слэш-команде ' + x.cmd + '. Заполни и открой.'),
+      fields,
+      h('div', { class: 'row' }, h('button', {
+        class: 'btn primary', onclick: () => {
+          const args = {};
+          Object.entries(store).forEach(([k, get]) => { args[k] = get(); });
+          run(x, args);
+        }
+      }, 'Открыть экран'), h('button', { class: 'btn', onclick: () => renderNav() }, 'Назад')));
+    for (const f of x.args) {
+      let node;
+      if (f.choices && f.choices.length) {
+        const sel = h('select', null, f.choices.map(([label, value]) => h('option', { value: value }, label)));
+        store[f.name] = () => sel.value;
+        node = sel;
+      } else if (f.kind === 'bool') {
+        const box = h('input', { type: 'checkbox' });
+        store[f.name] = () => (box.checked ? 'true' : 'false');
+        node = h('div', { class: 'row' }, box, h('span', { class: 'muted small' }, 'галочка = да'));
+      } else if (f.kind === 'member' || f.kind === 'channel') {
+        node = await pickerNode(f.kind, store, f.name);
+      } else {
+        const inp = h('input', { type: f.kind === 'number' ? 'number' : 'text', placeholder: f.label || f.name });
+        store[f.name] = () => inp.value;
+        node = inp;
+      }
+      fields.append(h('label', null, f.label || f.name, node));
+    }
+  }
+
+  const nav = h('div', { class: 'grid2' });
+  function renderNav() {
+    const needle = filter.value.trim().toLowerCase();
+    const cards = [];
+    d.sections.forEach((s) => {
+      const items = s.screens.filter((x) => !needle
+        || (x.label + ' ' + x.cmd + ' ' + s.title).toLowerCase().includes(needle));
+      if (!items.length) return;
+      cards.push(h('div', { class: 'card form' },
+        h('h2', null, (s.icon || '') + ' ' + s.title + ' · ' + items.length),
+        s.only_web ? h('p', { class: 'muted small' }, 'Им нужны аргументы: панель спросит формой, в Discord они остаются своими командами.') : null,
+        h('div', { class: 'btns' }, items.map((x) => {
+          const needs = x.args && x.args.length;
+          return h('button', {
+            class: 'btn' + (x.live === false ? ' dim' : ''),
+            title: x.cmd + (x.live === false ? ' · ког выключен, экран не откроется' : '')
+              + (needs ? ' · ' + x.args.map((f) => f.label).join(', ') : ''),
+            onclick: () => (needs ? openForm(x) : run(x))
+          }, (x.icon || '') + ' ' + x.label + (needs ? ' ✎' : ''));
+        }))));
+    });
+    nav.replaceChildren(...cards);
+    if (!cards.length) nav.replaceChildren(h('p', { class: 'muted' }, 'Ничего не нашлось по «' + filter.value + '».'));
+  }
+  filter.addEventListener('input', renderNav);
+  renderNav();
+
+  const ready = d.sections.reduce((n, s) => n + s.screens.filter((x) => x.live !== false).length, 0);
+  const total = d.sections.reduce((n, s) => n + s.screens.length, 0);
   return h('div', null,
     pageHead('Экраны команд', 'Команды бота работают отсюда: экран получает тот же ответ, что и в Discord, и его кнопки живые.',
       h('button', { class: 'btn', onclick: () => go('screens') }, 'Обновить')),
-    h('div', { class: 'toolbar' }, h('label', null, 'От чьего имени', actorSel), h('label', null, 'Куда отвечать', chanSel),
-      d.hidden && d.hidden.length ? chip('скрытых дублей: ' + d.hidden.length, 'off') : null),
-    nav, h('div', { class: 'section-title' }, 'Ответ'), out
+    h('div', { class: 'toolbar' }, h('label', null, 'Найти', filter),
+      h('label', null, 'От чьего имени', actorSel), h('label', null, 'Куда отвечать', chanSel),
+      chip(ready + ' из ' + total + ' экранов открыты', ready === total ? 'ok' : 'off'),
+      d.hidden && d.hidden.length ? chip('спрятано дублей: ' + d.hidden.length, 'off') : null),
+    h('div', { class: 'split', style: 'grid-template-columns:minmax(300px,46%) 1fr' }, nav,
+      h('div', { class: 'stick' }, h('div', { class: 'section-title' }, 'Ответ'), out))
   );
 }
 

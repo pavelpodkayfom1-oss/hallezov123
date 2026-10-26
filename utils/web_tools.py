@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import disnake
+from disnake.ext import commands
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -1064,19 +1065,31 @@ async def _screen_channel(bot, channel_id: Any):
     return guild.text_channels[0] if guild.text_channels else None, ""
 
 
-def command_rows() -> Dict[str, Any]:
+def command_rows(bot) -> Dict[str, Any]:
     hub = sys.modules.get("cogs.admin_hub")
     if hub is None:
         return {"error": "Каталог экранов держит cogs.admin_hub, а он выключен"}
-    sections = [{"icon": icon, "title": title,
-                 "screens": [{"icon": i, "label": l, "ref": r, "cmd": c} for (i, l, r, c) in items]}
+
+    def pack(items):
+        rows = []
+        for (icon, label, ref, cmd) in items:
+            rows.append({"icon": icon, "label": label, "ref": ref, "cmd": cmd,
+                         "args": hub.args_of(bot, ref),
+                         "live": hub.web_target(bot, ref) is not None})
+        return rows
+
+    sections = [{"icon": icon, "title": title, "screens": pack(items)}
                 for (icon, title, items) in hub.SECTIONS]
+    if getattr(hub, "EXTRA_SCREENS", None):
+        sections.append({"icon": "🧷", "title": "С аргументами", "only_web": True,
+                         "screens": pack(hub.EXTRA_SCREENS)})
     return {"sections": sections,
             "hidden": [str(n) for n in getattr(hub, "HIDDEN", ())],
             "hr": str(getattr(hub, "HR_REF", ""))}
 
 
-async def run_screen(bot, ref: str, actor_id: Any, channel_id: Any = None) -> Dict[str, Any]:
+async def run_screen(bot, ref: str, actor_id: Any, channel_id: Any = None,
+                     args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     hub = sys.modules.get("cogs.admin_hub")
     if hub is None:
         return {"error": "Каталог экранов держит cogs.admin_hub, а он выключен"}
@@ -1084,7 +1097,7 @@ async def run_screen(bot, ref: str, actor_id: Any, channel_id: Any = None) -> Di
     if err:
         return {"error": err}
     label, cmd = hub.screen_of(str(ref))
-    target = hub._target(bot, str(ref))
+    target = hub.web_target(bot, str(ref))
     if target is None:
         return {"error": f"«{label}» недоступен: ког выключен или экран не найден ({cmd})"}
     channel, cerr = await _screen_channel(bot, channel_id)
@@ -1092,7 +1105,12 @@ async def run_screen(bot, ref: str, actor_id: Any, channel_id: Any = None) -> Di
         return {"error": cerr}
     cap = _Cap(bot, channel)
     try:
-        await target(WebInter(bot, actor, channel, cap))
+        # аргументы экрану подставляет hub: панель отдаёт строки, hub превращает их в
+        # участника, канал или число — ровно то, что прислал бы Discord своей подсказкой
+        await target(WebInter(bot, actor, channel, cap), dict(args or {}))
+    except commands.CommandError as e:
+        # экран сам сказал, чего ему не хватило (hub поднимает BadArgument на пустую форму)
+        return {"error": f"«{label}»: {e}", "label": label, "cmd": cmd}
     except Exception as e:
         return {"error": f"«{label}» не открылся: {_discord_error(e)}", "label": label, "cmd": cmd}
     out = cap.to_dict()
@@ -1225,6 +1243,70 @@ async def day_report(hours: int = 24) -> Dict[str, Any]:
         counts[r["what"]] = counts.get(r["what"], 0) + 1
     return {"hours": hours, "totals": rep.get("totals") or {}, "counts": counts,
             "rows": rows[:120], "total": len(rows)}
+
+
+NEEDED_PERMS = [
+    ("view_channel", "видеть каналы"),
+    ("send_messages", "писать сообщения"),
+    ("read_message_history", "читать историю"),
+    ("embed_links", "показывать карточки"),
+    ("attach_files", "прикладывать файлы"),
+    ("external_emojis", "пользоваться чужими эмодзи"),
+    ("add_reactions", "ставить реакции"),
+    ("manage_roles", "выдавать и снимать роли"),
+    ("manage_nicknames", "переименовывать состав"),
+    ("manage_channels", "создавать ветки заявок"),
+    ("moderate_members", "усыплять нарушителей"),
+    ("manage_expressions", "загружать эмодзи и стикеры"),
+    ("connect", "заходить в голосовые"),
+    ("speak", "говорить в голосовых"),
+]
+
+
+def control_center(bot) -> Dict[str, Any]:
+    """Что бот на сервере не может: права, каналы без доступа и экраны с выключенным когом."""
+    guild = guild_of(bot)
+    if guild is None:
+        return {"error": "Бот ни на одном сервере"}
+    me = guild.me
+    if me is None:
+        return {"error": "Бот ещё не разобрал себя на сервере — обнови через пару секунд"}
+    top = getattr(me.guild_permissions, "administrator", False)
+    missing: List[str] = []
+    if not top:
+        for attr, label in NEEDED_PERMS:
+            if not bool(getattr(me.guild_permissions, attr, False)):
+                missing.append(label)
+    silent: List[Dict[str, str]] = []
+    for ch in sorted(guild.text_channels, key=lambda c: (c.position, c.name)):
+        try:
+            if not bool(ch.permissions_for(me).send_messages):
+                silent.append({"name": ch.name,
+                               "category": ch.category.name if getattr(ch, "category", None) else ""})
+        except Exception:
+            continue
+    hub = sys.modules.get("cogs.admin_hub")
+    dark: List[str] = []
+    if hub is not None:
+        refs = [(label, ref) for _, _, items in hub.SECTIONS for (_, label, ref, _) in items]
+        refs += [(label, ref) for (_, label, ref, _) in getattr(hub, "EXTRA_SCREENS", [])]
+        for label, ref in refs:
+            if hub.web_target(bot, ref) is None:
+                dark.append(f"{label} ({ref.split('.')[0]})")
+    total = int(getattr(guild, "member_count", 0) or 0)
+    seen = len(guild.members)
+    return {
+        "guild": guild.name,
+        "administrator": bool(top),
+        "missing": missing,
+        "silent": silent[:40],
+        "silent_total": len(silent),
+        "dark": dark,
+        "members": {"seen": seen, "total": total,
+                    "note": ("бот видит только " + f"{seen} из {total} — без намерения участников "
+                             "карточки, варны и рассылки будут слепы"
+                             if total and seen and seen * 1.6 < total else "")},
+    }
 
 
 def system_report(bot) -> Dict[str, Any]:

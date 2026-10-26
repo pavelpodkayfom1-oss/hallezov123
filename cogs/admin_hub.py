@@ -11,6 +11,11 @@
 с картинкой (баннер-файл) и увольнение остаются своими командами: подставить им файл или
 решение с подтверждением из меню нельзя, а вызвать без них — значит молча сломать половину кнопок.
 
+Экраны со строковыми аргументами (эмодзи по ссылке, событие, чёрный список, привязка канала
+логов) живут в EXTRA_SCREENS: в Discord их по-прежнему открывают своими командами, а веб-панель
+спрашивает то же самое формой. В SECTIONS их нет, чтобы меню Discord не предлагало кнопки,
+которые просят аргументы.
+
 Вторая панель — /hr (набор и анкета), она кнопкой внизу.
 
 Кнопка «🙈 Убрать дубли» прячет из меню Discord те команды, которые /панель открывает не
@@ -122,6 +127,19 @@ HIDDEN = (
 )
 
 _stash: dict = {}
+
+# Экраны только для веб-панели: у них обязательные аргументы, форма панели их спрашивает.
+# (эмодзи, экран, "КлассКога.метод", "команда")
+EXTRA_SCREENS = [
+    ("😀", "Эмодзи: добавить", "BannerPanel.emoji_add", "/emoji_add"),
+    ("🗓", "Событие: собрать семью", "Events.event_command", "/event"),
+    ("🔎", "ЧС: проверить статик", "FamqControl.bl_check", "/famq-blacklist check"),
+    ("⛔", "ЧС: внести игрока", "FamqControl.bl_add", "/famq-blacklist add"),
+    ("🧹", "ЧС: убрать запись", "FamqControl.bl_remove", "/famq-blacklist remove"),
+    ("📁", "Логи: привязать канал", "FamLogs.logs_set", "/logs set"),
+    ("🔕", "Логи: отвязать категорию", "FamLogs.logs_clear", "/logs clear"),
+    ("👑", "Забрать админку", "AdminCog.remove_admin_command", "/removeadmin"),
+]
 
 
 def _find_command(bot, name: str):
@@ -256,28 +274,136 @@ async def resync(bot) -> dict:
 
 
 # ───────────────────────── делегирование экрана ─────────────────────────
-def _options(callback):
-    """Опции, которые disnake подставил бы сам, или None — если экран без аргументов не открыть.
+def _kind(annotation) -> str:
+    """Как спросить аргумент у панели: число, участник, канал, да/нет или просто текст."""
+    text = str(getattr(annotation, "__name__", annotation) or "").lower()
+    if annotation is bool or "bool" in text:
+        return "bool"
+    if "member" in text or "user" in text:
+        return "member"
+    if "channel" in text or "thread" in text:
+        return "channel"
+    if annotation in (int, float) or "int" in text or "float" in text:
+        return "number"
+    return "text"
+
+
+def _choices(info) -> list:
+    """Варианты commands.Param(choices=…) в виде [[показывать, значение]].
+
+    Коги передают то dict, то list[str], а disnake иногда отдаёт свой список Option —
+    разбираем все три формы, чтобы селект в панели не оказался пустым.
+    """
+    raw = getattr(info, "choices", None)
+    if not raw:
+        return []
+    try:
+        pairs = list(raw.items()) if isinstance(raw, dict) else \
+            [(getattr(o, "name", o), getattr(o, "value", o)) for o in raw]
+    except Exception:
+        return []
+    return [[str(label), str(value)] for label, value in pairs
+            if label is not None and value is not None][:25]
+
+
+def _fields(callback):
+    """(дефолты, поля формы) — то, что подставил бы disnake, и что нужно спросить у панели.
 
     Команды пишут `arg = commands.Param(default=…)`, и в __defaults__ функции лежит сам
     ParamInfo, а не его значение. Вызовешь колбэк напрямую — экран получит ParamInfo вместо
     None или «⭐» и покажет мусор, поэтому дефолты разбираем здесь.
     """
     params = list(inspect.signature(callback).parameters.values())[2:]  # после self и inter
-    out = {}
+    defaults: dict = {}
+    fields: list = []
     for p in params:
-        default = p.default
-        if isinstance(default, commands.ParamInfo):
-            if default.required:
-                return None
-            out[p.name] = default.default
-        elif default is inspect.Parameter.empty:
-            return None
-    return out
+        info = p.default if isinstance(p.default, commands.ParamInfo) else None
+        if info is not None and info.required:
+            fields.append({"name": p.name, "label": getattr(info, "description", "") or p.name,
+                           "kind": _kind(p.annotation), "choices": _choices(info)})
+            continue
+        if info is not None:
+            defaults[p.name] = info.default
+            continue
+        if p.default is inspect.Parameter.empty:
+            fields.append({"name": p.name, "label": p.name,
+                           "kind": _kind(p.annotation), "choices": []})
+        else:
+            defaults[p.name] = p.default
+    return defaults, fields
 
 
-def _target(bot, ref: str):
-    """Экран из уже загруженного кога в виде func(inter) либо None."""
+def _options(callback):
+    """Опции экрана, который открывается без аргументов, или None, если экран их требует."""
+    defaults, fields = _fields(callback)
+    return None if fields else defaults
+
+
+def _digits(raw) -> int:
+    parts = [p for p in str(raw or "").replace(",", " ").split() if p.isdigit()]
+    return int(parts[-1]) if parts else 0
+
+
+async def _fill(inter, field, raw):
+    """Строку из формы превращаем в тот объект, который ждёт команда."""
+    kind = field["kind"]
+    if kind == "bool":
+        return str(raw).strip().lower() in ("1", "true", "on", "yes", "да")
+    if kind == "number":
+        try:
+            return int(str(raw).strip())
+        except ValueError:
+            raise commands.BadArgument(f"«{field['label']}» нужно числом")
+    if kind in ("member", "channel"):
+        what = "участника" if kind == "member" else "канал"
+        ident = _digits(raw)
+        if not ident:
+            raise commands.BadArgument(f"«{field['label']}»: выбери {what} из списка")
+        guild = getattr(inter, "guild", None)
+        if kind == "channel":
+            found = inter.bot.get_channel(ident) or await _fetch(inter.bot, "fetch_channel", ident)
+        else:
+            found = (guild.get_member(ident) if guild else None) or inter.bot.get_user(ident)
+            if found is None:
+                found = (await _fetch(inter.bot, "fetch_member", guild.id, ident) if guild
+                         else await _fetch(inter.bot, "fetch_user", ident))
+        if found is None:
+            raise commands.BadArgument(f"Я не нашла {what} «{raw}»")
+        return found
+    return str(raw)
+
+
+async def _fetch(bot, method: str, *args):
+    """fetch_* с ловушкой: без прав или при таймауте возвращаем None, а не роняем экран."""
+    try:
+        return await getattr(bot, method)(*args)
+    except Exception:
+        return None
+
+
+def _opener(cog, callback, defaults: dict, fields: list):
+    async def open_screen(inter, given=None):
+        kwargs = {}
+        for name, value in defaults.items():
+            if callable(value):                   # динамический default от disnake
+                value = value(inter)
+                if inspect.isawaitable(value):
+                    value = await value
+            kwargs[name] = value
+        if fields:
+            given = given or {}
+            for field in fields:
+                raw = given.get(field["name"])
+                if raw is None or str(raw).strip() == "":
+                    raise commands.BadArgument(f"В форме не хватает: {field['label']}")
+                kwargs[field["name"]] = await _fill(inter, field, raw)
+        await callback(cog, inter, **kwargs)
+
+    return open_screen
+
+
+def _callable_of(bot, ref: str):
+    """(ког, колбэк) уже загруженного экрана либо None."""
     cog_name, method = ref.split(".")
     cog = bot.get_cog(cog_name)
     if cog is None:
@@ -286,21 +412,39 @@ def _target(bot, ref: str):
     callback = getattr(command, "callback", None)
     if callback is None or not callable(callback):
         return None
-    options = _options(callback)
-    if options is None:
+    return cog, callback
+
+
+def _target(bot, ref: str):
+    """Экран из уже загруженного кога в виде func(inter) либо None.
+
+    Экраны с обязательными аргументами сюда не проходят: у Discord-хаба формы нет, кнопка
+    без аргументов вызвала бы команду криво.
+    """
+    pair = _callable_of(bot, ref)
+    if pair is None:
         return None
+    cog, callback = pair
+    defaults, fields = _fields(callback)
+    if fields:
+        return None
+    return _opener(cog, callback, defaults, [])
 
-    async def open_screen(inter):
-        kwargs = {}
-        for name, value in options.items():
-            if callable(value):                   # динамический default от disnake
-                value = value(inter)
-                if inspect.isawaitable(value):
-                    value = await value
-            kwargs[name] = value
-        await callback(cog, inter, **kwargs)
 
-    return open_screen
+def web_target(bot, ref: str):
+    """Как _target, но аргументы экрану отдаёт форма панели."""
+    pair = _callable_of(bot, ref)
+    if pair is None:
+        return None
+    cog, callback = pair
+    defaults, fields = _fields(callback)
+    return _opener(cog, callback, defaults, fields)
+
+
+def args_of(bot, ref: str) -> list:
+    """Что экран просит заполнить: [] — если открывается без аргументов."""
+    pair = _callable_of(bot, ref)
+    return _fields(pair[1])[1] if pair else []
 
 
 def screen_of(ref: str):
@@ -308,6 +452,9 @@ def screen_of(ref: str):
         for icon, label, r, cmd in items:
             if r == ref:
                 return label, cmd
+    for icon, label, r, cmd in EXTRA_SCREENS:
+        if r == ref:
+            return label, cmd
     return ref, ref
 
 

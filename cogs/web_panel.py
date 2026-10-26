@@ -20,6 +20,7 @@
 """
 from __future__ import annotations
 
+import ast
 import asyncio
 import hmac
 import json
@@ -50,6 +51,7 @@ SELF_COG = "cogs.web_panel"
 COOKIE_NAME = "hz_panel"
 SESSION_TTL = 12 * 3600
 MIN_PASSWORD_LEN = 8
+SLEEP_MAX = 720
 MAX_FILE_BYTES = 1_000_000
 FILE_NAME_RE = re.compile(r"^[A-Za-z0-9_\-]{1,64}\.json$")
 HIDDEN_FILES = {"panel_state.json"}
@@ -163,6 +165,28 @@ def _write_state(state: Dict[str, Any]) -> None:
     _atomic_write(STATE_PATH, json.dumps(state, ensure_ascii=False, indent=2))
 
 
+_ABOUT_CACHE: Dict[str, tuple] = {}
+
+
+def _about(path: Path) -> str:
+    """Первая строка docstring'а файла — панель показывает, за что отвечает модуль."""
+    try:
+        key, stamp = str(path), path.stat().st_mtime
+    except Exception:
+        return ""
+    hit = _ABOUT_CACHE.get(key)
+    if hit and hit[0] == stamp:
+        return hit[1]
+    line = ""
+    try:
+        doc = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8", errors="replace"))) or ""
+        line = next((s.strip() for s in doc.splitlines() if s.strip()), "")[:160]
+    except Exception:
+        pass
+    _ABOUT_CACHE[key] = (stamp, line)
+    return line
+
+
 def _memory_mb() -> Optional[float]:
     try:
         with open("/proc/self/status", "r", encoding="utf-8") as f:
@@ -272,6 +296,8 @@ class WebPanel(commands.Cog):
         self.password = os.getenv("PANEL_PASSWORD", "")
         self.runner: Optional[web.AppRunner] = None
         self._task: Optional[asyncio.Task] = None
+        self._sleep_task: Optional[asyncio.Task] = None
+        self._sleep_until: Optional[int] = None
 
         _install_tee()
 
@@ -287,6 +313,8 @@ class WebPanel(commands.Cog):
     def cog_unload(self) -> None:
         if self._task:
             self._task.cancel()
+        if self._sleep_task:
+            self._sleep_task.cancel()
         if self.runner:
             self.bot.loop.create_task(self.runner.cleanup())
 
@@ -320,6 +348,11 @@ class WebPanel(commands.Cog):
             app.router.add_post("/api/commands/run", self.h_command_run)
             app.router.add_post("/api/commands/press", self.h_command_press)
             app.router.add_post("/api/commands/modal", self.h_command_modal)
+            app.router.add_post("/api/commands/visibility", self.h_visibility)
+            app.router.add_post("/api/bot/reload", self.h_reload_code)
+            app.router.add_get("/api/bot/sleep", self.h_sleep_get)
+            app.router.add_post("/api/bot/sleep", self.h_sleep_set)
+            app.router.add_get("/api/control/center", self.h_center)
             app.router.add_get("/api/diag/day", self.h_diag_day)
             app.router.add_get("/api/diag/system", self.h_diag_system)
             app.router.add_get("/api/diag/silents", self.h_diag_silents)
@@ -486,6 +519,7 @@ class WebPanel(commands.Cog):
                 {
                     "name": name,
                     "file": p.name,
+                    "about": _about(p),
                     "loaded": name in self.bot.extensions,
                     "disabled": name in disabled,
                     "internal": p.name.startswith("_"),
@@ -651,15 +685,16 @@ class WebPanel(commands.Cog):
         tools, err = self._tools()
         if err:
             return _json({"error": err}, 500)
-        return _json(tools.command_rows())
+        return _json(tools.command_rows(self.bot))
 
     async def h_command_run(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
             return _json({"error": err}, 500)
         body = await _body(request)
+        args = body.get("args") if isinstance(body.get("args"), dict) else {}
         res = await tools.run_screen(self.bot, str(body.get("ref") or ""), body.get("actor"),
-                                    body.get("channel"))
+                                    body.get("channel"), {str(k): str(v) for k, v in args.items()})
         print(f"🧭 Панель: экран {res.get('cmd') or body.get('ref')}: "
               f"{str(res.get('error') or res.get('kind'))[:120]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
@@ -850,6 +885,91 @@ class WebPanel(commands.Cog):
     async def h_shutdown(self, request: web.Request) -> web.Response:
         self.bot.loop.create_task(self._shutdown())
         return _json({"ok": True})
+
+    # ---- применить код, меню Discord, сон ----
+    async def h_reload_code(self, request: web.Request) -> web.Response:
+        """Перезагрузить рабочие коги: новый код с GitHub вступает без рестарта процесса.
+
+        disnake снимает ког до импорта нового файла, поэтому упавший ког остаётся выключенным —
+        панель честно называет его, а не делает вид, что применила всё.
+        """
+        done: List[str] = []
+        failed: List[Dict[str, str]] = []
+        for name in list(self.bot.extensions):
+            if name == SELF_COG:
+                continue
+            short = name.replace("cogs.", "")
+            try:
+                self.bot.reload_extension(name)
+                done.append(short)
+            except Exception as e:
+                failed.append({"name": short, "error": str(e)[:200]})
+        print(f"🐣 Панель: код применила — {len(done)} модулей, осеклось {len(failed)}", flush=True)
+        return _json({"ok": True, "reloaded": done, "failed": failed})
+
+    async def h_visibility(self, request: web.Request) -> web.Response:
+        """Спрятать дубли или вернуть команды — та же кнопка, что и в /панель в Discord."""
+        hub = sys.modules.get("cogs.admin_hub")
+        if hub is None:
+            return _json({"error": "Модуль cogs.admin_hub выключен — меню команд отсюда не пересобрать"}, 400)
+        body = await _body(request)
+        hide = bool(body.get("hide"))
+        hub.flag_set(hide)
+        changed = hub.apply_visibility(self.bot)
+        try:
+            res = await hub.resync(self.bot)
+            tail = (f"Список перезаписан на {res['guilds']} серверах; меню Discord обновится само "
+                    "(обычно до минуты)." if res.get("checked") and not res.get("left")
+                    else "Часть списка Discord не отдал: "
+                         f"{', '.join('/' + n for n in res.get('left') or []) or 'проверить не удалось'}. "
+                         "Перезапишется при следующем запуске.")
+        except Exception as e:
+            tail = f"В Discord список не перезаписался ({type(e).__name__}: {str(e)[:120]}). Поможет рестарт."
+        names = ", ".join(f"/{n}" for n in changed) or ("нечего прятать" if hide else "нечего возвращать")
+        message = ("🙈 Спрятал: " if hide else "👁 Вернул: ") + names + ". " + tail
+        print(f"🎛 Панель: {message}", flush=True)
+        return _json({"ok": True, "hide": hide, "changed": changed, "message": message})
+
+    async def h_sleep_get(self, request: web.Request) -> web.Response:
+        return _json({"until": self._sleep_until})
+
+    async def h_sleep_set(self, request: web.Request) -> web.Response:
+        """Отложить выключение: ночью бот только жрёт трафик хостинга."""
+        body = await _body(request)
+        try:
+            minutes = int(body.get("minutes"))
+        except (TypeError, ValueError):
+            return _json({"error": "Сколько минут — непонятно"}, 400)
+        if self._sleep_task is not None:
+            self._sleep_task.cancel()
+            self._sleep_task = None
+        self._sleep_until = None
+        if minutes <= 0:
+            print("🎛 Панель: сон отменён", flush=True)
+            return _json({"ok": True, "until": None, "message": "Сон отменён, бот работает дальше."})
+        if minutes > SLEEP_MAX:
+            return _json({"error": f"Сон не длиннее {SLEEP_MAX} минут"}, 400)
+        self._sleep_until = round(time.time() + minutes * 60)
+        self._sleep_task = self.bot.loop.create_task(self._sleep_then(minutes * 60))
+        message = f"💤 Бот выключится через {minutes} мин. Кнопка «Отменить сон» оставляет его работать."
+        print("🎛 Панель: " + message, flush=True)
+        return _json({"ok": True, "until": self._sleep_until, "message": message})
+
+    async def _sleep_then(self, seconds: float) -> None:
+        try:
+            await asyncio.sleep(seconds)
+        except asyncio.CancelledError:
+            return
+        self._sleep_task = None
+        self._sleep_until = None
+        print("💤 Панель: время вышло, выключаю бота по таймеру сна", flush=True)
+        await self._shutdown()
+
+    async def h_center(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(tools.control_center(self.bot))
 
     async def _restart(self) -> None:
         await asyncio.sleep(1)
