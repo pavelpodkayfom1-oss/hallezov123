@@ -134,11 +134,11 @@ def resolve(
     msg = _ANSI.sub("", str(last)) if last else "Ничего не найдено"
     if "confirm you" in msg and "not a bot" in msg:
         if cookies and os.path.exists(cookies):
-            msg = ("YouTube не принял cookies.txt (устарел или аккаунт разлогинен). "
-                   "Экспортируйте свежий cookies.txt и положите рядом с main.py.")
+            msg = (f"YouTube не принял cookies.txt ({cookies}) — устарел или аккаунт "
+                   "разлогинен. Экспортируйте свежий.")
         else:
-            msg = ("YouTube требует вход. Положите cookies.txt рядом с main.py "
-                   "(экспорт из браузера, формат Netscape) и перезапустите бота.")
+            msg = (f"YouTube требует вход, а файла куков нет: {cookies or 'путь не передан'}. "
+                   "Положи cookies.txt рядом с main.py (экспорт из браузера, формат Netscape).")
     raise RuntimeError(msg[:300])
 
 
