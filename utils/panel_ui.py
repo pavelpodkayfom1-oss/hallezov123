@@ -584,7 +584,9 @@ async function pageModules() {
     list.replaceChildren(...data.modules.filter((m) => !m.internal && match(m)).map(row));
     internal.replaceChildren(...data.modules.filter((m) => m.internal && match(m)).map((m) =>
       h('div', { class: 'card item dim' }, h('div', { class: 'grow' }, h('b', null, m.file),
-        h('span', { class: 'muted small' }, (m.about || 'нутренняя кухня') + ' · его вызывают другие модули, отдельно он не запускается')))));
+        h('span', { class: 'muted small' }, (m.about ? m.about + ' · ' : '')
+          + 'main.py не грузит файлы с «_» — так коги выключают, чтобы экономить память. '
+          + 'Включить можно только переименованием файла в репозитории')))));
   }
   search.addEventListener('input', render);
   render();
@@ -596,7 +598,7 @@ async function pageModules() {
     h('div', { class: 'note' }, 'Модули связаны между собой: например, отключив один из них, вы можете сломать кнопки или команды другого. Если что-то пошло не так, включите модуль обратно. Если после отключения модуль всё равно что-то делает в фоне, перезапустите бота на вкладке «Управление».'),
     h('div', { class: 'toolbar' }, search, h('button', { class: 'btn', onclick: () => go('modules') }, 'Обновить')),
     list,
-    data.modules.some((m) => m.internal) ? [h('div', { class: 'section-title' }, 'Служебные файлы'), internal] : null
+    data.modules.some((m) => m.internal) ? [h('div', { class: 'section-title' }, 'Не загружаются (имя с «_»)'), internal] : null
   );
 }
 
