@@ -586,8 +586,11 @@ class Music(commands.Cog):
                 fresh = await self._extract(track["webpage_url"])
                 track.update(fresh)
             source = disnake.PCMVolumeTransformer(
-                disnake.FFmpegPCMAudio(track["stream_url"], executable=_ffmpeg_exe(),
-                                       before_options=FFMPEG_BEFORE, options=FFMPEG_OPTS),
+                disnake.FFmpegPCMAudio(
+                    track["stream_url"], executable=_ffmpeg_exe(),
+                    # -reconnect* понимает только http(s); для файла с диска они ломают ffmpeg
+                    before_options=FFMPEG_BEFORE if track["stream_url"].lower().startswith("http") else None,
+                    options=FFMPEG_OPTS),
                 volume=p.volume,
             )
         except Exception as e:
