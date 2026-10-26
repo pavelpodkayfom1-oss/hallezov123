@@ -357,7 +357,7 @@ class Music(commands.Cog):
                     loop = asyncio.get_running_loop()
                     track = await loop.run_in_executor(None, lambda: resolve(
                         query,
-                        COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
+                        COOKIES_FILE,
                         PREFER_SOUNDCLOUD,
                         SEARCH_RESULTS,
                     ))
@@ -376,7 +376,9 @@ class Music(commands.Cog):
         request = json.dumps(
             {
                 "query": query,
-                "cookies": COOKIES_FILE if os.path.exists(COOKIES_FILE) else None,
+                # путь передаём всегда: есть файл или нет — решает резолвер, иначе в ошибке
+                # останется бессмысленное «путь не передан» вместо адреса
+                "cookies": COOKIES_FILE,
                 "prefer_soundcloud": PREFER_SOUNDCLOUD,
                 "search_results": SEARCH_RESULTS,
             },
