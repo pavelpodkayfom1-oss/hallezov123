@@ -274,6 +274,8 @@ class Music(commands.Cog):
         if not getattr(self.bot, "_music_view_added", False):
             self.bot.add_view(MusicPanelView())
             self.bot._music_view_added = True
+            # путь в лог: «требует вход» означает, что файла просто нет по этому пути
+            _log(f"cookies: {'есть' if os.path.exists(COOKIES_FILE) else 'нет'} — {COOKIES_FILE}")
 
     # ---------- helpers ----------
     def get_player(self, guild: disnake.Guild) -> GuildPlayer:
