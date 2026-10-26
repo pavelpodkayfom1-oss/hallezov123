@@ -398,20 +398,45 @@ class Music(commands.Cog):
         except Exception as e:
             _log(f"дочерний резолвер не запустился: {e}")
             return None
+        # Сэмплер пика: если контейнер не выдержит и процесс снимут, цифра из JSON не
+        # дойдёт никогда. VmHWM читаем у живого ребёнка и пишем каждый новый максимум.
+        peak = {"mb": 0}
+
+        async def sample():
+            path = f"/proc/{proc.pid}/status"
+            while True:
+                await asyncio.sleep(0.5)
+                try:
+                    with open(path) as f:
+                        head = f.read()
+                except Exception:
+                    return
+                for line in head.splitlines():
+                    if line.startswith("VmHWM:"):
+                        try:
+                            mb = int(line.split()[1]) // 1024
+                        except (IndexError, ValueError):
+                            return
+                        if mb > peak["mb"]:
+                            peak["mb"] = mb
+                            _log(f"резолвер ест {mb} МБ")
+
+        watcher = asyncio.ensure_future(sample())
         try:
             out = (await asyncio.wait_for(proc.communicate(request), timeout=EXTRACT_TIMEOUT))[0]
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
             raise RuntimeError(f"Поиск завис ({EXTRACT_TIMEOUT} сек), трек не взят.")
+        finally:
+            watcher.cancel()
+        # Пик дочернего процесса — единственная цифра, по которой видно, влезает ли хост
+        _log(f"пик резолвера: {peak['mb']} МБ, бот сейчас {_rss_mb()} МБ")
         try:
             payload = json.loads(out.decode("utf-8", "replace"))
         except Exception:
             _log("резолвер вернул непонятный ответ")
             return None
-        # Пик дочернего процесса — единственная цифра, по которой видно, влезает ли хост
-        if payload.get("peak_mb"):
-            _log(f"пик резолвера: {payload['peak_mb']} МБ")
         if payload.get("ok"):
             return payload.get("track")
         raise RuntimeError(str(payload.get("error") or "Ничего не найдено")[:300])
