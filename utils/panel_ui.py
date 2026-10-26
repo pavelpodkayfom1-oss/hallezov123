@@ -909,12 +909,13 @@ async function pageScreens() {
   const refresh = (res) => out.replaceChildren(screenNode(res, actorSel, refresh));
 
   const nav = h('div', { class: 'grid2' }, d.sections.map((s) => h('div', { class: 'card form' },
-    h('h2', null, s.icon + ' ' + s.title),
-    ...s.screens.map((x) => h('button', { class: 'btn', onclick: async () => {
+    h('h2', null, (s.icon || '') + ' ' + s.title + ' · ' + s.screens.length),
+    h('div', { class: 'btns' }, s.screens.map((x) => h('button', {
+      class: 'btn', title: x.cmd, onclick: async () => {
       out.replaceChildren(spinner('Экран думает…'));
       try { refresh(await api('/api/commands/run', { method: 'POST', body: { ref: x.ref, actor: actorSel.value, channel: chanSel.value } })); }
       catch (e) { out.replaceChildren(h('p', { class: 'err' }, e.message)); }
-    } }, (s.icon || '') + ' ' + x.label + ' · ' + x.cmd)))));
+    } }, (x.icon || '') + ' ' + x.label))))));
 
   return h('div', null,
     pageHead('Экраны команд', 'Команды бота работают отсюда: экран получает тот же ответ, что и в Discord, и его кнопки живые.',

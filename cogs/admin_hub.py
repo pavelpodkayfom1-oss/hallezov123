@@ -14,7 +14,9 @@
 
 Кнопка «🙈 Убрать дубли» прячет из меню Discord те команды, которые /панель открывает не
 хуже. Флаг лежит в panel_state.json, а он входит в снимки backups/, поэтому /reverse
-возвращает список команд целиком — без рестарта и без правок кода.
+возвращает список команд целиком — без рестарта и без правок кода. Скрытие работает и после
+рестарта, а при спрятывании чистится и глобальный реестр команд: Discord показывает его в
+меню всегда, даже когда у сервера свой список.
 """
 import inspect
 import json
@@ -31,64 +33,66 @@ STATE_FILE = Path(__file__).resolve().parent.parent / "panel_state.json"
 FLAG = "hide_duplicate_commands"
 
 # (эмодзи, категория, [(эмодзи, экран, "КлассКога.метод", "команда")])
+# Экран называется коротко и по делу: подпись читается на кнопке и в эмбеде, команда — только
+# в подсказке, её показывать некрасиво.
 SECTIONS = [
     ("👥", "Состав и кадры", [
-        ("🧑‍🤝‍🧑", "Состав, роли и ранги", "HallTools.hall", "/hall"),
-        ("🏠", "Hall-панель: приветствие, напоминания, АФК, доступ", "HallPanel.hallpanel", "/hallpanel"),
-        ("⚜️", "Центр управления: логи, роли, отпуска", "ControlCenter.center", "/центр"),
+        ("🧑‍🤝‍🧑", "Состав", "HallTools.hall", "/hall"),
+        ("🏠", "Hall-панель", "HallPanel.hallpanel", "/hallpanel"),
+        ("⚜️", "Центр управления", "ControlCenter.center", "/центр"),
         ("🧾", "Карточка бойца", "Profile.profile_command", "/profile"),
         ("🪪", "Карточка семьи", "FamqControl.card", "/famq-card"),
         ("🖼", "Карточка картинкой", "ProfileCard.card", "/карточка-фото"),
-        ("🔎", "Проверка активности состава", "ActivityCenter.activity_check", "/activity_check"),
-        ("📈", "Список на повышение по активу", "ActivityCenter.for_improve", "/for_improve"),
+        ("🔎", "Активность состава", "ActivityCenter.activity_check", "/activity_check"),
+        ("📈", "На повышение", "ActivityCenter.for_improve", "/for_improve"),
     ]),
-    ("🏖", "Отпуска, АФК, списки", [
-        ("🌴", "Кто сейчас в отпуске", "HallTools.leave_list", "/отпуск-список"),
-        ("💤", "Кто сейчас в АФК", "HallTools.afk_list", "/афк-список"),
-        ("🗑", "Записи чёрного списка", "FamqControl.bl_list", "/famq-blacklist list"),
-        ("🎧", "Онлайн в голосовых семьи", "FamqControl.voice_top_cmd", "/famq-voice top"),
-        ("🧮", "Статистика рекрутеров", "FamqControl.recruiters", "/famq-recruiters"),
-        ("📊", "Статистика семьи: обновить сейчас", "FamqControl.livestats_refresh", "/famq-livestats refresh"),
+    ("🏖", "Отпуска и списки", [
+        ("🌴", "Отпуск: кто", "HallTools.leave_list", "/отпуск-список"),
+        ("💤", "АФК: кто", "HallTools.afk_list", "/афк-список"),
+        ("🗑", "Чёрный список", "FamqControl.bl_list", "/famq-blacklist list"),
+        ("🎧", "Онлайн в голосовых", "FamqControl.voice_top_cmd", "/famq-voice top"),
+        ("🧮", "Рекрутеры: статистика", "FamqControl.recruiters", "/famq-recruiters"),
+        ("📊", "Статистика семьи", "FamqControl.livestats_refresh", "/famq-livestats refresh"),
     ]),
-    ("🎙", "Голос, сборы, звонки", [
-        ("🔊", "Настройка голоса бота", "Govorit.golos", "/golos"),
-        ("🎛", "Управление голосом (роль с доступом)", "Govorit.govorit_panel", "/govorit-panel"),
-        ("🏢", "Сервер: канал, режим «всегда в войсе»", "GovoritStay.golos_server", "/golos-server"),
-        ("🔇", "Заглушить речь и выйти из войса", "Govorit.zamolchi", "/zamolchi"),
-        ("📍", "Teg panel: теги на сборы", "TegPanel.teg", "/teg"),
-        ("🙋", "Кто может пользоваться Teg panel", "TegPanel.teg_access", "/teg_access"),
-        ("📋", "Кто ответил на последний сбор", "TegPanel.teg_report", "/teg_report"),
-        ("📤", "Опубликовать кнопку Teg panel в этом канале", "TegPanel.teg_post", "/teg_post"),
+    ("🎙", "Голос и сборы", [
+        ("🔊", "Голос бота", "Govorit.golos", "/golos"),
+        ("🎛", "Голос: роль доступа", "Govorit.govorit_panel", "/govorit-panel"),
+        ("🏢", "Голос: канал и войс", "GovoritStay.golos_server", "/golos-server"),
+        ("🔇", "Заглушить бота", "Govorit.zamolchi", "/zamolchi"),
+        ("📍", "Teg panel: теги", "TegPanel.teg", "/teg"),
+        ("🙋", "Teg: доступ", "TegPanel.teg_access", "/teg_access"),
+        ("📋", "Teg: ответы на сбор", "TegPanel.teg_report", "/teg_report"),
+        ("📤", "Teg: кнопка в канал", "TegPanel.teg_post", "/teg_post"),
     ]),
     ("🗂", "Логи и память", [
-        ("📁", "Панель логов семьи", "FamLogs.logs_panel", "/logs panel"),
-        ("👀", "Куда льются логи: смотреть", "FamLogs.logs_view", "/logs view"),
-        ("🏗", "Логи: создать приватную категорию", "FamLogs.logs_auto", "/logs auto"),
-        ("🧠", "Сколько памяти ест бот", "Memory.mem", "/mem"),
+        ("📁", "Логи: панель", "FamLogs.logs_panel", "/logs panel"),
+        ("👀", "Логи: куда льются", "FamLogs.logs_view", "/logs view"),
+        ("🏗", "Логи: категория", "FamLogs.logs_auto", "/logs auto"),
+        ("🧠", "Память бота", "Memory.mem", "/mem"),
     ]),
     ("⚙️", "Настройки бота", [
-        ("🎛", "Главная админ-панель: тексты, каналы, роли", "AdminCog.admin_command", "/admin"),
-        ("🧪", "Проверка всех оформленных текстов", "AdminCog.test_texts", "/test_texts"),
-        ("😀", "Какие эмодзи пака видит бот", "HallTools.hz_emojis", "/hz_emojis"),
-        ("🔤", "Список эмодзи сервера", "BannerPanel.emoji_list", "/emoji_list"),
+        ("🎛", "Главная админ-панель", "AdminCog.admin_command", "/admin"),
+        ("🧪", "Проверка текстов", "AdminCog.test_texts", "/test_texts"),
+        ("😀", "Эмодзи пака", "HallTools.hz_emojis", "/hz_emojis"),
+        ("🔤", "Эмодзи сервера", "BannerPanel.emoji_list", "/emoji_list"),
     ]),
     ("📣", "Панели и рассылки", [
-        ("🎯", "Панель набора: опубликовать", "BannerPanel.recruit_panel", "/recruit_panel"),
+        ("🎯", "Панель набора", "BannerPanel.recruit_panel", "/recruit_panel"),
         ("🏞", "Баннер под заявками", "BannerPanel.banner", "/banner"),
-        ("📺", "Анонс стрима в личные", "Media.media_send", "/media_send"),
+        ("📺", "Анонс стрима", "Media.media_send", "/media_send"),
         ("📢", "Правила семьи", "HallRecruit.rules_cmd", "/rules"),
-        ("🎭", "Панель розыгрышей-пугалок", "PrankCog.prank_panel", "/prank_panel"),
+        ("🎭", "Розыгрыши-пугалки", "PrankCog.prank_panel", "/prank_panel"),
     ]),
-    ("✍️", "Набор — вторая панель", [
-        ("💎", "Рекрут-центр: анкета, баллы, магазин, эмодзи", "HallRecruit.hr", "/hr"),
-        ("🔓", "Доступ рекрутеров ко всем веткам", "HallRecruit.hr_access", "/hr_access"),
-        ("🗃", "Загрузить эмодзи из папки", "HallRecruit.hr_emoji_upload", "/hr_emoji_upload"),
-        ("🎫", "Загрузить стикеры из папки", "HallRecruit.hr_sticker_upload", "/hr_sticker_upload"),
+    ("✍️", "Набор и рекруты", [
+        ("💎", "Рекрут-центр", "HallRecruit.hr", "/hr"),
+        ("🔓", "Доступ к веткам", "HallRecruit.hr_access", "/hr_access"),
+        ("🗃", "Эмодзи из папки", "HallRecruit.hr_emoji_upload", "/hr_emoji_upload"),
+        ("🎫", "Стикеры из папки", "HallRecruit.hr_sticker_upload", "/hr_sticker_upload"),
         ("💬", "Баллы рекрута", "HallRecruit.points", "/points"),
     ]),
     ("🔧", "Сервис и откат", [
-        ("💾", "Снять состояние в backups/ сейчас", "StateSave.update_save", "/update_save"),
-        ("↩️", "Откатить настройки и базу на шаг назад", "Reverse.reverse", "/reverse"),
+        ("💾", "Снимок состояния", "StateSave.update_save", "/update_save"),
+        ("↩️", "Откат настроек", "Reverse.reverse", "/reverse"),
     ]),
 ]
 
@@ -168,16 +172,77 @@ def apply_visibility(bot) -> list:
     return changed
 
 
-async def resync(bot) -> int:
-    """Переписать список команд в Discord, чтобы изменение было видно сразу."""
+def _global_bodies(bot):
+    """Список команд, который должен остаться в глобальном реестре Discord.
+
+    С GUILD_ID disnake держит команды в этих серверах, а глобальный список — огрыстки
+    прежних запусков без GUILD_ID: их и надо вычистить.
+    """
     if getattr(bot, "test_guilds", None):
-        await bot._sync_application_commands()
-        return len(bot.guilds)
-    for g in bot.guilds:
-        cmds = [c.body for c in bot.application_commands
-                if not getattr(c, "guild_ids", None) or g.id in c.guild_ids]
-        await bot.bulk_overwrite_guild_commands(g.id, cmds)
-    return len(bot.guilds)
+        return []
+    return [c.body for c in bot.application_commands if not getattr(c, "guild_ids", None)]
+
+
+async def _stragglers(bot):
+    """Команды из HIDDEN, которые Discord всё ещё показывает, и попытка убрать их по id.
+
+    Перезапись списка — best effort: Discord может отдать RateLimit, а клиент держит меню
+    у себя. Проверяем живой список и дожимаем удалением, чтобы панель честно сказала, что
+    именно не ушло. Возвращает (не ушло, список удался).
+    """
+    if not flag_on():
+        return [], True
+    hide = set(HIDDEN)
+    stale = []
+    try:
+        for c in await bot.fetch_global_commands():
+            if c.get("name") in hide:
+                stale.append(("global", None, c.get("id"), c["name"]))
+        for gid in (list(getattr(bot, "test_guilds", None) or []) or [g.id for g in bot.guilds]):
+            for c in await bot.fetch_guild_commands(gid):
+                if c.get("name") in hide:
+                    stale.append(("guild", gid, c.get("id"), c["name"]))
+    except Exception as e:
+        print(f"🔌 Панель: живой список команд не проверить ({e.__class__.__name__})", flush=True)
+        return [], False
+    left = []
+    for kind, gid, cid, name in stale:
+        try:
+            await (bot.delete_global_command(cid) if kind == "global"
+                   else bot.delete_guild_command(gid, cid))
+            print(f"🙈 Панель: дожал /{name} ({'глобально' if kind == 'global' else gid})", flush=True)
+        except Exception as e:
+            print(f"🙈 Панель: /{name} не удаляется ({e.__class__.__name__})", flush=True)
+            left.append(name)
+    return left, True
+
+
+async def resync(bot) -> dict:
+    """Списать реестр бота с Discord и проверить, что скрытое действительно исчезло.
+
+    Одной перезаписи сервера мало: глобально зарегистрированные команды Discord показывает
+    в слэш-меню всегда, поэтому скрытая команда обязана уйти и из глобального списка.
+    """
+    global_bodies = _global_bodies(bot)
+    test = list(getattr(bot, "test_guilds", None) or [])
+    servers = test or [g.id for g in bot.guilds]
+    await bot.bulk_overwrite_global_commands(global_bodies)
+    if test:
+        await bot._sync_application_commands()      # disnake сам пишет только эти серверы
+    else:
+        for gid in servers:
+            bodies = [c.body for c in bot.application_commands
+                      if not getattr(c, "guild_ids", None) or gid in c.guild_ids]
+            await bot.bulk_overwrite_guild_commands(gid, bodies)
+    left, checked = await _stragglers(bot)
+    if not checked:
+        note = " · живой список Discord не проверить"
+    elif left:
+        note = f" · не удалось убрать: {', '.join('/' + n for n in left)}"
+    else:
+        note = " · скрытых в списке не осталось"
+    print(f"⚡ Панель: список команд перезаписан на {len(servers)} серверах{note}", flush=True)
+    return {"guilds": len(servers), "left": left, "checked": checked}
 
 
 # ───────────────────────── делегирование экрана ─────────────────────────
@@ -240,20 +305,20 @@ def screen_of(ref: str):
 def hub_embed(cat=None, guild=None) -> disnake.Embed:
     e = base_embed(
         "⚜️ Панель семьи",
-        "Здесь всё для руководства: сначала раздел, потом экран. Открывается тот же экран, "
-        "что и своей командой — права и кнопки не меняются.\n"
-        "Вторая панель — набор и анкета, кнопка «💎 Набор» внизу.",
+        "Всё для руководства: сначала раздел, потом экран. Открывается тот же экран, что и по "
+        "своей команде — права и кнопки не меняются.\n"
+        "Набор и анкета — кнопка «💎 Набор».",
         guild=guild,
     )
     if cat is None:
-        e.add_field(name="📂 Разделы — жми кнопку",
-                    value="\n".join(f"{icon} **{title}** · {len(items)}"
+        e.add_field(name="📂 Разделы",
+                    value="\n".join(f"{icon} **{title}** · {len(items)} экранов"
                                     for icon, title, items in SECTIONS),
                     inline=False)
     else:
         icon, title, items = SECTIONS[cat]
-        e.add_field(name=f"{icon} {title}",
-                    value="\n".join(f"{i} **{label}**\n└ `{cmd}`" for i, label, _, cmd in items),
+        e.add_field(name=f"{icon} {title} · {len(items)} экранов",
+                    value="\n".join(f"{i} **{label}**" for i, label, _, _ in items),
                     inline=False)
     e.set_footer(text=f"Hallez FAMQ • экранов: {TOTAL} • "
                       f"дублей команд скрыто: {len(_stash)}")
@@ -376,8 +441,13 @@ class HubView(disnake.ui.View):
         flag_set(value)
         changed = apply_visibility(inter.bot)
         try:
-            servers = await resync(inter.bot)
-            tail = f"Список команд обновлён на {servers} серверах — видно в Discord сразу."
+            res = await resync(inter.bot)
+            tail = (f"Список команд перезаписан на {res['guilds']} серверах — "
+                    "меню Discord обновится само, обычно за минуту, иногда дольше."
+                    if res["checked"] and not res["left"]
+                    else "Часть списка Discord не отдал: "
+                         f"{', '.join('/' + n for n in res['left']) or 'проверить не удалось'}. "
+                         "Список перезапишется сам при следующем запуске.")
         except Exception as error:
             tail = (f"В Discord список не перезаписался: `{type(error).__name__}: {error}`. "
                     "Поможет рестарт бота.")
@@ -398,6 +468,23 @@ class AdminHub(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Флаг «спрятать дубли» переживает рестарт, а Discord — нет.
+
+        На старте main.py перезаписывает только списки серверов, а команды, которые этот бот
+        когда-то зарегистрировал глобально, остаются в меню навсегда: скрытая команда
+        перестаёт быть скрытой. После старта сверяем ещё и глобальный реестр.
+        """
+        if self.bot is None or not flag_on():
+            return
+        apply_visibility(self.bot)
+        try:
+            await resync(self.bot)
+        except Exception as error:
+            print(f"⚠️ Панель: дубли не перезаписать в Discord "
+                  f"({type(error).__name__}: {error})", flush=True)
 
     @commands.slash_command(
         name="панель",
