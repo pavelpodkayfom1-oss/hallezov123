@@ -571,8 +571,33 @@ class WebPanel(commands.Cog):
 
         state["disabled_cogs"] = sorted(set(disabled))
         _write_state(state)
+        now = name in self.bot.extensions
         print(f"🧩 Панель: {message}", flush=True)
-        return _json({"ok": True, "message": message, "loaded": name in self.bot.extensions})
+        if now != loaded or action == "reload":
+            message += ". " + await self._resync_menu()
+        return _json({"ok": True, "message": message, "loaded": now})
+
+    async def _resync_menu(self) -> str:
+        """Донести команды до слэш-меню Discord.
+
+        load_extension регистрирует команду только в реестре внутри процесса, и Discord
+        про неё не знает, пока список не перезаписать. Без этого шага получается
+        «модуль работает, а команды нет».
+        """
+        hub = sys.modules.get("cogs.admin_hub")
+        if hub is None:
+            return "Меню Discord не пересоберётся: выключен cogs.admin_hub"
+        try:
+            hub.apply_visibility(self.bot)
+            res = await hub.resync(self.bot)
+        except Exception as e:
+            return f"В Discord список не перезаписался ({type(e).__name__}: {str(e)[:120]}), поможет рестарт"
+        if not res.get("checked"):
+            return "Список перезаписан, живой меню Discord проверить не удалось"
+        left = res.get("left") or []
+        return (f"меню Discord перезаписано на {res['guilds']} серверах"
+                if not left else
+                f"список перезаписан, но убрать не удалось: {', '.join('/' + n for n in left)}")
 
     # ---- взрослые разделы ----
     # Всё дело лежит в utils/web_tools.py: тут только разбор запроса. Импорт на месте,
