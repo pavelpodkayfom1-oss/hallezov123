@@ -408,7 +408,7 @@ class PanelView(disnake.ui.View):
             select = disnake.ui.RoleSelect(
                 custom_id=f"hzkazp:role:{key}", placeholder=placeholder,
                 max_values=3, row=2 if key == "manage" else 3,
-                default_values=_roles(st, key))
+                default_values=[disnake.Object(id=r) for r in _roles(st, key)])
             select.callback = self._role_handler(key, select)
             self.add_item(select)
 

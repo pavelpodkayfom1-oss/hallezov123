@@ -123,13 +123,24 @@ async def on_ready():
         else:
             # Без GUILD_ID disnake регистрирует команды глобально, а Discord кэширует это до часа.
             # Пишем список команд сразу в каждый сервер — на сервере они появляются мгновенно.
+            # Один сервер не должен обрывать список: без try/except RateLimit на первом
+            # сервере оставлял остальные со старым меню, и новые команды в нём не появлялись.
             for g in bot.guilds:
                 cmds = [
                     c.body for c in bot.application_commands
                     if not getattr(c, "guild_ids", None) or g.id in c.guild_ids
                 ]
-                await bot.bulk_overwrite_guild_commands(g.id, cmds)
-                print(f"⚡ {len(cmds)} команд синхронизированы с сервером «{g.name}»", flush=True)
+                for attempt in (1, 2):
+                    try:
+                        await bot.bulk_overwrite_guild_commands(g.id, cmds)
+                        print(f"⚡ {len(cmds)} команд синхронизированы с сервером «{g.name}»", flush=True)
+                        break
+                    except Exception as e:
+                        if attempt == 2:
+                            print(f"⚠️ «{g.name}»: команды не перезаписались ({e.__class__.__name__}) — "
+                                  f"поможет рестарт", file=sys.stderr, flush=True)
+                        else:
+                            await asyncio.sleep(3)
         print("⚡ Слеш-команды успешно синхронизированы с Discord API!", flush=True)
     except Exception as e:
         print(f"⚠️ Ошибка синхронизации команд: {e}", file=sys.stderr, flush=True)
