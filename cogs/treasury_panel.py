@@ -424,7 +424,7 @@ class PanelView(disnake.ui.View):
                        custom_id="hzkazp:setup", row=0)
     async def setup(self, button, inter: disnake.MessageInteraction):
         cog = _cog(inter)
-        await inter.response.defer(ephemeral=True, thinking=True)
+        await inter.response.defer(ephemeral=True, with_message=True)
         if cog:
             await cog.build_branch(inter)
 
@@ -432,7 +432,7 @@ class PanelView(disnake.ui.View):
                        custom_id="hzkazp:banners", row=0)
     async def banners(self, button, inter: disnake.MessageInteraction):
         cog = _cog(inter)
-        await inter.response.defer(ephemeral=True, thinking=True)
+        await inter.response.defer(ephemeral=True, with_message=True)
         if cog:
             await cog.post_banners(inter)
 
