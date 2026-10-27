@@ -344,6 +344,13 @@ class WebPanel(commands.Cog):
             app.router.add_post("/api/send", self.h_send)
             app.router.add_post("/api/dm", self.h_dm)
             app.router.add_post("/api/broadcast", self.h_broadcast)
+            app.router.add_get("/api/texts", self.h_texts)
+            app.router.add_post("/api/texts/save", self.h_text_save)
+            app.router.add_post("/api/texts/reset", self.h_text_reset)
+            app.router.add_post("/api/texts/preview", self.h_text_preview)
+            app.router.add_get("/api/stickers", self.h_stickers)
+            app.router.add_get("/api/stickers/image", self.h_sticker_image)
+            app.router.add_post("/api/stickers/send", self.h_sticker_send)
             app.router.add_get("/api/commands", self.h_commands)
             app.router.add_post("/api/commands/run", self.h_command_run)
             app.router.add_post("/api/commands/press", self.h_command_press)
@@ -544,6 +551,9 @@ class WebPanel(commands.Cog):
             return _json({"error": "Неизвестное действие"}, 400)
 
         short = name.replace("cogs.", "")
+        tools, _ = self._tools()
+        if tools:
+            tools.invalidate_texts()
         state = _read_state()
         disabled = [c for c in state.get("disabled_cogs", []) if isinstance(c, str)]
         loaded = name in self.bot.extensions
@@ -709,6 +719,69 @@ class WebPanel(commands.Cog):
                                    dry=bool(body.get("dry", True)))
         print(f"📣 Панель: рассылка {'накидка' if res.get('dry') else 'отправлена'}: "
               f"{str(res.get('error') or res.get('sent') or res.get('would'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    # ---- тексты бота ----
+    async def h_texts(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        force = request.query.get("fresh") == "1"
+        return _json(tools.texts_catalog(self.bot, force=force))
+
+    async def h_text_save(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        body = await _body(request)
+        res = tools.text_save(self.bot, str(body.get("id") or ""), body.get("value"))
+        print(f"📝 Панель: текст {res.get('key') or body.get('id')}: "
+              f"{str(res.get('error') or 'сохранён')[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_text_reset(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        body = await _body(request)
+        res = tools.text_reset(self.bot, str(body.get("id") or ""))
+        print(f"📝 Панель: вернул как в коде {body.get('id')}: {str(res.get('error'))[:80]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_text_preview(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        body = await _body(request)
+        return _json(tools.text_preview(self.bot, str(body.get("id") or ""), body.get("value")))
+
+    # ---- стикеры ----
+    async def h_stickers(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        return _json(tools.sticker_rows())
+
+    async def h_sticker_image(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        data, mime = tools.sticker_image(request.query.get("name"))
+        if data is None:
+            return _json({"error": "Картинки нет в папке stickers/"}, 404)
+        return web.Response(body=data, content_type=mime,
+                            headers={"Cache-Control": "public, max-age=600"})
+
+    async def h_sticker_send(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 500)
+        body = await _body(request)
+        res = await tools.post_sticker(self.bot, body.get("channel"), body.get("name"),
+                                       str(body.get("text") or ""), str(body.get("title") or ""),
+                                       str(body.get("color") or ""))
+        print(f"🎴 Панель: стикер в {res.get('where', '?')}: "
+              f"{str(res.get('error') or res.get('link'))[:120]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
 
     async def h_commands(self, request: web.Request) -> web.Response:
@@ -934,6 +1007,9 @@ class WebPanel(commands.Cog):
                 done.append(short)
             except Exception as e:
                 failed.append({"name": short, "error": str(e)[:200]})
+        tools, _ = self._tools()
+        if tools:
+            tools.invalidate_texts()
         print(f"🐣 Панель: код применила — {len(done)} модулей, осеклось {len(failed)}", flush=True)
         return _json({"ok": True, "reloaded": done, "failed": failed})
 

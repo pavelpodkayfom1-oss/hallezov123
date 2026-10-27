@@ -10,6 +10,7 @@ web_panel.py остаётся про HTTP (маршруты, сессии, за�
 """
 from __future__ import annotations
 
+import ast
 import asyncio
 import json
 import re
@@ -20,6 +21,7 @@ from collections import OrderedDict
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import quote
 
 import disnake
 from disnake.ext import commands
@@ -1625,6 +1627,429 @@ async def snapshot_restore(name: str, bot) -> Dict[str, Any]:
         except Exception as e:
             steps.append(f"панель набора не перерисована ({e.__class__.__name__})")
     return {"steps": steps, "reloaded": reloaded, "restored": files}
+
+
+# ═══════════════════════════════ Тексты бота ═══════════════════════════════
+# Надписи живут в трёх местах: config.json["texts"] (тексты набор/повышения/сборов),
+# hall_settings.json (приветствие в канал и текст панели АФК) и golos_guild.json
+# (приветствие голосом в войсе). Каталог ключей собирается из самих исходников — новый
+# get_text в коде появляется в редакторе сам, руками список вести нельзя, он отстаёт.
+
+TEXT_SRC_DIRS = ("cogs", "utils")
+MAX_EMBED_TEXT = 4000
+MAX_EMBED_TITLE = 256
+MAX_BUTTON_LABEL = 80
+MAX_FIELD_LABEL = 45
+
+_HALL_FIELDS = (("rules_text", "Приветствие новичку в канале"),
+                ("afk_panel_text", "Текст панели АФК"))
+_GOLOS_FIELDS = (("greet_text", "Приветствие голосом (бот говорит в войсе)"),)
+_catalog_cache: Optional[Dict[str, Any]] = None
+
+
+def _text_kind(key: str) -> str:
+    k = key.lower()
+    if k.startswith("btn_") or "_btn_" in k:
+        return "button"
+    if "title" in k:
+        return "title"
+    if k.startswith("modal_"):
+        return "field"
+    return "text"
+
+
+def _text_limit(kind: str) -> int:
+    return {"button": MAX_BUTTON_LABEL, "title": MAX_EMBED_TITLE,
+            "field": MAX_FIELD_LABEL}.get(kind, MAX_EMBED_TEXT)
+
+
+def _text_group(key: str) -> str:
+    k = key.lower()
+    if k.startswith("modal_"):
+        return "Анкеты: поля"
+    if k.startswith("btn_"):
+        return "Кнопки"
+    if k.startswith("promo_"):
+        return "Повышения"
+    if k.startswith("event_"):
+        return "Сборы"
+    if k.startswith("recruit_") or k.startswith("select_voice"):
+        return "Набор и заявки"
+    return "Прочее"
+
+
+def _scan_get_text() -> "OrderedDict[str, Dict[str, str]]":
+    """Ключи get_text("ключ", "дефолт") из исходников — с файлом и строкой."""
+    found: "OrderedDict[str, Dict[str, str]]" = OrderedDict()
+    for sub in TEXT_SRC_DIRS:
+        folder = ROOT / sub
+        if not folder.is_dir():
+            continue
+        for f in sorted(folder.glob("*.py")):
+            try:
+                tree = ast.parse(f.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call):
+                    continue
+                fn = node.func
+                if (getattr(fn, "id", None) or getattr(fn, "attr", None)) != "get_text":
+                    continue
+                first = node.args[0] if node.args else None
+                if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
+                    continue
+                key = first.value
+                if key in found:
+                    continue
+                default = ""
+                if len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
+                    default = str(node.args[1].value)
+                found[key] = {"default": default, "src": f"{sub}/{f.name}:{node.lineno}"}
+    return found
+
+
+def _read_json_file(path: Path) -> Dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _safe_guild(bot):
+    try:
+        return guild_of(bot)
+    except Exception:
+        return None
+
+
+def _hall_mod():
+    return sys.modules.get("cogs.hall_panel")
+
+
+def _golos_mod():
+    return sys.modules.get("cogs.govorit_stay")
+
+
+def _hall_texts(bot) -> List[Dict[str, Any]]:
+    hp = _hall_mod()
+    live = _read_json_file(ROOT / "hall_settings.json")
+    defaults = getattr(hp, "DEFAULTS", {}) if hp else {}
+    if not defaults:
+        defaults = {"rules_text": "Привет, {mention}! Добро пожаловать на {server}!"}
+    if hp is not None:
+        try:
+            live = hp.load_settings()
+        except Exception:
+            pass
+    out = []
+    for field, label in _HALL_FIELDS:
+        default = str(defaults.get(field, ""))
+        value = str(live.get(field, default))
+        out.append({"id": f"hall::{field}", "where": "hall", "key": field, "kind": "text",
+                    "group": "Приветствия", "label": label, "default": default, "value": value,
+                    "changed": bool(default) and value != default, "src": "hall_settings.json",
+                    "limit": MAX_EMBED_TEXT})
+    return out
+
+
+def _hall_write(field: str, value: str, default_if_missing: bool = False) -> str:
+    """Пишет настройку hall_panel: через ког, а если он выключен — прямо в файл."""
+    hp = _hall_mod()
+    if hp is not None:
+        try:
+            hp.update_settings(**{field: value})
+            return ""
+        except Exception as e:
+            return f"Ког не принял запись: {e.__class__.__name__}"
+    path = ROOT / "hall_settings.json"
+    try:
+        data = _read_json_file(path)
+        data[field] = value
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+        return ""
+    except Exception as e:
+        return f"Файл hall_settings.json не записан: {e.__class__.__name__}"
+
+
+def _golos_texts(bot) -> List[Dict[str, Any]]:
+    guild = _safe_guild(bot)
+    if guild is None:
+        return []
+    gs = _golos_mod()
+    live = {}
+    if gs is not None:
+        try:
+            live = gs.get_guild(guild.id) or {}
+        except Exception:
+            live = {}
+    if not live:
+        live = _read_json_file(ROOT / "golos_guild.json").get(str(guild.id)) or {}
+    defaults = getattr(gs, "GUILD_DEFAULT", {}) or {"greet_text": "Привет, {name}! Добро пожаловать."}
+    out = []
+    for field, label in _GOLOS_FIELDS:
+        default = str(defaults.get(field, ""))
+        value = str(live.get(field, default))
+        out.append({"id": f"golos::{field}", "where": "golos", "key": field, "kind": "text",
+                    "group": "Приветствия", "label": label, "default": default, "value": value,
+                    "changed": bool(default) and value != default, "src": "golos_guild.json",
+                    "limit": MAX_EMBED_TEXT})
+    return out
+
+
+def invalidate_texts() -> None:
+    """Каталог пересобирается после переключения модуля: ключи живут в их коде."""
+    global _catalog_cache
+    _catalog_cache = None
+
+
+def texts_catalog(bot, force: bool = False) -> Dict[str, Any]:
+    """Весь список надписей: ключ, дефолт из кода, живое значение, где берётся."""
+    global _catalog_cache
+    if _catalog_cache is not None and not force:
+        items = _catalog_cache["items"]
+    else:
+        try:
+            from utils.checks import load_config
+            live = (load_config() or {}).get("texts") or {}
+        except Exception:
+            live = {}
+        items = []
+        for key, meta in _scan_get_text().items():
+            kind = _text_kind(key)
+            raw = live.get(key)
+            changed = isinstance(raw, str)
+            items.append({"id": f"cfg::{key}", "where": "cfg", "key": key, "kind": kind,
+                          "group": _text_group(key), "label": "", "default": meta["default"],
+                          "value": raw if changed else meta["default"], "changed": changed,
+                          "src": meta["src"], "limit": _text_limit(kind)})
+        items = _hall_texts(bot) + _golos_texts(bot) + items
+        _catalog_cache = {"items": items}
+    groups: "OrderedDict[str, List[Dict[str, Any]]]" = OrderedDict()
+    for it in items:
+        groups.setdefault(it["group"], []).append(it)
+    return {"items": items, "groups": [{"title": g, "items": v} for g, v in groups.items()],
+            "total": len(items),
+            "changed": sum(1 for it in items if it["changed"]),
+            "no_default": sum(1 for it in items if not (it["value"] or "").strip())}
+
+
+def _find_text_item(bot, item_id: str) -> Optional[Dict[str, Any]]:
+    for it in texts_catalog(bot, force=True)["items"]:
+        if it["id"] == item_id:
+            return it
+    return None
+
+
+def _golos_write(bot, guild, key: str, value: str) -> str:
+    """Пишет настройку сервера: через ког, а если он выключен — прямо в файл."""
+    gs = _golos_mod()
+    if gs is not None:
+        try:
+            data = gs.get_guild(guild.id) or {}
+            data[key] = value
+            gs.set_guild(guild.id, data)
+            return ""
+        except Exception as e:
+            return f"Ког не принял запись: {e.__class__.__name__}"
+    path = ROOT / "golos_guild.json"
+    try:
+        data = _read_json_file(path)
+        entry = data.get(str(guild.id)) or {}
+        entry[key] = value
+        data[str(guild.id)] = entry
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(path)
+        return ""
+    except Exception as e:
+        return f"Файл golos_guild.json не записан: {e.__class__.__name__}"
+
+
+def text_save(bot, item_id: str, value: Any) -> Dict[str, Any]:
+    item = _find_text_item(bot, item_id)
+    if item is None:
+        return {"error": "Такой надписи в каталоге нет — обнови страницу"}
+    text = str(value if value is not None else "")
+    if len(text) > item["limit"]:
+        return {"error": f"Слишком длинно: {len(text)} знаков, для «{item['kind']}» максимум {item['limit']}"}
+    where, _, key = item_id.partition("::")
+    try:
+        if where == "cfg":
+            from utils.checks import load_config, save_config
+            cfg = load_config() or {}
+            texts = cfg.get("texts")
+            if not isinstance(texts, dict):
+                texts = {}
+            texts[key] = text
+            cfg["texts"] = texts
+            save_config(cfg)
+        elif where == "hall":
+            err = _hall_write(key, text)
+            if err:
+                return {"error": err}
+        elif where == "golos":
+            guild = _safe_guild(bot)
+            if guild is None:
+                return {"error": "Бот ни на одном сервере — приветствие голосом не сохранить"}
+            err = _golos_write(bot, guild, key, text)
+            if err:
+                return {"error": err}
+        else:
+            return {"error": "Непонятно, куда это писать"}
+    except Exception as e:
+        return {"error": f"Не удалось сохранить: {e.__class__.__name__}: {e}"}
+    _catalog_cache = None
+    return {"ok": True, "where": item["src"], "key": key, "saved": item["label"] or key}
+
+
+def text_reset(bot, item_id: str) -> Dict[str, Any]:
+    item = _find_text_item(bot, item_id)
+    if item is None:
+        return {"error": "Такой надписи в каталоге нет — обнови страницу"}
+    where, _, key = item_id.partition("::")
+    default = item["default"]
+    try:
+        if where == "cfg":
+            from utils.checks import load_config, save_config
+            cfg = load_config() or {}
+            texts = cfg.get("texts") or {}
+            texts.pop(key, None)
+            cfg["texts"] = texts
+            save_config(cfg)
+        elif where == "hall":
+            if _hall_mod() is None and not default:
+                return {"error": "Модуль hall_panel выключен, а дефолт отсюда не взять"}
+            err = _hall_write(key, default)
+            if err:
+                return {"error": err}
+        elif where == "golos":
+            guild = _safe_guild(bot)
+            if guild is None:
+                return {"error": "Бот ни на одном сервере"}
+            err = _golos_write(bot, guild, key, default)
+            if err:
+                return {"error": err}
+        else:
+            return {"error": "Непонятно, откуда брать дефолт"}
+    except Exception as e:
+        return {"error": f"Не удалось вернуть как в коде: {e.__class__.__name__}"}
+    _catalog_cache = None
+    return {"ok": True, "value": default, "where": item["src"]}
+
+
+def _sample_map(bot) -> Dict[str, str]:
+    """Чем заменить {placeholders} в предпросмотре — чтобы правка была видна живой."""
+    try:
+        from utils.checks import load_config
+        cfg = load_config() or {}
+    except Exception:
+        cfg = {}
+    guild = _safe_guild(bot)
+    return {
+        "nick": "Марк", "name": "Марк", "user": "Марк", "member": "Марк", "mention": "@Марк",
+        "server": guild.name if guild else "Hallez FAMQ", "guild": guild.name if guild else "Hallez FAMQ",
+        "bot_name": str(cfg.get("bot_name") or "Бот"), "title": "Дроп 19:30", "time": "19:15 МСК",
+        "info": "Особняк семьи, бронежилеты", "static": "123-456", "age": "21",
+        "recruit_channel": "#набор", "channel": "#общий", "reason": "не подошло по времени",
+        "rank": "Боец", "id": "1234", "prev": "другая семья", "why": "хочу в семью",
+        "days": "3", "hours": "3", "date": "31.10.2026", "role": "Семья",
+    }
+
+
+def text_preview(bot, item_id: str, value: Any) -> Dict[str, Any]:
+    item = _find_text_item(bot, item_id)
+    kind = item["kind"] if item else "text"
+    limit = item["limit"] if item else MAX_EMBED_TEXT
+    text = str(value if value is not None else "")
+    subs = _sample_map(bot)
+    names = sorted(set(re.findall(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", text)))
+    rendered = re.sub(r"\{(\w+)\}", lambda m: str(subs[m.group(1)]) if m.group(1) in subs else m.group(0), text)
+    out = {"kind": kind, "text": "" if kind == "title" else rendered,
+           "title": rendered if kind == "title" else "",
+           "placeholders": names, "unknown": [n for n in names if n not in subs],
+           "len": len(text), "limit": limit, "overflow": len(text) > limit}
+    if item:
+        out["label"] = item["label"] or item["key"]
+        out["default"] = item["default"]
+    return out
+
+
+# ═══════════════════════════════ Стикеры ═══════════════════════════════
+# Папка stickers/ лежит в репозитории и на хостинге; в Discord стикером её делает
+# hall_recruit, а здесь картинку можно кинуть в канал прямо с сайта — эмбедом,
+# чтобы подпись и стиль были как у остальных постов бота.
+
+STICKER_DIR = ROOT / "stickers"
+STICKER_EXT = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+               ".gif": "image/gif", ".webp": "image/webp"}
+STICKER_NAME_RE = re.compile(r"^[\w\- ]{1,80}\.(png|jpg|jpeg|gif|webp)$", re.IGNORECASE | re.UNICODE)
+
+
+def _sticker_path(name: Any) -> Optional[Path]:
+    filename = str(name or "").strip()
+    if not STICKER_NAME_RE.match(filename):
+        return None
+    path = STICKER_DIR / filename
+    if not path.is_file() or path.stat().st_size > 4 * 1024 * 1024:
+        return None
+    return path
+
+
+def sticker_rows() -> Dict[str, Any]:
+    out = []
+    try:
+        names = sorted(p.name for p in STICKER_DIR.iterdir() if p.is_file())
+    except FileNotFoundError:
+        return {"rows": [], "error": "Папки stickers/ на хостинге нет"}
+    for n in names:
+        ext = "." + n.rsplit(".", 1)[-1].lower() if "." in n else ""
+        if ext not in STICKER_EXT:
+            continue
+        path = STICKER_DIR / n
+        out.append({"name": n, "title": path.stem.replace("_", " ").replace("-", " "),
+                    "size": round(path.stat().st_size / 1024), "mime": STICKER_EXT[ext],
+                    "url": "/api/stickers/image?name=" + quote(n)})
+    return {"rows": out}
+
+
+def sticker_image(name: Any):
+    path = _sticker_path(name)
+    if path is None:
+        return None, None
+    ext = "." + path.name.rsplit(".", 1)[-1].lower()
+    return path.read_bytes(), STICKER_EXT.get(ext, "application/octet-stream")
+
+
+async def post_sticker(bot, cid: Any, name: Any, text: str = "", title: str = "",
+                       color: str = "") -> Dict[str, Any]:
+    path = _sticker_path(name)
+    if path is None:
+        return {"error": "Такого стикера нет в папке stickers/"}
+    ch, err = await _resolve_channel(bot, cid)
+    if err:
+        return {"error": err}
+    text = (text or "").strip()
+    if len(text) > MAX_EMBED_TEXT:
+        return {"error": f"Подпись длинная: {len(text)} знаков, максимум {MAX_EMBED_TEXT}"}
+    filename = path.name
+    emb = None
+    if title or text:
+        emb = disnake.Embed(title=str(title)[:MAX_EMBED_TITLE] if title else None,
+                            description=text or None, color=disnake.Color(_hex_color(color)))
+        emb.set_image(url=f"attachment://{filename}")
+    try:
+        msg = await ch.send(embed=emb, file=disnake.File(path, filename=filename))
+    except Exception as e:
+        return {"error": _discord_error(e)}
+    out = {"link": msg.jump_url, "where": f"#{ch.name}", "sticker": filename}
+    hint = _hygiene_hint(bot, ch)
+    if hint:
+        out["hint"] = hint
+    return out
 
 
 

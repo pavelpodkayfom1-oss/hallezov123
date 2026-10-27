@@ -51,6 +51,8 @@ p{margin:.3em 0 .9em}
 .small{font-size:.85rem}
 button,input,select,textarea{font:inherit;color:inherit}
 input,select,textarea{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:.55em .75em;min-width:0;transition:border-color .15s,box-shadow .15s}
+/* поле часто стоит внутри подписи серого цвета — текст ввода не должен наследовать её */
+input,select,textarea{color:var(--text)}
 input:hover,select:hover,textarea:hover{border-color:#3a3a45}
 input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--accent2);outline-offset:1px}
 select{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 16px) calc(50% + 2px),calc(100% - 11px) calc(50% + 2px);background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:2.1em}
@@ -292,10 +294,71 @@ dialog::backdrop{background:rgba(0,0,0,.65);backdrop-filter:blur(3px)}
 ::-webkit-scrollbar-thumb{background:#2f2f38;border-radius:99px;border:2px solid transparent;background-clip:padding-box}
 ::-webkit-scrollbar-thumb:hover{background:#43434e;background-clip:padding-box}
 
+/* ---------- светлая тема ---------- */
+/* Тема переключается кнопкой в шапке и запоминается в браузере: сервер её не хранит,
+   поэтому у каждого своя. Всё, что в тёмной теме было хардкодом цвета, перекрыто здесь. */
+html[data-theme=light]{
+  --bg:#eceef6; --panel:#fff; --panel2:#f5f7fc; --line:#d8dcea;
+  --text:#141726; --muted:#5d6377; --ok:#1e9e57; --warn:#b8770f; --err:#c0392b;
+  --glow:0 12px 30px rgba(25,28,50,.10); --edge:inset 0 1px 0 rgba(255,255,255,.85);
+  color-scheme:light
+}
+html[data-theme=light] body{
+  background:
+    linear-gradient(rgba(20,23,38,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20,23,38,.035) 1px, transparent 1px),
+    linear-gradient(180deg, #f7f8fd, var(--bg) 55%);
+}
+html[data-theme=light] body::before,html[data-theme=light] body::after{opacity:.2}
+html[data-theme=light] input,html[data-theme=light] select,html[data-theme=light] textarea{background:#fff}
+html[data-theme=light] input[type=checkbox],html[data-theme=light] input[type=radio]{background:#fff;border-color:#b7bdd0}
+html[data-theme=light] .btn{background:linear-gradient(180deg,#fff,#eef1f8);color:#1b1e2d;border-color:var(--line)}
+html[data-theme=light] .btn:hover{background:linear-gradient(180deg,#fff,#e6eaf5);border-color:#bcc3d8}
+html[data-theme=light] .btn.danger{background:#fdeaea;border-color:#e7b4b4;color:#a32020}
+html[data-theme=light] .btn.danger:hover{background:#fbdcdc}
+html[data-theme=light] .login h1{background:linear-gradient(180deg,#1b1e2d,#4a5069);-webkit-background-clip:text;background-clip:text}
+html[data-theme=light] .switch{background:#dfe3ee}
+html[data-theme=light] .switch::after{background:#fff}
+html[data-theme=light] .logbox{background:#0f1016;color:#dfe2ee}
+html[data-theme=light] .bar{background:#e4e8f2;box-shadow:inset 0 1px 3px rgba(20,23,38,.12)}
+html[data-theme=light] .rows button.r,html[data-theme=light] .rows .r{background:#f8fafd}
+html[data-theme=light] ::-webkit-scrollbar-thumb{background:#c3c9da;border-color:#eef0f6}
+html[data-theme=light] .embed{background:#f6f8fd}
+html[data-theme=light] .topbar .brand .logo{color:#fff}
+
+/* ---------- новые кусочки интерфейса ---------- */
+.msg.tall{min-height:24vh;line-height:1.6}
+.btn.tiny{padding:.3em .62em;font-size:.78rem;border-radius:9px}
+.btn.icon{padding:.42em .55em;font-size:1rem;line-height:1}
+.pinwrap{display:inline-flex;align-items:stretch;gap:3px}
+.btn.star{padding:.42em .5em;min-width:2.1em;font-size:.9rem;opacity:.55}
+.btn.star:hover{opacity:1}
+.btn.star.on{opacity:1;color:#ffcf5a;border-color:#7a5c14;background:linear-gradient(180deg,#2b2312,#221d12)}
+html[data-theme=light] .btn.star.on{color:#a97a12;border-color:#d8c48a;background:#fff8e6}
+.card.pinned{border-color:rgba(255,207,90,.32)}
+.card.pinned::before{content:"";position:absolute;left:1.1rem;right:1.1rem;top:0;height:2px;border-radius:2px;
+  background:linear-gradient(90deg,transparent,rgba(255,207,90,.75),transparent)}
+.card.pinned{position:relative}
+.previewbox{margin:.7rem 0;display:flex;flex-direction:column;gap:.5rem}
+.tiles .sticker{cursor:pointer;align-items:center;text-align:center;padding:.8rem}
+.tiles .sticker img{width:100%;max-width:150px;aspect-ratio:1/1;object-fit:contain;border-radius:12px;
+  background:rgba(255,255,255,.05);padding:.35rem;transition:transform .2s cubic-bezier(.2,.7,.3,1)}
+.tiles .sticker:hover img{transform:scale(1.06) rotate(-1deg)}
+.tiles .sticker.sel{border-color:var(--accent2);box-shadow:var(--glow),0 0 0 2px rgba(210,58,58,.28)}
+.tiles .sticker b{font-size:.85rem}
+.skel{position:relative;overflow:hidden;height:15px;border-radius:8px;background:var(--panel2);flex:1}
+.skel::after{content:"";position:absolute;inset:0;transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.10),transparent);animation:shimmer 1.15s infinite}
+@keyframes shimmer{to{transform:translateX(100%)}}
+.skelwrap{display:flex;flex-direction:column;gap:.75rem}
+.skelrow{display:flex;gap:.6rem;align-items:center}
+
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
   #content>*,.toast,.login,.login>*,body::before,body::after,.logo,.tabs button.active,.dot,.head::after{animation:none}
   .btn:hover,.r:hover,.tabs button:hover,.pager button:hover,.stat:hover,.guild:hover,.tile:hover,.grid2>.card:hover,.cols>.card:hover{transform:none}
+  .tiles .sticker:hover img{transform:none}
+  .skel::after{animation:none;opacity:.35}
   .btn::after{display:none}
 }
 
@@ -420,6 +483,34 @@ function showLogin(msg) {
   input.focus();
 }
 
+/* ---------- тема и избранное ---------- */
+/* Тема и закреплённые экраны живут в localStorage браузера: сервер их не хранит,
+   поэтому каждый заходит со своими настройками и ничего не ломает другому. */
+function applyTheme() {
+  let t = '';
+  try { t = localStorage.getItem('hz_theme') || ''; } catch (e) { /* приватный режим */ }
+  document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+}
+function themeIcon() { return document.documentElement.dataset.theme === 'light' ? '☀️' : '🌙'; }
+function toggleTheme() {
+  const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  try { localStorage.setItem('hz_theme', next); } catch (e) { /* приватный режим */ }
+  applyTheme();
+  document.querySelectorAll('.btn.icon').forEach((b) => { b.replaceChildren(themeIcon()); });
+}
+
+const FAV_KEY = 'hz_fav';
+function favGet() {
+  try { return JSON.parse(localStorage.getItem(FAV_KEY)) || []; } catch (e) { return []; }
+}
+function favToggle(ref) {
+  const list = favGet();
+  const i = list.indexOf(ref);
+  if (i >= 0) list.splice(i, 1); else list.push(ref);
+  try { localStorage.setItem(FAV_KEY, JSON.stringify(list.slice(0, 24))); } catch (e) { /* приватный режим: не запоминаем */ }
+  return list.indexOf(ref) >= 0;
+}
+
 /* ---------- каркас ---------- */
 /* группа в третьей колонке — вкладки лепятся в полосы, полоса на каждую группу */
 const PAGES = [
@@ -427,6 +518,8 @@ const PAGES = [
   ['apps', 'Заявки', '💎', 'Семья'],
   ['send', 'Сообщения', '✉️', 'Семья'],
   ['screens', 'Экраны', '🖥️', 'Семья'],
+  ['texts', 'Тексты', '📝', 'Семья'],
+  ['stickers', 'Стикеры', '🎴', 'Семья'],
   ['diag', 'Диагностика', '🩺', 'Служба'],
   ['audit', 'Ревизия', '🔍', 'Служба'],
   ['shots', 'Снимки', '📸', 'Служба'],
@@ -458,6 +551,7 @@ function renderShell() {
         h('div', null, h('b', null, state.botName), h('span', null, 'Панель управления'))),
       h('span', { class: 'dot', id: 'live', title: 'Бот на связи' }),
       h('div', { class: 'spacer' }),
+      h('button', { class: 'btn icon', title: 'Светлая или тёмная тема', onclick: toggleTheme }, themeIcon()),
       h('button', { class: 'btn', onclick: logout }, 'Выйти')),
     tabs);
   $app.replaceChildren(bar, h('main', { class: 'main', id: 'content' }));
@@ -485,9 +579,10 @@ async function go(page) {
   history.replaceState(null, '', '#' + page);
   document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.page === page));
   const content = document.getElementById('content');
-  content.replaceChildren(h('p', { class: 'muted' }, 'Загрузка…'));
+  content.replaceChildren(skeleton());
   try {
     const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, screens: pageScreens,
+      texts: pageTexts, stickers: pageStickers,
       diag: pageDiag, audit: pageAudit, shots: pageShots,
       modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
     if (state.page === page) content.replaceChildren(view);
@@ -710,6 +805,221 @@ async function pageLogs() {
     h('div', { class: 'toolbar' }, src, cnt, q, h('label', { class: 'row small muted' }, auto, 'Автообновление'), h('button', { class: 'btn', onclick: () => { load().then(() => { box.scrollTop = box.scrollHeight; }); } }, 'Обновить')),
     box
   );
+}
+
+/* ---------- Тексты бота ---------- */
+/* Ключи берутся из самого кода (utils/web_tools.py их сканирует), поэтому список не
+   отстаёт: новый get_text в коге появляется здесь сам. Правим три хранилища:
+   config.json["texts"], hall_settings.json и golos_guild.json. */
+const TEXT_PLACEHOLDERS = ['{nick}', '{name}', '{mention}', '{server}', '{bot_name}', '{title}',
+  '{time}', '{info}', '{static}', '{recruit_channel}', '{reason}', '{rank}', '{days}', '{hours}'];
+
+async function pageTexts() {
+  const d = await api('/api/texts').catch((e) => ({ error: e.message }));
+  if (d.error) return h('div', null, pageHead('Тексты', null), h('p', { class: 'err' }, d.error));
+
+  const items = d.items;
+  const search = h('input', { type: 'search', placeholder: 'Название, ключ или слово из текста…' });
+  const list = h('div', { class: 'rows' });
+  const edBox = h('div', { class: 'card form' }, spinner('Выбери надпись слева.'));
+  let current = null;
+
+  const titleOf = (it) => it.label || it.key.replace(/_/g, ' ');
+
+  function renderList() {
+    const needle = search.value.trim().toLowerCase();
+    const cards = [];
+    d.groups.forEach((g) => {
+      const rows = g.items.filter((it) => !needle
+        || (it.key + ' ' + titleOf(it) + ' ' + (it.value || '') + ' ' + g.title).toLowerCase().includes(needle));
+      if (!rows.length) return;
+      cards.push(h('div', { class: 'section-title' }, g.title + ' · ' + rows.length),
+        ...rows.map((it) => h('button', {
+          class: 'r' + (current && current.id === it.id ? ' sel' : ''),
+          onclick: () => open(it)
+        },
+          h('div', { class: 'grow' }, h('b', null, titleOf(it)), h('small', { class: 'mono' }, it.key)),
+          it.changed ? chip('свой текст', 'ok') : chip('как в коде', 'off'))));
+    });
+    list.replaceChildren(...(cards.length ? cards : [h('p', { class: 'muted' }, 'Ничего не нашлось.')]));
+  }
+
+  const KIND_LABEL = { title: 'заголовок эмбеда', text: 'текст эмбеда', button: 'кнопка', field: 'поле анкеты' };
+
+  function previewNode(p) {
+    const box = h('div', { class: 'previewbox' });
+    if (p.overflow) box.append(h('p', { class: 'err small' }, 'Не влезает: ' + p.len + ' из ' + p.limit + ' знаков'));
+    if (p.unknown && p.unknown.length) box.append(h('p', { class: 'warnline small' }, 'Такой подстановки нет: ' + p.unknown.join(', ')));
+    if (p.kind === 'button') {
+      box.append(h('div', { class: 'section-title' }, 'Как будет выглядеть кнопка'),
+        h('div', { class: 'btns' }, h('span', { class: 'btn' }, p.text || '(пусто)')));
+      return box;
+    }
+    if (p.kind === 'field') {
+      box.append(h('div', { class: 'section-title' }, 'Как будет выглядеть поле'),
+        h('div', { class: 'form' }, h('label', null, p.text || '(пусто)',
+          h('input', { type: 'text', disabled: true, placeholder: 'так видит кандидат' }))));
+      return box;
+    }
+    box.append(h('div', { class: 'section-title' }, 'Предпросмотр'),
+      embedNode({ title: p.title || '', text: p.text, color: '#990000' }));
+    return box;
+  }
+
+  async function showPreview(previewBox, area, counter, it) {
+    try {
+      const p = await api('/api/texts/preview', { method: 'POST', body: { id: it.id, value: area.value } });
+      counter.textContent = p.len + ' / ' + p.limit + ' знаков';
+      counter.className = 'small ' + (p.overflow ? 'err' : 'muted');
+      previewBox.replaceChildren(previewNode(p));
+    } catch (e) { /* превью не главное — ошибку держим молча */ }
+  }
+
+  function open(it) {
+    current = it;
+    renderList();
+    const area = h('textarea', { class: 'msg tall', spellcheck: 'false' });
+    area.value = it.value || '';
+    const counter = h('small', { class: 'muted' });
+    const previewBox = h('div');
+    const dirty = () => !!current && area.value !== (current.value || '');
+    state.isDirty = dirty;
+    area.addEventListener('input', () => {
+      state.isDirty = dirty;
+      clearTimeout(area._t);
+      area._t = setTimeout(() => showPreview(previewBox, area, counter, it), 380);
+    });
+
+    const tips = h('div', { class: 'btns' }, TEXT_PLACEHOLDERS.map((ph) => h('button', {
+      class: 'btn tiny', title: 'Вставить в текст', onclick: () => {
+        const from = area.selectionStart || area.value.length;
+        const to = area.selectionEnd || from;
+        area.value = area.value.slice(0, from) + ph + area.value.slice(to);
+        area.focus();
+        showPreview(previewBox, area, counter, it);
+      }
+    }, ph)));
+
+    const saveBtn = h('button', {
+      class: 'btn primary', onclick: async () => {
+        saveBtn.disabled = true;
+        try {
+          const r = await api('/api/texts/save', { method: 'POST', body: { id: it.id, value: area.value } });
+          it.value = area.value;
+          it.changed = area.value !== (it.default || '');
+          state.isDirty = () => false;
+          renderList();
+          toast('Сохранено: ' + (r.saved || it.key), 'ok');
+        } catch (e) { toast(e.message, 'err'); }
+        saveBtn.disabled = false;
+      }
+    }, 'Сохранить');
+
+    const resetBtn = h('button', {
+      class: 'btn', onclick: async () => {
+        if (!(await confirmBox('Вернуть текст из кода?', 'Твоё редактирование этой надписи сотрётся.', 'Вернуть', true))) return;
+        try {
+          const r = await api('/api/texts/reset', { method: 'POST', body: { id: it.id } });
+          it.value = r.value || ''; it.changed = false; area.value = it.value;
+          state.isDirty = () => false;
+          renderList(); showPreview(previewBox, area, counter, it);
+          toast('Как в коде', 'ok');
+        } catch (e) { toast(e.message, 'err'); }
+      }
+    }, 'Вернуть как в коде');
+
+    edBox.replaceChildren(
+      h('h2', null, titleOf(it)),
+      h('div', { class: 'row wrap' }, chip(KIND_LABEL[it.kind] || it.kind), chip('до ' + it.limit + ' знаков', 'off'),
+        chip(it.src, 'off'), it.changed ? chip('изменено', 'ok') : chip('как в коде', 'off'), counter),
+      h('label', null, 'Текст', area),
+      previewBox,
+      h('div', { class: 'section-title' }, 'Что подставляется само'), tips,
+      h('div', { class: 'row' }, saveBtn, resetBtn));
+    showPreview(previewBox, area, counter, it);
+  }
+
+  search.addEventListener('input', renderList);
+  renderList();
+  const first = items.find((it) => it.changed) || items[0];
+  if (first) open(first);
+
+  return h('div', null,
+    pageHead('Тексты бота', 'Все надписи, которые бот показывает людям: заголовки панелей, тексты заявок, кнопки, ЛС после принятия и отказа, приветствия. Правь — сразу видно, как это будет выглядеть.',
+      h('button', { class: 'btn', onclick: () => go('texts') }, 'Обновить')),
+    h('div', { class: 'toolbar' }, h('label', null, 'Найти', search),
+      chip('всего ' + d.total, 'off'), chip('со своим текстом: ' + d.changed, d.changed ? 'ok' : 'off')),
+    h('div', { class: 'split', style: 'grid-template-columns:minmax(280px,38%) 1fr' },
+      h('div', { class: 'stick' }, list), edBox));
+}
+
+/* ---------- Стикеры ---------- */
+async function pageStickers() {
+  const d = await api('/api/stickers').catch((e) => ({ error: e.message }));
+  const chans = await api('/api/channels').catch(() => ({ rows: [] }));
+  if (d.error) return h('div', null, pageHead('Стикеры', null), h('p', { class: 'err' }, d.error));
+
+  const grid = h('div', { class: 'tiles' });
+  const cq = h('input', { type: 'search', placeholder: 'Имя канала…' });
+  const chanSel = h('select', { size: '6' });
+  const title = h('input', { type: 'text', maxlength: '256', placeholder: 'Заголовок (пусто — просто картинка)' });
+  const color = h('input', { type: 'text', maxlength: '9', placeholder: 'Цвет, например 990000', value: '990000' });
+  const text = h('textarea', { class: 'msg', placeholder: 'Подпись под стикером (необязательно)' });
+  const out = resultBox();
+  let picked = null;
+
+  function fillChannels() {
+    const needle = cq.value.trim().toLowerCase();
+    const rows = chans.rows.filter((c) => c.can_write !== false
+      && (!needle || (c.name + ' ' + (c.category || '')).toLowerCase().includes(needle)));
+    chanSel.replaceChildren(...(rows.length ? rows.map((c) => h('option', { value: c.id },
+      chanLabel(c) + (c.category ? ' · ' + c.category : ''))) : [h('option', { value: '' }, 'канал не найден')]));
+    if (rows.length) chanSel.value = rows[0].id;
+  }
+
+  function pick(s) {
+    picked = s;
+    document.querySelectorAll('[data-sticker]').forEach((b) => b.classList.toggle('sel', b.dataset.sticker === s.name));
+  }
+
+  grid.replaceChildren(...d.rows.map((s) => h('button', {
+    class: 'card tile sticker', 'data-sticker': s.name, onclick: () => pick(s), title: s.name
+  },
+    h('img', { src: s.url, alt: s.title, loading: 'lazy' }),
+    h('b', null, s.title), h('small', { class: 'muted' }, s.size + ' КБ'))));
+  if (!d.rows.length) grid.append(h('p', { class: 'muted' }, 'В папке stickers/ пусто.'));
+
+  const sendBtn = h('button', {
+    class: 'btn primary', onclick: async () => {
+      if (!picked) { toast('Сначала выбери стикер — нажми на картинку.', 'err'); return; }
+      if (!chanSel.value) { toast('Выбери канал.', 'err'); return; }
+      sendBtn.disabled = true; out.busy();
+      try {
+        const r = await api('/api/stickers/send', { method: 'POST', body: {
+          channel: chanSel.value, name: picked.name, title: title.value.trim(),
+          text: text.value, color: color.value.trim() } });
+        out.show(r);
+        toast('Стикер ушёл в ' + r.where, 'ok');
+      } catch (e) { out.err(e); }
+      sendBtn.disabled = false;
+    }
+  }, 'Отправить стикер');
+
+  fillChannels();
+  cq.addEventListener('input', fillChannels);
+  return h('div', null,
+    pageHead('Стикеры', 'Картинки бота из папки stickers/. Выбери стикер и канал — он выйдет подписанным эмбедом, как обычный пост семьи.',
+      h('button', { class: 'btn', onclick: () => go('stickers') }, 'Обновить')),
+    h('div', { class: 'split' },
+      h('div', null, h('div', { class: 'section-title' }, 'Выбери стикер'), grid),
+      h('div', { class: 'card form' },
+        h('div', { class: 'section-title' }, 'Куда и с чем'),
+        h('label', null, 'Канал', cq, chanSel),
+        h('label', null, 'Заголовок', title),
+        h('label', null, 'Подпись', text),
+        h('label', null, 'Цвет', color),
+        sendBtn,
+        h('div', { class: 'section-title' }, 'Результат'), out)));
 }
 
 /* ---------- Управление ---------- */
@@ -1319,9 +1629,43 @@ async function pageScreens() {
   }
 
   const nav = h('div', { class: 'grid2' });
+  /* Избранное живёт в браузере: у каждого свои «главные» экраны, и они первыми. */
+  const allScreens = [];
+  d.sections.forEach((s) => s.screens.forEach((x) => allScreens.push(Object.assign({ section: s.title }, x))));
+  const byRef = {};
+  allScreens.forEach((x) => { byRef[x.ref] = x; });
+  let favs = favGet();
+
+  function screenBtn(x) {
+    const needs = x.args && x.args.length;
+    const fav = favs.indexOf(x.ref) >= 0;
+    const star = h('button', {
+      class: 'btn star' + (fav ? ' on' : ''), title: fav ? 'Убрать из главных' : 'Закрепить как главный экран',
+      onclick: (ev) => {
+        ev.stopPropagation();
+        favToggle(x.ref);
+        favs = favGet();
+        renderNav();
+      }
+    }, fav ? '★' : '☆');
+    return h('span', { class: 'pinwrap' }, h('button', {
+      class: 'btn' + (x.live === false ? ' dim' : ''),
+      title: x.cmd + (x.live === false ? ' · ког выключен, экран не откроется' : '')
+        + (needs ? ' · ' + x.args.map((f) => f.label).join(', ') : ''),
+      onclick: () => (needs ? openForm(x) : run(x))
+    }, (x.icon || '') + ' ' + x.label + (needs ? ' ✎' : '')), star);
+  }
+
   function renderNav() {
     const needle = filter.value.trim().toLowerCase();
     const cards = [];
+    const pinned = favGet().map((r) => byRef[r]).filter(Boolean);
+    if (pinned.length && !needle) {
+      cards.push(h('div', { class: 'card form pinned' },
+        h('h2', null, '⭐ Главное'),
+        h('p', { class: 'muted small' }, 'Твои закреплённые экраны — звёздочкой на любой кнопке.'),
+        h('div', { class: 'btns' }, pinned.map(screenBtn))));
+    }
     d.sections.forEach((s) => {
       const items = s.screens.filter((x) => !needle
         || (x.label + ' ' + x.cmd + ' ' + s.title).toLowerCase().includes(needle));
@@ -1329,15 +1673,7 @@ async function pageScreens() {
       cards.push(h('div', { class: 'card form' },
         h('h2', null, (s.icon || '') + ' ' + s.title + ' · ' + items.length),
         s.only_web ? h('p', { class: 'muted small' }, 'Им нужны аргументы: панель спросит формой, в Discord они остаются своими командами.') : null,
-        h('div', { class: 'btns' }, items.map((x) => {
-          const needs = x.args && x.args.length;
-          return h('button', {
-            class: 'btn' + (x.live === false ? ' dim' : ''),
-            title: x.cmd + (x.live === false ? ' · ког выключен, экран не откроется' : '')
-              + (needs ? ' · ' + x.args.map((f) => f.label).join(', ') : ''),
-            onclick: () => (needs ? openForm(x) : run(x))
-          }, (x.icon || '') + ' ' + x.label + (needs ? ' ✎' : ''));
-        }))));
+        h('div', { class: 'btns' }, items.map(screenBtn))));
     });
     nav.replaceChildren(...cards);
     if (!cards.length) nav.replaceChildren(h('p', { class: 'muted' }, 'Ничего не нашлось по «' + filter.value + '».'));
@@ -1521,13 +1857,26 @@ async function boot() {
     return;
   }
   if (!s.authed) { showLogin(); return; }
+  applyTheme();
   state.botName = s.bot_name || 'Бот';
   document.title = state.botName + ' · Панель';
   renderShell();
   go(location.hash.slice(1) || 'overview');
 }
 
+function skeleton() {
+  /* Скелетон вместо «Загрузка…»: экран не прыгает, когда данные приходят. */
+  const box = h('div', { class: 'skelwrap' });
+  box.append(h('div', { class: 'skel', style: 'height:26px;width:38%' }));
+  for (let i = 0; i < 5; i++) {
+    box.append(h('div', { class: 'skelrow' }, h('div', { class: 'skel', style: 'width:' + (34 + (i % 3) * 18) + '%' }),
+      h('div', { class: 'skel', style: 'width:' + (18 + (i % 2) * 22) + '%' })));
+  }
+  return box;
+}
+
 window.addEventListener('beforeunload', (e) => { if (state.isDirty()) { e.preventDefault(); e.returnValue = ''; } });
+applyTheme();
 boot();
 })();
 </script>
