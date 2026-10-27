@@ -20,6 +20,7 @@ from disnake.ext import commands
 
 import database
 from utils.checks import load_config, rank_title
+from utils.embeds import card
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SETTINGS_PATH = os.path.join(BASE_DIR, "panel_settings.json")
@@ -186,21 +187,15 @@ def color(kind: str = "main") -> int:
     return _hex(cfg.get(key, default), default)
 
 
+_KIND_COLOR = {"main": "embed_color", "ok": "success_color",
+               "err": "error_color", "warn": "warning_color"}
+
+
 def make_embed(title: Optional[str] = None, description: Optional[str] = None,
                kind: str = "main", footer: bool = True, col: Optional[int] = None) -> disnake.Embed:
-    e = disnake.Embed(title=title, description=description,
-                      color=col if col is not None else color(kind),
-                      timestamp=disnake.utils.utcnow())
-    if footer:
-        cfg = load_config()
-        bot_name = cfg.get("bot_name", "Hallez FAMQ")
-        text = (cfg.get("texts", {}) or {}).get("footer_text", "{bot_name}")
-        try:
-            text = text.format(bot_name=bot_name)
-        except Exception:
-            text = bot_name
-        e.set_footer(text=text)
-    return e
+    """Карточка: имя семьи, футер и время навешивает общий фабрик utils.embeds.card."""
+    return card(title, description, _KIND_COLOR.get(kind, "embed_color"),
+                footer=footer, color=col)
 
 
 def clip(text: Any, n: int = 1000) -> str:

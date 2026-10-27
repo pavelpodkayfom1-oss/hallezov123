@@ -405,7 +405,7 @@ class WelcomeView(PanelView):
                        load_settings()["rules_text"], paragraph=True, max_length=4000),
         ], handler))
 
-    @disnake.ui.button(label="Предпросмотр", emoji="👁", row=2)
+    @disnake.ui.button(label="Предпросмотр", emoji="👁", style=disnake.ButtonStyle.secondary, row=2)
     async def preview(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         cfg = load_config()
         rid = cfg.get("channels", {}).get("recruitment_channel_id", 0)
@@ -415,7 +415,7 @@ class WelcomeView(PanelView):
         })
         await inter.response.send_message(embed=base_embed("👁 Так увидит новичок", text[:4000]), ephemeral=True)
 
-    @disnake.ui.button(label="Сбросить канал", emoji="🧹", row=2)
+    @disnake.ui.button(label="Сбросить канал", emoji="🧹", style=disnake.ButtonStyle.danger, row=2)
     async def reset_channel(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         update_settings(welcome_channel_id=0)
         await self.cog.show(inter, "welcome", self.owner_id)
@@ -460,7 +460,7 @@ class RemindView(PanelView):
             text_input("Часов (336 = 14 дней)", "hours", str(load_settings()["remind_hours"]), max_length=5),
         ], handler))
 
-    @disnake.ui.button(label="Сбросить каналы", emoji="🧹", row=3)
+    @disnake.ui.button(label="Сбросить каналы", emoji="🧹", style=disnake.ButtonStyle.danger, row=3)
     async def reset(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         update_settings(remind_channel_id=0, leave_channel_id=0)
         await self.cog.show(inter, "remind", self.owner_id)
@@ -521,7 +521,7 @@ class AfkAdminView(PanelView):
                        max_length=5),
         ], handler))
 
-    @disnake.ui.button(label="Текст панели", emoji="📝", row=3)
+    @disnake.ui.button(label="Текст панели", emoji="📝", style=disnake.ButtonStyle.primary, row=3)
     async def text(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         async def handler(minter, values):
             update_settings(afk_panel_text=values["text"])
@@ -532,17 +532,17 @@ class AfkAdminView(PanelView):
                        paragraph=True, max_length=1500),
         ], handler))
 
-    @disnake.ui.button(label="Убрать роль", emoji="🧹", row=3)
+    @disnake.ui.button(label="Убрать роль", emoji="🧹", style=disnake.ButtonStyle.danger, row=3)
     async def clear_role(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         update_settings(afk_role_id=0)
         await self.cog.show(inter, "afk", self.owner_id)
 
-    @disnake.ui.button(label="Отправить / обновить панель", emoji="📤", style=disnake.ButtonStyle.success, row=4)
+    @disnake.ui.button(label="Отправить панель", emoji="📤", style=disnake.ButtonStyle.success, row=4)
     async def send_panel(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         ok, msg = await self.cog.publish_afk_panel(inter.guild)
         await inter.response.send_message(msg, ephemeral=True)
 
-    @disnake.ui.button(label="Кто в АФК", emoji="👥", row=4)
+    @disnake.ui.button(label="Кто в АФК", emoji="👥", style=disnake.ButtonStyle.secondary, row=4)
     async def who(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         await inter.response.send_message(embed=await self.cog.afk_list_embed(inter.guild), ephemeral=True)
 

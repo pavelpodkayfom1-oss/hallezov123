@@ -23,7 +23,7 @@ from pathlib import Path
 import disnake
 from disnake.ext import commands
 
-from utils.embeds import get_color, note_embed
+from utils.embeds import get_color, list_embed, note_embed
 
 BASE = Path(__file__).resolve().parent.parent
 CFG_PATH = BASE / "logs_settings.json"
@@ -539,14 +539,15 @@ class FamLogs(commands.Cog):
     async def logs_view(self, inter):
         if not self._allowed(inter):
             return await inter.response.send_message(embed=note_embed("⛔ Недостаточно прав."), ephemeral=True)
-        lines = []
+        rows = []
         for key, (name, icon, _) in CATS.items():
             cid = self.cfg["channels"].get(key)
-            off = " ⛔(выкл)" if key in self.cfg["disabled"] else ""
-            lines.append(f"{icon} **{name}** — {f'<#{cid}>' if cid else '*не задан (идёт в запасной)*'}{off}")
+            off = " · ⛔ выкл" if key in self.cfg["disabled"] else ""
+            rows.append([f"{icon} {name}", (f"<#{cid}>" if cid else "*не задан → в запасной*") + off])
         d = self.cfg["channels"].get("default")
-        lines.append(f"📦 **Запасной** — {f'<#{d}>' if d else '*не задан*'}")
-        await inter.response.send_message(embed=disnake.Embed(title="Настройки логов", description="\n".join(lines), color=get_color()), ephemeral=True)
+        rows.append(["📦 Запасной", f"<#{d}>" if d else "*не задан*"])
+        await inter.response.send_message(
+            embed=list_embed("Настройки логов", rows, guild=inter.guild, inline=False), ephemeral=True)
 
     @logs.sub_command(name="test", description="Отправить тестовую запись в категорию")
     async def logs_test(self, inter, category: str = commands.Param(choices=CHOICES_NO_DEFAULT, description="Категория")):

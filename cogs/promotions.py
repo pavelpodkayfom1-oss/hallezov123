@@ -5,7 +5,7 @@ import disnake
 from disnake.ext import commands
 from typing import Optional
 from utils.checks import load_config, is_recruiter, get_text, rank_title
-from utils.embeds import base_embed, success_embed, error_embed, warning_embed
+from utils.embeds import base_embed, brand_name, success_embed, error_embed, warning_embed
 from database import (
     create_promotion_report,
     get_promotion_by_id,
@@ -136,7 +136,7 @@ class PromoRejectModal(disnake.ui.Modal):
                     "Здравствуйте, {nick}!\nВаш отчет на повышение был проверен и **отклонен**.\n\n**Причина:** {reason}\n\nИсправьте недочеты и отправьте отчет заново."
                 )
                 dm_emb = error_embed(
-                    "Отчет на повышение в Zakonov FAMQ отклонен",
+                    f"Отчет на повышение в {brand_name()} отклонен",
                     dm_tpl.format(nick=applicant.display_name, reason=reason, reviewer=inter.author.display_name),
                     guild=inter.guild
                 )
@@ -233,7 +233,7 @@ class PromotionModal(disnake.ui.Modal):
         title_tpl = get_text("promo_card_title", "📈 Отчет на повышение #{id}")
         desc_tpl = get_text(
             "promo_card_desc",
-            "Участник {mention} подал отчет на повышение в должности семьи **Zakonov FAMQ**.\nКвалификация: **{prev_name} ({prev_rank}) ➔ {target_name} ({target_rank})**"
+            "Участник {mention} подал отчет на повышение в должности семьи **{brand}**.\nКвалификация: **{prev_name} ({prev_rank}) ➔ {target_name} ({target_rank})**"
         )
         report_emb = base_embed(
             title_tpl.format(id=promo_id),
@@ -242,7 +242,8 @@ class PromotionModal(disnake.ui.Modal):
                 prev_name=prev_name,
                 prev_rank=prev_rank,
                 target_name=target_name,
-                target_rank=self.target_rank
+                target_rank=self.target_rank,
+                brand=brand_name()
             ),
             guild=inter.guild
         )
@@ -453,15 +454,16 @@ class Promotions(commands.Cog):
                 try:
                     dm_tpl = get_text(
                         "promo_approved_dm",
-                        "Поздравляем с повышением в семье Zakonov FAMQ!\nВаш отчет на повышение был **одобрен** проверяющим {reviewer}!\nВам присвоен ранг: **{target_name} ({target_rank} ранг)**.\nПродолжайте показывать отличный актив на благо семьи!"
+                        "Поздравляем с повышением в семье {brand}!\nВаш отчет на повышение был **одобрен** проверяющим {reviewer}!\nВам присвоен ранг: **{target_name} ({target_rank} ранг)**.\nПродолжайте показывать отличный актив на благо семьи!"
                     )
                     dm_text = dm_tpl.format(
                         reviewer=inter.author.display_name,
                         target_name=target_name,
                         target_rank=target_rank,
-                        nick=promo["nick"]
+                        nick=promo["nick"],
+                        brand=brand_name()
                     )
-                    dm_emb = success_embed("Поздравляем с повышением в семье Zakonov FAMQ!", dm_text, guild=inter.guild)
+                    dm_emb = success_embed(f"Поздравляем с повышением в семье {brand_name()}!", dm_text, guild=inter.guild)
                     await applicant.send(embed=dm_emb)
                 except Exception:
                     pass

@@ -46,6 +46,7 @@ logging.getLogger("disnake.client").setLevel(logging.INFO)
 from database import init_db
 from utils import state_backup
 from utils.checks import load_config
+from utils.embeds import set_default_icon
 from cogs.recruitment import RecruitLaunchView
 from cogs.promotions import PromotionLaunchView
 from cogs.events import EventAttendanceView
@@ -141,6 +142,13 @@ async def on_ready():
 
     config = load_config()
     bot_name = config.get("bot_name", "Hallez FAMQ")
+
+    # Короткие ответы бот строит без guild, а карточка без знака семьи выглядит чужой:
+    # запоминаем иконку сервера один раз, дальше её берут все карточки.
+    for g in bot.guilds:
+        if g.icon:
+            set_default_icon(g.icon.url)
+            break
 
     activity = disnake.Activity(
         type=disnake.ActivityType.watching,

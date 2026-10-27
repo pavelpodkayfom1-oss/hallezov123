@@ -20,7 +20,7 @@ import disnake
 from disnake.ext import commands
 
 from utils.checks import load_config
-from utils.embeds import note_embed
+from utils.embeds import card, note_embed, panel_embed
 
 # Кулдаун на заказ музыки (секунд на одного пользователя)
 PLAY_COOLDOWN = 20
@@ -854,11 +854,7 @@ class Music(commands.Cog):
         if p.text_channel:
             link = track["webpage_url"]
             shown = f"[{track['title']}]({link})" if link.startswith("http") else f"**{track['title']}**"
-            embed = disnake.Embed(
-                title="🎶 Сейчас играет",
-                description=shown,
-                color=_color(),
-            )
+            embed = card("🎶 Сейчас играет", shown, "embed_color", guild=guild)
             embed.add_field(name="Длительность", value=_fmt_duration(track["duration"]))
             if track.get("requester"):
                 embed.add_field(name="Заказал", value=track["requester"])
@@ -873,22 +869,19 @@ class Music(commands.Cog):
     @commands.slash_command(name="music_panel", description="Отправить панель музыки в этот канал",
                             default_member_permissions=disnake.Permissions(manage_guild=True))
     async def music_panel(self, inter: disnake.ApplicationCommandInteraction):
-        embed = disnake.Embed(
-            title="🎧 Музыкальная панель",
-            description=(
-                "Зайдите в голосовой канал и нажмите **«Включить музыку»**.\n"
-                "Бот спросит название из библиотеки семьи (или ссылку на звук), зайдёт к вам "
-                "в войс и поставит трек.\n\n"
-                "Треки кладутся кнопкой **«📥 Закинуть трек»** — просто прикрепи mp3. "
-                "«🎧 Треки» покажет, что уже есть.\n\n"
-                "Управление: ⏯ пауза • ⏭ скип • ⏹ стоп • 📜 очередь • 🔉🔊 громкость\n\n"
-                "Ещё: 🎼 **плейлисты** (собрал очередь — сохрани под именем, потом включи одним "
-                "нажатием), 🗳 **скип голосованием** (нужно большинство в канале, а не один "
-                "нахал) и 🔁 **авто-диджей** (очередь кончилась — бот сам берёт случайный трек, "
-                "вечер не затихает)"
-            ),
-            color=_color(),
-        )
+        embed = panel_embed("🎧 Музыка семьи", [
+            ("▶ Как включить",
+             "Зайдите в голосовой канал и нажмите **«Включить музыку»** — бот спросит название "
+             "из библиотеки семьи или ссылку на звук."),
+            ("📥 Библиотека",
+             "«Закинуть трек» — прикрепи mp3 прямо в канал, «Треки» покажет, что уже лежит."),
+            ("⏯ Управление",
+             "пауза · скип · стоп · очередь · громкость · 🗳 скип голосованием (нужно "
+             "большинство в канале, а не один нахал)"),
+            ("🎼 Плейлисты и диджей",
+             "🎼 плейлист — собрал очередь, сохранил под именем, включил одним нажатием; "
+             "📌 авто-диджей — очередь кончилась, бот сам берёт случайный трек."),
+        ], guild=inter.guild)
         await inter.channel.send(embed=embed, view=MusicPanelView())
         await inter.response.send_message(embed=note_embed("✅ Панель отправлена."), ephemeral=True)
 

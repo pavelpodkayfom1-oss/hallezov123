@@ -25,7 +25,7 @@ import disnake
 from disnake.ext import commands, tasks
 
 from database import DB_PATH, add_warn, get_active_warns, get_member, remove_warn, upsert_member
-from utils.embeds import note_embed
+from utils.embeds import brand_name, list_embed, note_embed, stamp
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
@@ -336,7 +336,7 @@ class StaffTools(commands.Cog):
         limit = int(cfg().get("warn_limit", 3))
         try:
             user = guild.get_member(uid) or await self.bot.fetch_user(uid)
-            await user.send(f"⚠️ Вам выдан выговор в семье **{cfg().get('bot_name', 'Hall FAMQ')}**.\n"
+            await user.send(f"⚠️ Вам выдан выговор в семье **{brand_name()}**.\n"
                             f"📝 Причина: {reason}\nАктивных выговоров: {len(active)}/{limit}")
         except Exception:
             pass
@@ -422,7 +422,7 @@ class StaffTools(commands.Cog):
                 await inter.response.send_message(embed=note_embed(text), ephemeral=True)
 
     # ───────────── КОМАНДЫ ─────────────
-    @commands.slash_command(name="staff", description="Инструменты руководства Hall FAMQ")
+    @commands.slash_command(name="staff", description=f"Инструменты руководства {brand_name()}")
     @commands.guild_only()
     async def staff(self, inter: disnake.ApplicationCommandInteraction):
         pass
@@ -563,12 +563,12 @@ class StaffTools(commands.Cog):
         rows = await q_all(
             "SELECT user_id, SUM(seconds) s FROM voice_daily WHERE day>=date('now',?) "
             "GROUP BY user_id ORDER BY s DESC LIMIT 10", (PERIODS[period][0],))
-        medals = ["🥇", "🥈", "🥉"]
-        text = "\n".join(f"{medals[i] if i < 3 else f'`{i + 1}.`'} <@{r['user_id']}> — **{fmt_dur(r['s'])}**"
-                         for i, r in enumerate(rows)) or "Пока нет данных."
         await inter.response.send_message(
-            embed=disnake.Embed(title=f"🎙️ Топ голосового онлайна — {PERIODS[period][2]}", description=text,
-                                color=embed_color()), ephemeral=True)
+            embed=list_embed(f"🎙️ Топ голосового онлайна — {PERIODS[period][2]}",
+                             [[f"<@{r['user_id']}>", f"**{fmt_dur(r['s'])}**"] for r in rows],
+                             medals=True, guild=inter.guild, empty="Пока нет данных.",
+                             note="Онлайн в голосовых каналах за выбранный период."),
+            ephemeral=True, allowed_mentions=disnake.AllowedMentions.none())
 
     # --- рекрутеры ---
     @staff.sub_command(name="recruiters", description="Статистика рекрутеров")
@@ -581,13 +581,13 @@ class StaffTools(commands.Cog):
             "SELECT reviewer_id, SUM(status='accepted') acc, SUM(status='rejected') rej FROM applications "
             "WHERE reviewer_id IS NOT NULL AND status IN ('accepted','rejected') AND closed_at>=datetime('now',?) "
             "GROUP BY reviewer_id ORDER BY (acc+rej) DESC LIMIT 10", (PERIODS[period][1],))
-        medals = ["🥇", "🥈", "🥉"]
-        text = "\n".join(f"{medals[i] if i < 3 else f'`{i + 1}.`'} <@{r['reviewer_id']}> — "
-                         f"✅ {r['acc']} · ❌ {r['rej']} · всего **{r['acc'] + r['rej']}**"
-                         for i, r in enumerate(rows)) or "Пока нет данных."
         await inter.response.send_message(
-            embed=disnake.Embed(title=f"📋 Рекрутеры — {PERIODS[period][2]}", description=text,
-                                color=embed_color()), ephemeral=True)
+            embed=list_embed(f"📋 Рекрутеры — {PERIODS[period][2]}",
+                             [[f"<@{r['reviewer_id']}>",
+                               f"✅ {r['acc']} · ❌ {r['rej']} · всего **{r['acc'] + r['rej']}**"]
+                              for r in rows],
+                             medals=True, guild=inter.guild, empty="Пока нет данных."),
+            ephemeral=True, allowed_mentions=disnake.AllowedMentions.none())
 
     # --- живая статистика ---
     @staff.sub_command(name="board", description="Создать самообновляющееся сообщение со статистикой")
@@ -616,7 +616,7 @@ class StaffTools(commands.Cog):
         warns = (await q_one("SELECT COUNT(*) n FROM warns WHERE active=1"))["n"]
         vtotal = (await q_one("SELECT COALESCE(SUM(seconds),0) s FROM voice_daily "
                               "WHERE day>=date('now','-6 days')"))["s"]
-        e = disnake.Embed(title=f"📊 Статистика {cfg().get('bot_name', 'Hall FAMQ')}", color=embed_color(),
+        e = disnake.Embed(title=f"📊 Статистика {brand_name()}", color=embed_color(),
                           timestamp=datetime.now(timezone.utc))
         e.add_field(f"👥 Состав: {total}", rank_txt, inline=True)
         e.add_field("📋 Заявки за 7 дней",

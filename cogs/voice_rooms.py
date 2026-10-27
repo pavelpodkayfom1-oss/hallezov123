@@ -17,7 +17,7 @@ from typing import Dict
 import disnake
 from disnake.ext import commands
 
-from utils.embeds import base_embed, note_embed
+from utils.embeds import note_embed, panel_embed
 
 ROOM_LIMIT = 4
 ROOM_PREFIX = "🎤"
@@ -275,14 +275,14 @@ class VoiceRooms(commands.Cog):
     @commands.slash_command(name="rooms_panel", description="Отправить панель временных комнат в этот канал",
                             default_member_permissions=disnake.Permissions(manage_guild=True))
     async def rooms_panel(self, inter: disnake.ApplicationCommandInteraction):
-        embed = base_embed(
-            "🎤 Временные комнаты",
-            (f"«🎤 Создать комнату» — бот делает голосовой канал с твоим именем на "
-             f"{ROOM_LIMIT} человек. Внутри ты можешь двигать и мутить своих.\n\n"
-             f"Никто не остался в канале — через {EMPTY_GRACE} секунд он удалится сам, "
-             "список каналов не засоряется. «🧹 Убрать пустые» чистит всё сразу."),
-            guild=inter.guild,
-        )
+        embed = panel_embed("🎤 Временные комнаты", [
+            ("🎤 Создать комнату",
+             f"Бот делает голосовой канал с твоим именем на {ROOM_LIMIT} человек. "
+             "Внутри ты можешь двигать и мутить своих."),
+            ("🧹 Убрать пустые",
+             f"Никто не остался в канале — через {EMPTY_GRACE} секунд он удаляется сам. "
+             "Эта кнопка чистит пустые сразу."),
+        ], guild=inter.guild)
         await inter.channel.send(embed=embed, view=RoomPanelView())
         await inter.response.send_message(embed=note_embed("✅ Панель отправлена."), ephemeral=True)
 

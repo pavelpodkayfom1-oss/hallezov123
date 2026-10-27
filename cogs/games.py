@@ -1,6 +1,6 @@
 """
 =====================================================================
-  ИГРОВОЙ МОДУЛЬ Zakonov FAMQ — ВСЁ В ОДНОМ ФАЙЛЕ
+  Игровой модуль семьи — всё в одном файле
 =====================================================================
 
 Просто положи этот файл в папку cogs/ и добавь "cogs.games" в список
@@ -34,7 +34,7 @@ import disnake
 from disnake.ext import commands
 from disnake import ButtonStyle
 
-from utils.embeds import note_embed
+from utils.embeds import brand_name, list_embed, note_embed
 
 # ---------------------------------------------------------------
 # Пути — файл лежит в cogs/, поднимаемся на уровень выше к корню проекта
@@ -431,15 +431,14 @@ class CasinoCog(commands.Cog):
         if not top:
             await inter.response.send_message(embed=note_embed("Пока никто не играл в казино."), ephemeral=True)
             return
-        lines = []
-        medals = ["🥇", "🥈", "🥉"]
-        for i, row in enumerate(top):
-            medal = medals[i] if i < 3 else f"`{i + 1}.`"
+        rows = []
+        for row in top:
             member = inter.guild.get_member(row["user_id"]) if inter.guild else None
             name = member.display_name if member else f"<@{row['user_id']}>"
-            lines.append(f"{medal} {name} — {CURRENCY} {fmt(row['balance'])}")
-        embed = disnake.Embed(title="🏆 Таблица лидеров", description="\n".join(lines), color=colors["main"])
-        await inter.response.send_message(embed=embed)
+            rows.append([name, f"{CURRENCY} {fmt(row['balance'])}"])
+        await inter.response.send_message(
+            embed=list_embed("🏆 Таблица лидеров", rows, medals=True, guild=inter.guild,
+                             empty="Пока никто не играл в казино."))
 
     @commands.slash_command(name="givecoins", description="[Админ] Выдать или списать монеты у участника")
     async def givecoins(
@@ -1198,7 +1197,7 @@ class PrankTemplateView(disnake.ui.View):
     async def on_select(self, inter: disnake.MessageInteraction):
         colors = get_colors()
         cfg = load_local_config()
-        bot_name = cfg.get("bot_name", "Zakonov FAMQ")
+        bot_name = brand_name()
 
         template_key = self.children[0].values[0]
         template = PRANK_TEMPLATES[template_key]

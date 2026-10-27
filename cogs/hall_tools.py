@@ -1,5 +1,5 @@
 """
-Hall FAMQ: дополнительные функции бота.
+Дополнительные функции бота для семьи.
 
  • Приветствие и правила новичку при входе на сервер
  • Автонапоминание о повышении (срок в днях/часах задаётся в панели /hall)
@@ -27,7 +27,7 @@ from disnake.ext import commands, tasks
 from database import DB_PATH
 from utils import brand
 from utils.checks import load_config
-from utils.embeds import note_embed
+from utils.embeds import brand_name, card, note_embed
 
 ROSTER_ROWS = 12                # строк списка в одном поле эмбеда
 # цвет стрелки — старшинство: чем ниже по иерархии, тем спокойнее цвет. В списке берётся
@@ -68,7 +68,7 @@ SETTINGS_PATH = os.path.join(
 
 DEFAULT_RULES = (
     "Привет, {mention}! 🌟\n\n"
-    "Рады видеть тебя на сервере **{server}** — это дом семьи **Hall FAMQ** на Majestic RP.\n\n"
+    "Рады видеть тебя на сервере **{server}** — это дом семьи **{family}** на Majestic RP.\n\n"
     "📜 **Правила сервера:**\n"
     "• Уважай всех участников, без оскорблений и токсичности\n"
     "• Никакой рекламы и спама\n"
@@ -76,7 +76,7 @@ DEFAULT_RULES = (
     "• Читай закреплённые сообщения в каналах\n\n"
     "📝 **Как вступить в семью:**\n"
     "1️⃣ Перейди в канал {recruit_channel}\n"
-    "2️⃣ Нажми кнопку **«Подать заявку в Hall FAMQ»** и заполни анкету\n"
+    "2️⃣ Нажми кнопку **«Подать заявку в {family}»** и заполни анкету\n"
     "3️⃣ Дождись рекрутера: он вызовет тебя на обзвон в голосовой канал\n\n"
     "✨ Желаем отличного настроения и удачи! Мы рады, что ты с нами 💎"
 )
@@ -202,11 +202,8 @@ def _color(key="embed_color"):
 
 
 def make_embed(title, desc="", color_key="embed_color"):
-    cfg = load_config()
-    e = disnake.Embed(title=title, description=desc, color=_color(color_key))
-    footer = cfg.get("texts", {}).get("footer_text", "{bot_name}")
-    e.set_footer(text=footer.replace("{bot_name}", cfg.get("bot_name", "Hall FAMQ")))
-    return e
+    """Карточка кога: бренд и время берёт общий фабрик (см. utils.embeds)."""
+    return card(title, desc, color_key)
 
 
 def is_admin(member) -> bool:
@@ -613,7 +610,7 @@ def panel_embed(guild) -> disnake.Embed:
         roles = "вручную, по порядку добавления:\n" + (
             " → ".join(f"<@&{r['role_id']}>" for r in s["roster_roles"]) or "роли не добавлены"
         )
-    e = make_embed("⚙️ Панель настроек Hall FAMQ", "Настройки приветствия, напоминаний, отпусков и списка состава.")
+    e = make_embed(f"⚙️ Панель настроек {brand_name()}", "Настройки приветствия, напоминаний, отпусков и списка состава.")
     e.add_field(
         name="👋 Приветствие",
         value=f"Статус: {'🟢 включено' if s['welcome_enabled'] else '🔴 выключено'}\n"
@@ -747,7 +744,7 @@ class RulesModal(disnake.ui.Modal):
             custom_id="hall:modal:rules",
             components=[
                 disnake.ui.TextInput(
-                    label="Текст (можно {mention} {server} {recruit_channel})",
+                    label="Текст (можно {mention} {server} {recruit_channel} {family})",
                     custom_id="text",
                     style=disnake.TextInputStyle.paragraph,
                     value=get_settings()["rules_text"][:4000],
@@ -975,6 +972,7 @@ class HallTools(commands.Cog):
             .replace("{mention}", member.mention)
             .replace("{server}", member.guild.name)
             .replace("{recruit_channel}", f"<#{recruit}>" if recruit else "канал набора")
+            .replace("{family}", brand_name())
         )
         embed = make_embed(f"👋 Добро пожаловать на {member.guild.name}!", text)
         try:
@@ -1053,8 +1051,8 @@ class HallTools(commands.Cog):
             notes.append("ℹ️ В базе состава этого человека не было, архив не создан.")
 
         dm = make_embed(
-            "🤍 Вы покинули семью Hall FAMQ",
-            f"Здравствуйте! Вы были уволены из семьи **Hall FAMQ**.\n\n📝 **Причина:** {reason}\n\n"
+            f"🤍 Вы покинули семью {brand_name()}",
+            f"Здравствуйте! Вы были уволены из семьи **{brand_name()}**.\n\n📝 **Причина:** {reason}\n\n"
             "Спасибо за время, проведённое вместе. Желаем вам удачи, ярких побед и отличного настроения! ✨\n"
             "Двери всегда открыты: при желании вы сможете подать заявку снова 🚪",
             "error_color",
@@ -1173,7 +1171,7 @@ class HallTools(commands.Cog):
         return bool(row)
 
     # ── /hall ──
-    @commands.slash_command(name="hall", description="Панель настроек Hall FAMQ", dm_permission=False)
+    @commands.slash_command(name="hall", description=f"Панель настроек {brand_name()}", dm_permission=False)
     async def hall(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter.author):
             await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
@@ -1241,7 +1239,7 @@ class HallTools(commands.Cog):
         строк в поле. Знак берём тот, что реально есть на сервере (см. /hz_emojis): не было
         стрелки — её аналог, а сырой токен показывать нельзя.
         """
-        name = load_config().get("bot_name", "Hall FAMQ")
+        name = brand_name()
         total = len({m.id for _, ms in sections for m in ms})
         marks = [brand.pick(self.bot, *tier) for tier in ROSTER_TIER]
         e = make_embed(
@@ -1438,7 +1436,7 @@ class HallTools(commands.Cog):
                 dm = make_embed(
                     "🌟 Пора подавать на повышение!",
                     f"Здравствуйте, {m['nick']}! 👋\n\n"
-                    f"Вы уже **{spent}** в семье **Hall FAMQ**, а значит можете подать отчёт на повышение "
+                    f"Вы уже **{spent}** в семье **{brand_name()}**, а значит можете подать отчёт на повышение "
                     f"до ранга **{target_name} (3 ранг)**! 🎖️\n\n"
                     + (f"📝 Подать отчёт можно в канале <#{promo_ch}>.\n\n" if promo_ch else "")
                     + "Желаем успехов и новых высот, вы заслужили это! 🚀✨",

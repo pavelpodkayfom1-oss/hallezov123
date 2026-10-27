@@ -2,7 +2,7 @@ import disnake
 from disnake.ext import commands
 from typing import Optional, Dict
 from utils.checks import load_config, save_config, is_admin, get_text
-from utils.embeds import base_embed, success_embed, error_embed, warning_embed
+from utils.embeds import base_embed, brand_name, note_embed, success_embed, error_embed, warning_embed
 from database import get_stats
 from cogs.recruitment import RecruitLaunchView
 from cogs.promotions import PromotionLaunchView, build_promo_panel_embed
@@ -474,7 +474,7 @@ class SendPanelsView(disnake.ui.View):
             await inter.edit_original_response(content="❌ Сначала привяжите канал подачи заявок в меню 'Настройка каналов'!")
             return
 
-        title = get_text("recruit_panel_title", "⚜️ НАБОР В СЕМЬЮ ZAKONOV FAMQ ⚜️")
+        title = get_text("recruit_panel_title", f"⚜️ НАБОР В СЕМЬЮ {brand_name().upper()} ⚜️")
         desc = get_text("recruit_panel_desc", "Подайте заявку на вступление через кнопку ниже:")
         emb = base_embed(title, desc, guild=inter.guild)
         view = RecruitLaunchView()
@@ -641,7 +641,7 @@ class MainCategorySelect(disnake.ui.StringSelect):
             )
         ]
         super().__init__(
-            placeholder="Выберите раздел настроек Zakonov FAMQ...",
+            placeholder=f"Выберите раздел настроек {brand_name()}...",
             min_values=1,
             max_values=1,
             options=options,
@@ -714,7 +714,7 @@ class MainDashboardView(disnake.ui.View):
         super().__init__(timeout=300)
         self.add_item(MainCategorySelect())
 
-    @disnake.ui.button(label="🔒 Тумблер набора", style=disnake.ButtonStyle.primary, emoji="🔄", row=1)
+    @disnake.ui.button(label="Тумблер набора", style=disnake.ButtonStyle.primary, emoji="🔄", row=1)
     async def toggle_recruit(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         await inter.response.defer(ephemeral=True)
         config = load_config()
@@ -722,9 +722,12 @@ class MainDashboardView(disnake.ui.View):
         config["recruitment_open"] = not current
         save_config(config)
         state_str = "🟢 ОТКРЫТ" if config["recruitment_open"] else "🔴 ЗАКРЫТ"
-        await inter.edit_original_response(content=f"Прием заявок в семью теперь: **{state_str}**")
+        emb = await self.generate_dashboard_embed(inter.bot, inter.guild)
+        await inter.edit_original_response(embed=emb, view=self)
+        await inter.followup.send(embed=note_embed(f"Прием заявок в семью теперь: **{state_str}**"),
+                                  ephemeral=True)
 
-    @disnake.ui.button(label="🏷️ Тумблер авто-ников", style=disnake.ButtonStyle.secondary, emoji="✏️", row=1)
+    @disnake.ui.button(label="Тумблер авто-ников", style=disnake.ButtonStyle.secondary, emoji="✏️", row=1)
     async def toggle_nicknames(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         await inter.response.defer(ephemeral=True)
         config = load_config()
@@ -732,9 +735,12 @@ class MainDashboardView(disnake.ui.View):
         config["auto_nicknames"] = not current
         save_config(config)
         state_str = "🟢 ВКЛЮЧЕНО" if config["auto_nicknames"] else "🔴 ВЫКЛЮЧЕНО"
-        await inter.edit_original_response(content=f"Авто-смена ников теперь: **{state_str}**")
+        emb = await self.generate_dashboard_embed(inter.bot, inter.guild)
+        await inter.edit_original_response(embed=emb, view=self)
+        await inter.followup.send(embed=note_embed(f"Авто-смена ников теперь: **{state_str}**"),
+                                  ephemeral=True)
 
-    @disnake.ui.button(label="🔄 Обновить дашборд", style=disnake.ButtonStyle.secondary, emoji="🔃", row=1)
+    @disnake.ui.button(label="Обновить дашборд", style=disnake.ButtonStyle.secondary, emoji="🔃", row=1)
     async def refresh_btn(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         embed = await self.generate_dashboard_embed(inter.bot, inter.guild)
         await inter.response.edit_message(embed=embed, view=self)
@@ -749,7 +755,7 @@ class MainDashboardView(disnake.ui.View):
         ping_ms = round(bot.latency * 1000)
 
         emb = base_embed(
-            "👑 ПАНЕЛЬ УПРАВЛЕНИЯ ZAKONOV FAMQ • АДМИН-ЦЕНТР",
+            f"👑 ПАНЕЛЬ УПРАВЛЕНИЯ {brand_name().upper()} • АДМИН-ЦЕНТР",
             "Главная консоль управления рекрутингом, составом и функционалом бота для руководства семьи.",
             guild=guild
         )
@@ -801,7 +807,6 @@ class MainDashboardView(disnake.ui.View):
             inline=False
         )
 
-        emb.set_footer(text="Zakonov FAMQ Admin System • Все изменения сохраняются в config.json")
         return emb
 
 
@@ -811,7 +816,7 @@ class AdminCog(commands.Cog):
 
     @commands.slash_command(
         name="admin",
-        description="Главная панель управления семьей Zakonov FAMQ (Только для руководства)"
+        description=f"Панель управления семьей {brand_name()} (только для руководства)"
     )
     async def admin_command(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter):
@@ -827,7 +832,7 @@ class AdminCog(commands.Cog):
 
     @commands.slash_command(
         name="codex",
-        description="Быстрый вызов панели Zakonov FAMQ (Алиас для /admin)"
+        description=f"Быстрый вызов панели {brand_name()} (алиас /admin)"
     )
     async def codex_command(self, inter: disnake.ApplicationCommandInteraction):
         await self.admin_command(inter)

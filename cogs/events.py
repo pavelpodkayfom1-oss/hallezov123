@@ -310,6 +310,11 @@ class Events(commands.Cog):
             desc_tpl.format(time=normalize_time(time_str), info=info),
             guild=inter.guild
         )
+        when = _parse_when(_when_from_embed(event_emb))
+        if when:
+            # <t::R> Discord пересчитывает сам: «через 40 минут» живёт без правок сообщения.
+            ts = int(when.timestamp())
+            event_emb.description += f"\n\n⏳ До сбора <t:{ts}:R> · <t:{ts}:F>"
 
         lbl_yes = get_text("btn_event_yes", "Буду (+)")
         lbl_late = get_text("btn_event_late", "Опоздаю (+-)")

@@ -1,5 +1,5 @@
 """
-cogs/famq_control.py — контроль семьи Hall FAMQ.
+Контроль семьи: статус, выговоры, blacklist, голосовой онлайн.
 
 Что внутри:
   • /card        — карточка участника с кнопками Повысить / Понизить / Выговор / Уволить
@@ -24,7 +24,7 @@ from disnake.ext import commands, tasks
 
 from database import DB_PATH, get_member, remove_warn, upsert_member
 from utils.checks import load_config
-from utils.embeds import note_embed
+from utils.embeds import brand_name, list_embed, note_embed, stamp
 
 # ───────────────────────── Настройки ─────────────────────────
 WARN_LIMIT = 3              # при стольких активных выговорах уведомляем руководство
@@ -76,10 +76,8 @@ def _color(cfg: dict, key: str, default: int) -> int:
 
 
 def _footer(embed: disnake.Embed) -> disnake.Embed:
-    cfg = load_config()
-    text = cfg.get("texts", {}).get("footer_text", "{bot_name}")
-    embed.set_footer(text=text.replace("{bot_name}", cfg.get("bot_name", "Hall FAMQ")))
-    return embed
+    """Бренд для эмбедов, собранных вручную: футер, обложка и время как у всех карточек бота."""
+    return stamp(embed)
 
 
 def rank_name(cfg: dict, rank: Optional[int]) -> str:
@@ -851,10 +849,10 @@ class FamqControl(commands.Cog):
         top = await self.voice_top(period_since(period), 10)
         if not top:
             return await inter.response.send_message(embed=note_embed("За этот период данных пока нет."), ephemeral=True)
-        lines = [f"{MEDALS[i] if i < 3 else f'`{i + 1}.`'} <@{uid}> — **{fmt_duration(sec)}**" for i, (uid, sec) in enumerate(top)]
-        emb = disnake.Embed(title=f"🎙️ Топ голосового онлайна {PERIOD_LABEL[period]}", description="\n".join(lines),
-                            color=_color(load_config(), "embed_color", 0x990000))
-        await inter.response.send_message(embed=_footer(emb), allowed_mentions=disnake.AllowedMentions.none())
+        emb = list_embed(f"🎙️ Топ голосового онлайна {PERIOD_LABEL[period]}",
+                         [[f"<@{uid}>", f"**{fmt_duration(sec)}**"] for uid, sec in top],
+                         medals=True, guild=inter.guild, empty="За этот период данных пока нет.")
+        await inter.response.send_message(embed=emb, allowed_mentions=disnake.AllowedMentions.none())
 
     @voice.sub_command(name="me", description="Ваш голосовой онлайн (или участника — для руководства)")
     async def voice_me(self, inter: disnake.ApplicationCommandInteraction,
@@ -880,15 +878,14 @@ class FamqControl(commands.Cog):
         rows = await db_recruiter_rows(period_since(period))
         if not rows:
             return await inter.response.send_message(embed=note_embed("За этот период решений по заявкам нет."), ephemeral=True)
-        lines = []
-        for i, r in enumerate(rows[:15]):
+        cells = []
+        for r in rows[:15]:
             total = r["accepted"] + r["rejected"]
             rate = round(r["accepted"] / total * 100) if total else 0
-            lines.append(f"{MEDALS[i] if i < 3 else f'`{i + 1}.`'} <@{r['reviewer_id']}> — всего **{total}** "
-                         f"(✅ {r['accepted']} / ❌ {r['rejected']}, принято {rate}%)")
-        emb = disnake.Embed(title=f"📋 Рекрутеры {PERIOD_LABEL[period]}", description="\n".join(lines),
-                            color=_color(load_config(), "embed_color", 0x990000))
-        await inter.response.send_message(embed=_footer(emb), allowed_mentions=disnake.AllowedMentions.none())
+            cells.append([f"<@{r['reviewer_id']}>", f"всего **{total}** (✅ {r['accepted']} / ❌ {r['rejected']})\nпринято {rate}%"])
+        emb = list_embed(f"📋 Рекрутеры {PERIOD_LABEL[period]}", cells, medals=True,
+                         guild=inter.guild, empty="За этот период решений по заявкам нет.")
+        await inter.response.send_message(embed=emb, allowed_mentions=disnake.AllowedMentions.none())
 
     # ═════════════════════ Живая статистика ═════════════════════
     async def build_stats_embed(self) -> disnake.Embed:
@@ -918,7 +915,7 @@ class FamqControl(commands.Cog):
         vlines = [f"{MEDALS[i]} <@{u}> — {fmt_duration(s)}" for i, (u, s) in enumerate(vtop)]
         rec = await db_recruiter_rows(now - 7 * 86400)
 
-        emb = disnake.Embed(title=f"📊 Статистика {cfg.get('bot_name', 'Hall FAMQ')}",
+        emb = disnake.Embed(title=f"📊 Статистика {brand_name()}",
                             description=f"Обновлено: <t:{now}:R>", color=_color(cfg, "embed_color", 0x990000))
         emb.add_field(name=f"👥 Состав ({total})", value="\n".join(rank_lines), inline=True)
         emb.add_field(name="📥 Заявки за 7 дней",
