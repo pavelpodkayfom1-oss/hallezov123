@@ -15,7 +15,7 @@ from typing import List, Optional
 import disnake
 from disnake.ext import commands
 
-from utils import brand
+from utils import brand, cdn_assets
 from utils.checks import is_admin, load_config
 from utils.embeds import card, clip, list_embed, note_embed, panel_embed
 
@@ -132,9 +132,17 @@ def _move(st: dict, kind: str, amount: int, who: int, note: str) -> None:
 
 
 # ─────────────────────────── баннеры и тексты ───────────────────────────
-def _file(name: str) -> Optional[disnake.File]:
-    path = os.path.join(ASSETS_DIR, name)
-    return disnake.File(path, filename=name) if os.path.isfile(path) else None
+def _put_banner(embed: disnake.Embed, asset: str) -> Optional[disnake.File]:
+    """Картинка под текстом — как в заявках: ссылка на CDN, а если её нет — вложение."""
+    path = os.path.join(ASSETS_DIR, asset)
+    if not os.path.isfile(path):
+        return None
+    url = cdn_assets.cached_url(asset, path)
+    if url:
+        embed.set_image(url=url)
+        return None
+    embed.set_image(url=f"attachment://{asset}")
+    return disnake.File(path, filename=asset)
 
 
 async def _has_bot_message(ch, guild) -> bool:
@@ -147,26 +155,35 @@ async def _has_bot_message(ch, guild) -> bool:
 def _bank_text(bot) -> str:
     crown = brand.emoji(bot, "red_crown", "👑")
     house = brand.emoji(bot, "hz_house", "🏠")
+    bits = brand.emoji(bot, "hz_bitsicon", "💰")
+    book = brand.emoji(bot, "hz_book", "📖")
+    gift = brand.emoji(bot, "hz_gifticon", "🎁")
+    star = brand.emoji(bot, "hz_winterstar", "⭐")
     return (
         f"{crown} **Банк семьи** — здесь лежат общие деньги: сборы, награбленное с мероприятий,\n"
         "подарки от друзей семьи. Всё, что уходит, уходит только через отчёт и приёмку.\n\n"
-        f"▸ **💰 Баланс казны** — сколько лежит сейчас. Показывает только своим.\n"
-        f"▸ **📜 Книга казны** — последние пополнения и траты: кто, сколько и за что.\n"
-        f"▸ **➕ Пополнить** — записать взнос в казну (тоже остаётся в книге).\n\n"
-        f"{house} Отчёт подаётся в канале ниже, деньги списываются только после приёмки."
+        f"{bits} **💰 Баланс казны** — сколько лежит сейчас. Показывает только своим.\n"
+        f"{book} **📜 Книга казны** — последние пополнения и траты: кто, сколько и за что.\n"
+        f"{gift} **➕ Пополнить** — записать взнос в казну, он тоже остаётся в книге.\n\n"
+        f"{house} Отчёт подаётся в канале ниже — деньги списываются только после приёмки.\n"
+        f"{star} Казна семьи видна всем, кто состоит в семье."
     )
 
 
 def _reports_text(bot) -> str:
     pencil = brand.emoji(bot, "hz_pencil", "✍️")
+    cart = brand.emoji(bot, "hz_shoppingcart", "🛒")
+    meg = brand.emoji(bot, "hz_megaphone", "📢")
+    book = brand.emoji(bot, "hz_book", "📖")
+    like = brand.emoji(bot, "hz_likeicon", "👍")
     return (
         f"{pencil} **Как сдавать отчёт**\n\n"
         "Нажми **«🧾 Подать отчёт»** и заполни форму:\n"
-        "• **Сумма** — сколько ушло из казны;\n"
-        "• **На что** — статья расхода (мероприятие, форма, транспорт, откат после рейда);\n"
-        "• **Кому** — на кого потратили и на сколько человек;\n"
-        "• **Детали** — всё, что стоит знать проверяющему.\n\n"
-        "Отчёт уйдёт в **✅ приёмку**. Как его примут — сумма снимется с баланса, а в\n"
+        f"{cart} **Сумма** — сколько ушло из казны;\n"
+        f"{pencil} **На что** — статья расхода (мероприятие, форма, транспорт, откат после рейда);\n"
+        f"{like} **Кому** — на кого потратили и на сколько человек;\n"
+        f"{meg} **Детали** — всё, что стоит знать проверяющему.\n\n"
+        f"{book} Отчёт уйдёт в **✅ приёмку**. Как его примут — сумма снимется с баланса, а в\n"
         "**📜 логах казны** появится запись. Отклонят — вернётся тебе с причиной."
     )
 
@@ -176,40 +193,51 @@ def _review_text() -> str:
         "✅ **Приёмка отчётов**\n\n"
         "Сюда падают отчёты о тратах. Роль, которой ты выдал приёмку, жмёт **«Принять»** или\n"
         "**«Отклонить»**.\n\n"
-        "▸ Принято → деньги снимаются с баланса, отчёт уходит в логи казны.\n"
-        "▸ Отклонено → баланс не трогается, автор получает причину.\n\n"
+        "✔️ Принято → деньги снимаются с баланса, отчёт уходит в логи казны.\n"
+        "✖️ Отклонено → баланс не трогается, автор получает причину.\n\n"
         "_Кнопки без нужной роли молчат — это не баг, это казна._"
     )
 
 
 def _logs_text(bot) -> str:
     book = brand.emoji(bot, "hz_book", "📖")
+    train = brand.emoji(bot, "hz_trainicon", "🚂")
+    crown = brand.emoji(bot, "red_crown", "👑")
     return (
         f"{book} **Логи казны** — сюда падает всё принятое и все пополнения.\n"
-        "Канал только для записей бота: обсуждение — в отчётах, вопросы — руководству семьи."
+        f"{train} Канал только для записей бота: обсуждение — в отчётах, вопросы — руководству семьи.\n"
+        f"{crown} Тут история денег семьи: её не чистят и не правят руками."
     )
 
 
 # ─────────────────────────── карточки ───────────────────────────
 def _balance_embed(bot, guild, st: dict) -> disnake.Embed:
     crown = brand.emoji(bot, "red_crown", "👑")
+    bits = brand.emoji(bot, "hz_bitsicon", "💰")
+    gift = brand.emoji(bot, "hz_gifticon", "🎁")
+    cart = brand.emoji(bot, "hz_shoppingcart", "🛒")
+    book = brand.emoji(bot, "hz_book", "📖")
+    botv2 = brand.emoji(bot, "hz_botv2", "🤖")
     emb = card(f"{crown} Баланс казны", guild=guild)
     emb.description = (
-        f"**Остаток:** {_n(st['balance'])}\n\n"
-        f"Пополнено: **{_n(st['raised'])}** · Потрачено: **{_n(st['spent'])}**\n"
-        f"Записей в книге: {len(st['moves'])} · Отчётов подано: {st['seq']}"
+        f"{bits} **Остаток:** {_n(st['balance'])}\n\n"
+        f"{gift} Пополнено: **{_n(st['raised'])}** · {cart} Потрачено: **{_n(st['spent'])}**\n"
+        f"{book} Записей в книге: {len(st['moves'])} · {botv2} Отчётов подано: {st['seq']}"
     )
     return emb
 
 
 def _book_embed(bot, guild, st: dict) -> disnake.Embed:
+    gift = brand.emoji(bot, "hz_gifticon", "➕")
+    cart = brand.emoji(bot, "hz_shoppingcart", "🧾")
+    book = brand.emoji(bot, "hz_book", "⚖️")
     rows = []
     for m in list(reversed(st["moves"]))[:12]:
-        icon = "➕" if m["kind"] == "topup" else ("🧾" if m["kind"] == "spend" else "⚖️")
+        icon = gift if m["kind"] == "topup" else (cart if m["kind"] == "spend" else book)
         sign = "+" if m["kind"] == "topup" else ("−" if m["kind"] == "spend" else "=")
         rows.append([f"{icon} {sign}{_n(m['amount'])}",
                      f"{clip(m['note'], 90)}\n<@{m['by']}> · {_when(m['ts'])} · остаток {_n(m['bal'])}"])
-    return list_embed("📜 Книга казны", rows, guild=guild, inline=False,
+    return list_embed(f"{book} Книга казны", rows, guild=guild, inline=False,
                       empty="Книга чистая — трат ещё не было.",
                       note=f"Остаток: **{_n(st['balance'])}** · последние 12 записей")
 
@@ -217,26 +245,33 @@ def _book_embed(bot, guild, st: dict) -> disnake.Embed:
 def _report_embed(bot, guild, rep: dict) -> disnake.Embed:
     status = rep.get("status") or "wait"
     icon = {"wait": "⏳", "ok": "✅", "no": "❌"}.get(status, "⏳")
-    emb = card(f"🧾 Отчёт #{rep['id']} · {icon}", guild=guild,
+    cart = brand.emoji(bot, "hz_shoppingcart", "🧾")
+    bits = brand.emoji(bot, "hz_bitsicon", "💰")
+    pencil = brand.emoji(bot, "hz_pencil", "✍️")
+    like = brand.emoji(bot, "hz_likeicon", "👤")
+    meg = brand.emoji(bot, "hz_megaphone", "📢")
+    warn = brand.emoji(bot, "hz_warn", "📝")
+    emb = card(f"{cart} Отчёт #{rep['id']} · {icon}", guild=guild,
                color_key={"ok": "success_color", "no": "error_color"}.get(status, "embed_color"))
     emb.description = (
-        f"**Сумма:** {_n(rep['amount'])}\n"
-        f"**На что:** {clip(rep['purpose'], 200)}\n"
-        f"**Кому:** {clip(rep['people'], 200)}"
+        f"{bits} **Сумма:** {_n(rep['amount'])}\n"
+        f"{pencil} **На что:** {clip(rep['purpose'], 200)}\n"
+        f"{like} **Кому:** {clip(rep['people'], 200)}"
     )
     if rep.get("detail"):
-        emb.add_field(name="Детали", value=clip(rep["detail"], 900), inline=False)
+        emb.add_field(name=f"{meg} Детали", value=clip(rep["detail"], 900), inline=False)
     foot = f"Подал <@{rep['by']}> · {_when(rep['ts'])}"
     if status == "ok":
         foot += f"\n✅ Принял <@{rep.get('decided_by', 0)}> · {_when(rep.get('decided_ts', 0))}"
     elif status == "no":
         foot += (f"\n❌ Отклонил <@{rep.get('decided_by', 0)}> · {_when(rep.get('decided_ts', 0))}"
-                 f"\n📝 {clip(rep.get('reason', ''), 200)}")
+                 f"\n{warn} {clip(rep.get('reason', ''), 200)}")
     emb.add_field(name="Кто и когда", value=foot[:1024], inline=False)
     return emb
 
 
 def _mine_embed(bot, st: dict, uid: int) -> disnake.Embed:
+    pencil = brand.emoji(bot, "hz_pencil", "🧾")
     rows = []
     for rep in sorted(st["reports"].values(), key=lambda r: -int(r["id"]))[:12]:
         if int(rep["by"]) != int(uid):
@@ -244,7 +279,7 @@ def _mine_embed(bot, st: dict, uid: int) -> disnake.Embed:
         icon = {"wait": "⏳", "ok": "✅", "no": "❌"}.get(rep.get("status") or "wait", "⏳")
         rows.append([f"{icon} #{rep['id']} · {_n(rep['amount'])}",
                      f"{clip(rep['purpose'], 60)}\n{_when(rep['ts'])}"])
-    return list_embed("🧾 Мои отчёты", rows, guild=None, inline=False,
+    return list_embed(f"{pencil} Мои отчёты", rows, guild=None, inline=False,
                       empty="Ты ещё не подавал отчётов — форма в этом же канале.",
                       note="⏳ ждёт приёмку · ✅ принято · ❌ отклонён")
 
@@ -457,7 +492,7 @@ class Treasury(commands.Cog):
     # ── команда ──
     @commands.slash_command(name="казна", description="Казна семьи: банк, отчёты, приёмка",
                             default_member_permissions=disnake.Permissions(manage_guild=True),
-                            dm_permission=False)
+                            contexts=disnake.InteractionContextTypes(guild=True))
     async def kazna_panel(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter):
             return await inter.response.send_message(embed=_deny(), ephemeral=True)
@@ -470,13 +505,17 @@ class Treasury(commands.Cog):
             sections.append((title, ch.mention if ch else "*не создан*"))
         manage = " ".join(f"<@&{r}>" for r in _roles(st, "manage")) or "_не выбрана — только админы_"
         approve = " ".join(f"<@&{r}>" for r in _roles(st, "approve")) or "_не выбрана — берёт управление_"
-        sections.append(("💰 Остаток", _n(st["balance"])))
-        sections.append(("👑 Управление казной", manage))
-        sections.append(("✅ Приёмка отчётов", approve))
+        bits = brand.emoji(self.bot, "hz_bitsicon", "💰")
+        crown = brand.emoji(self.bot, "hz_moderatorpurple", "👑")
+        shield = brand.emoji(self.bot, "hz_moderator", "✅")
+        sections.append((f"{bits} Остаток", _n(st["balance"])))
+        sections.append((f"{crown} Управление казной", manage))
+        sections.append((f"{shield} Приёмка отчётов", approve))
         emb = panel_embed(f"{brand.emoji(self.bot, 'red_crown', '👑')} Казна семьи",
                           sections, guild=inter.guild,
                           intro="Кнопки ниже: собрать ветку каналов, выбрать роли и задать остаток.")
-        await inter.response.send_message(embed=emb, view=PanelView(st), ephemeral=True)
+        await inter.response.send_message(embed=emb, view=PanelView(st), ephemeral=True,
+                                          file=_put_banner(emb, BANK_BANNER))
 
     # ── создание ветки ──
     async def build_branch(self, inter) -> None:
@@ -572,16 +611,15 @@ class Treasury(commands.Cog):
                         await m.delete()
                     except disnake.DiscordException:
                         pass
-        banner = _file(BANK_BANNER)
-        if banner:
-            await ch["bank"].send(file=banner)
-        await ch["bank"].send(embed=card(f"{brand.emoji(self.bot, 'red_crown', '👑')} Банк семьи",
-                                         _bank_text(self.bot), guild=guild), view=BankView())
-        rbanner = _file(REPORT_BANNER)
-        if rbanner:
-            await ch["reports"].send(file=rbanner)
-        await ch["reports"].send(embed=card("🧾 Отчёты казны", _reports_text(self.bot),
-                                            guild=guild), view=ReportsView())
+        bank_emb = card(f"{brand.emoji(self.bot, 'red_crown', '👑')} Банк семьи",
+                        _bank_text(self.bot), guild=guild)
+        # Картинка не отдельным сообщением, а под текстом — как в заявках.
+        put = _put_banner(bank_emb, BANK_BANNER)
+        await ch["bank"].send(embed=bank_emb, view=BankView(), file=put)
+        rep_emb = card(f"{brand.emoji(self.bot, 'hz_pencil', '🧾')} Отчёты казны",
+                       _reports_text(self.bot), guild=guild)
+        rput = _put_banner(rep_emb, REPORT_BANNER)
+        await ch["reports"].send(embed=rep_emb, view=ReportsView(), file=rput)
         for key, title, text in (("review", "✅ Приёмка отчётов", _review_text()),
                                  ("logs", "📜 Логи казны", _logs_text(self.bot))):
             c = ch[key]
