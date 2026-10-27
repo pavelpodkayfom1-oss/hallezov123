@@ -251,25 +251,36 @@ class Reminders(commands.Cog):
         action, _, rid = cid.split(":", 2)
         if rid == "__warmup__":
             return await inter.response.send_message(embed=note_embed("Панель устарела."),
-                                                     ephemeral=True)
+                                                     ephemeral=inter.guild is not None)
         data = _load()
         rem = data.get(rid)
         if not rem:
             return await inter.response.send_message(
-                embed=note_embed("Это напоминание уже удалено."), ephemeral=True)
+                embed=note_embed("Это напоминание уже удалено."),
+                ephemeral=inter.guild is not None)
         if str(inter.author.id) != str(rem["user"]) and not _is_owner(inter):
             return await inter.response.send_message(
-                embed=note_embed("❌ Это чужое напоминание."), ephemeral=True)
+                embed=note_embed("❌ Это чужое напоминание."),
+                ephemeral=inter.guild is not None)
 
         if action == "done":
             data.pop(rid, None)
             _save(data)
+            if inter.guild is None:
+                # Кнопка в том же ЛС-сообщении: убираем их, иначе «Готово» жмётся второй раз.
+                return await inter.response.edit_message(
+                    embed=note_embed("✅ Отметил — больше не напомню.",
+                                     title="Напоминание закрыто"), view=None)
             await inter.response.send_message(embed=note_embed("✅ Отметил — больше не напомню."),
                                               ephemeral=True)
         elif action == "late":
             rem["ts"] = int(time.time()) + 3600
             rem["sent"] = False
             _save(data)
+            if inter.guild is None:
+                return await inter.response.edit_message(
+                    embed=note_embed(f"⏰ Напомню через час: {until(rem['ts'])}",
+                                     title="Отложено"), view=ReminderActions(rid))
             await inter.response.send_message(
                 embed=note_embed(f"⏰ Напомню через час: {until(rem['ts'])}"), ephemeral=True)
         elif action == "cancel":
