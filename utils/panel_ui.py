@@ -13,7 +13,7 @@ INDEX_HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>Панель управления ботом</title>
-<meta name="theme-color" content="#07070a">
+<meta name="theme-color" content="#000000">
 <style nonce="__NONCE__">
 /* ============================================================
    Панель управления — новый дизайн
@@ -537,6 +537,136 @@ html[data-theme=light] .login{background:#fff}
   .mbar{background:rgba(10,11,15,.96)}
   html[data-theme=light] .mbar{background:rgba(255,255,255,.96)}
 }
+
+/* ============================================================
+   Чёрно-белая палитра и экран входа в стиле HUD.
+   Красного больше нет: акцент белый (в светлой теме чёрный).
+   ============================================================ */
+:root{
+  --bg:#000; --bg2:#050505;
+  --panel:#0a0a0a; --panel2:#111; --panel3:#1a1a1a;
+  --line:rgba(255,255,255,.10); --line2:rgba(255,255,255,.22);
+  --text:#f4f4f4; --muted:#9a9a9a; --faint:#5f5f5f;
+  --accent:#fff; --accent2:#d8d8d8; --accent-d:#bbb; --on-accent:#000;
+  --accent-soft:rgba(255,255,255,.07); --accent-line:rgba(255,255,255,.4);
+  --field:#050505; --code:#000; --hover:rgba(255,255,255,.06);
+}
+html[data-theme=light]{
+  --bg:#f5f5f5; --bg2:#fff;
+  --panel:#fff; --panel2:#f1f1f1; --panel3:#e6e6e6;
+  --line:rgba(0,0,0,.12); --line2:rgba(0,0,0,.25);
+  --text:#0a0a0a; --muted:#666; --faint:#999;
+  --accent:#000; --accent2:#333; --accent-d:#222; --on-accent:#fff;
+  --accent-soft:rgba(0,0,0,.06); --accent-line:rgba(0,0,0,.45);
+  --field:#fff; --code:#0a0a0a; --hover:rgba(0,0,0,.05);
+}
+body::before{background:
+  radial-gradient(1000px 560px at 50% -14%, rgba(255,255,255,.11), transparent 70%),
+  radial-gradient(760px 520px at 100% 112%, rgba(255,255,255,.055), transparent 70%),
+  radial-gradient(700px 480px at 0% 100%, rgba(255,255,255,.035), transparent 70%),
+  var(--bg)}
+body::after{
+  background-image:
+    linear-gradient(rgba(255,255,255,.05) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.05) 1px,transparent 1px);
+  background-size:56px 56px;
+  -webkit-mask-image:radial-gradient(ellipse 85% 75% at 50% 0%,#000,transparent 80%);
+  mask-image:radial-gradient(ellipse 85% 75% at 50% 0%,#000,transparent 80%)}
+html[data-theme=light] body::before{background:
+  radial-gradient(1000px 560px at 50% -14%, rgba(0,0,0,.06), transparent 70%),
+  radial-gradient(760px 520px at 100% 112%, rgba(0,0,0,.04), transparent 70%),
+  var(--bg)}
+html[data-theme=light] body::after{
+  background-image:
+    linear-gradient(rgba(0,0,0,.06) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,0,0,.06) 1px,transparent 1px)}
+::selection{background:var(--accent);color:var(--on-accent)}
+a{color:var(--text)}
+input:focus,select:focus,textarea:focus{border-color:var(--accent-line);box-shadow:0 0 0 3px var(--accent-soft)}
+.btn.primary,html[data-theme=light] .btn.primary{background:var(--accent);color:var(--on-accent);border-color:transparent}
+.btn.primary:hover{background:var(--accent2)}
+.logo{background:var(--accent);color:var(--on-accent)}
+.side{background:rgba(0,0,0,.9)}
+html[data-theme=light] .side{background:rgba(255,255,255,.95)}
+.nav button.active{background:var(--accent-soft);color:var(--text)}
+.nav button.active .ico{background:var(--accent);color:var(--on-accent)}
+.nav button.active::before{background:var(--accent)}
+.pager button.active{background:var(--accent);color:var(--on-accent)}
+.switch.on{background:var(--accent)}
+.switch.on::after{background:var(--on-accent)}
+input[type=checkbox]:checked,input[type=radio]:checked{background:var(--accent);box-shadow:none}
+input[type=checkbox]:checked::after{border-color:var(--on-accent)}
+input[type=radio]:checked::after{background:var(--on-accent)}
+.stat::before{background:var(--accent)}
+.stat.ok::before{background:var(--ok)} .stat.warn::before{background:var(--warn)}
+.bar i{background:var(--accent)}
+.bar i.warn{background:var(--warn)} .bar i.ok{background:var(--ok)}
+.r.sel,.files button.active,.picks label:has(input:checked){background:var(--accent-soft);border-color:var(--accent-line)}
+.note{border-color:var(--line2);background:var(--accent-soft)}
+.tile .ic{background:var(--accent-soft);border-color:var(--line2)}
+@media (max-width:1000px){
+  .side{background:var(--panel)}
+  .mbar{background:rgba(0,0,0,.95)}
+  html[data-theme=light] .mbar{background:rgba(255,255,255,.96)}
+}
+
+/* ---------- вход в стиле HUD ---------- */
+.hudwrap{position:relative;min-height:100vh;display:grid;place-items:center;padding:1.2rem;overflow:hidden}
+.hudwrap::before{content:"";position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(closest-side at 50% 42%,rgba(255,255,255,.10),transparent 70%)}
+html[data-theme=light] .hudwrap::before{background:radial-gradient(closest-side at 50% 42%,rgba(0,0,0,.07),transparent 70%)}
+.hudwrap::after{content:"";position:absolute;left:0;right:0;top:-160px;height:160px;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(255,255,255,.055),transparent);animation:scan 8s linear infinite}
+html[data-theme=light] .hudwrap::after{background:linear-gradient(180deg,transparent,rgba(0,0,0,.05),transparent)}
+@keyframes scan{to{transform:translateY(calc(100vh + 160px))}}
+.hud{position:relative;z-index:1;width:100%;max-width:430px;display:flex;flex-direction:column;gap:.8rem;
+  padding:1.6rem 2.2rem 1.2rem;text-align:center;border:1px solid var(--line);background:rgba(0,0,0,.5);
+  animation:hudin .5s ease-out both!important}
+html[data-theme=light] .hud{background:rgba(255,255,255,.7)}
+@keyframes hudin{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+.hud .c{position:absolute;width:18px;height:18px;border:2px solid var(--text);pointer-events:none}
+.hud .c.tl{top:-2px;left:-2px;border-right:0;border-bottom:0}
+.hud .c.tr{top:-2px;right:-2px;border-left:0;border-bottom:0}
+.hud .c.bl{bottom:-2px;left:-2px;border-right:0;border-top:0}
+.hud .c.br{bottom:-2px;right:-2px;border-left:0;border-top:0}
+.reactor{width:200px;height:200px;margin:0 auto;color:var(--text);filter:drop-shadow(0 0 12px rgba(255,255,255,.35))}
+html[data-theme=light] .reactor{filter:none}
+.reactor svg{width:100%;height:100%;display:block;overflow:visible}
+.rg{transform-box:fill-box;transform-origin:center}
+.r1{animation:spin 36s linear infinite}
+.r2{animation:spin 20s linear infinite reverse}
+.r3{animation:spin 12s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.reactor .core{animation:corepulse 3s ease-in-out infinite}
+@keyframes corepulse{0%,100%{opacity:1}50%{opacity:.55}}
+.hudcap{font:600 .68rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.34em;text-transform:uppercase;color:var(--muted);padding-left:.34em}
+.hud h1{margin:0;font-size:1.3rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
+.hudfield{display:block;margin-top:.4rem}
+.hudfield input{width:100%;background:transparent;border:0;border-bottom:1px solid var(--line2);border-radius:0;
+  text-align:center;letter-spacing:.5em;padding:.7em 0 .7em .5em;font:1.15rem ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;box-shadow:none}
+.hudfield input:focus{border-bottom-color:var(--text);box-shadow:0 10px 18px -14px var(--text)}
+.hudbtn{border:1px solid var(--text);background:transparent;color:var(--text);padding:.8em 1em;cursor:pointer;
+  font:600 .78rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.32em;text-transform:uppercase}
+.hudbtn:hover:not(:disabled){background:var(--text);color:var(--bg)}
+.hudbtn:disabled{opacity:.5;cursor:wait}
+.hudstat{font:.72rem/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);min-height:1em}
+.hudstat::after{content:"_";animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.hud .hud-err{margin:0;min-height:1.2em;font:.74rem/1.3 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.06em;color:var(--err)}
+.hudfoot{display:flex;justify-content:space-between;margin-top:.3rem;padding-top:.65rem;border-top:1px solid var(--line);
+  font:.64rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
+.hudfoot span:first-child::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok);margin-right:.6em;vertical-align:1px}
+.hud.deny{animation:shake .38s!important}
+.hud.deny .c{border-color:var(--err)}
+.hud.deny .hudstat{color:var(--err)}
+@keyframes shake{20%{transform:translateX(-9px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
+.hud.granted .reactor{filter:drop-shadow(0 0 26px rgba(255,255,255,.9))}
+.hud.granted .r1,.hud.granted .r2,.hud.granted .r3{animation-duration:1.2s}
+.hud.granted .hudstat{color:var(--text)}
+@media (max-width:480px){.hud{padding:1.4rem 1.2rem 1rem}.reactor{width:170px;height:170px}.hud h1{font-size:1.1rem}}
+@media (prefers-reduced-motion:reduce){
+  .hudwrap::after,.reactor *,.hud{animation:none!important}
+}
 </style>
 </head>
 <body>
@@ -618,30 +748,69 @@ function fmtUptime(s) {
 }
 
 /* ---------- вход ---------- */
+/* Экран входа в стиле HUD: дуговой реактор, угловые рамки, часы, ответ «доступ разрешён/запрещён». */
+const REACTOR_SVG = '<svg viewBox="0 0 200 200" fill="none" stroke="currentColor" focusable="false">'
+  + '<g class="rg r1"><circle cx="100" cy="100" r="95" stroke-width="1" stroke-dasharray="2 7" opacity=".7"/>'
+  + '<circle cx="100" cy="100" r="88" stroke-width=".7" opacity=".35"/>'
+  + '<circle cx="100" cy="100" r="81" stroke-width="7" stroke-dasharray="2.4 8.7" opacity=".85"/></g>'
+  + '<g class="rg r2"><circle cx="100" cy="100" r="68" stroke-width="2" stroke-dasharray="70 18 110 18 80 18 90 18"/>'
+  + '<circle cx="100" cy="100" r="62" stroke-width=".7" opacity=".4"/></g>'
+  + '<g class="rg r3"><path d="M100 54 L140 123 L60 123 Z" stroke-width="1.2" opacity=".75"/>'
+  + '<circle cx="100" cy="100" r="46" stroke-width="1" stroke-dasharray="1 5" opacity=".7"/></g>'
+  + '<circle cx="100" cy="100" r="33" stroke-width="2"/>'
+  + '<circle cx="100" cy="100" r="26" stroke-width="10" stroke-dasharray="7.5 8.8" opacity=".9"/>'
+  + '<circle class="core" cx="100" cy="100" r="13" fill="currentColor" stroke="none"/></svg>';
+
+function clockText() {
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
+}
+
 function showLogin(msg) {
   stopTimer();
   state.isDirty = () => false;
-  const input = h('input', { type: 'password', placeholder: 'Пароль', autocomplete: 'current-password' });
-  const err = h('div', { class: 'err' }, msg || '');
+  const input = h('input', { type: 'password', placeholder: '········', autocomplete: 'current-password', 'aria-label': 'Пароль' });
+  const err = h('div', { class: 'err hud-err' }, msg || '');
+  const stat = h('div', { class: 'hudstat' }, msg ? 'Сессия завершена' : 'Ожидание идентификации');
+  const clock = h('span', { id: 'hudclock' }, clockText());
+  const reactor = h('div', { class: 'reactor', 'aria-hidden': 'true' });
+  reactor.innerHTML = REACTOR_SVG;
+  const btn = h('button', { class: 'hudbtn', type: 'submit' }, 'Авторизация');
   const form = h('form', {
-    class: 'card login',
+    class: 'hud',
     onsubmit: async (e) => {
       e.preventDefault();
       err.textContent = '';
+      form.classList.remove('deny');
+      btn.disabled = true;
+      stat.textContent = 'Проверка доступа…';
       try {
         await api('/api/login', { method: 'POST', body: { password: input.value } });
+        form.classList.add('granted');
+        stat.textContent = 'Доступ разрешён';
+        await sleep(550);
         await boot();
-      } catch (ex) { err.textContent = ex.message; input.select(); }
+      } catch (ex) {
+        btn.disabled = false;
+        void form.offsetWidth;
+        form.classList.add('deny');
+        stat.textContent = 'Доступ запрещён';
+        err.textContent = ex.message;
+        input.select();
+      }
     }
   },
-    h('div', { class: 'logo' }, 'H'),
+    h('i', { class: 'c tl' }), h('i', { class: 'c tr' }), h('i', { class: 'c bl' }), h('i', { class: 'c br' }),
+    reactor,
+    h('div', { class: 'hudcap' }, 'Защищённый доступ'),
     h('h1', null, 'Панель управления'),
-    h('p', { class: 'muted' }, 'Введите пароль, чтобы войти'),
-    input,
-    h('button', { class: 'btn primary wide', type: 'submit' }, 'Войти'),
-    err
-  );
-  $app.replaceChildren(h('div', { class: 'center' }, form));
+    h('label', { class: 'hudfield' }, input),
+    btn,
+    stat,
+    err,
+    h('div', { class: 'hudfoot' }, h('span', null, 'Система в сети'), clock));
+  $app.replaceChildren(h('div', { class: 'hudwrap' }, form));
+  state.timer = setInterval(() => { const c = document.getElementById('hudclock'); if (c) c.textContent = clockText(); }, 1000);
   input.focus();
 }
 
