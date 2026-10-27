@@ -83,8 +83,27 @@ def _allowed(inter, st: dict, key: str) -> bool:
     return bool(want) and any(r.id in want for r in getattr(member, "roles", []))
 
 
-def _deny() -> disnake.Embed:
-    return note_embed("⛔ Это канал казны: только для управления и приёмки.")
+def _deny(bot=None, guild=None) -> disnake.Embed:
+    warn = _e(bot, "hz_warn", "⚠️")
+    crown = _e(bot, "red_crown", "👑")
+    return note_embed(
+        f"{warn}  Это канал казны: остаток и приёмка видны только своим.\n\n"
+        f"{crown}  Роль выдаёт руководство семьи — экран `/казна`.",
+        "error", guild=guild, title=f"{warn}  НЕТ ДОСТУПА")
+
+
+def _warn(bot=None, guild=None, head: str = "ТАК НЕ ВЫЙДЕТ", text: str = "") -> disnake.Embed:
+    warn = _e(bot, "hz_warn", "⚠️")
+    return note_embed(text, "error", title=f"{warn}  {head}", guild=guild)
+
+
+def _need_manage(bot=None, guild=None) -> disnake.Embed:
+    pencil = _e(bot, "hz_pencil", "✍️")
+    bits = _e(bot, "hz_bitsicon", "💎")
+    return note_embed(
+        f"{pencil}  Отчёт подаёт **управление казной**\n"
+        f"{bits}  Роль выдаёт руководство семьи — экран `/казна`.",
+        "error", guild=guild, title=f"{pencil}  НЕ ТЕ ПРАВА")
 
 
 def _cog(inter) -> Optional["Treasury"]:
@@ -152,143 +171,184 @@ async def _has_bot_message(ch, guild) -> bool:
     return False
 
 
+def _e(bot, name: str, fallback: str) -> str:
+    return brand.emoji(bot, name, fallback)
+
+
 def _bank_text(bot) -> str:
-    crown = brand.emoji(bot, "red_crown", "👑")
-    house = brand.emoji(bot, "hz_house", "🏠")
-    bits = brand.emoji(bot, "hz_bitsicon", "💰")
-    book = brand.emoji(bot, "hz_book", "📖")
-    gift = brand.emoji(bot, "hz_gifticon", "🎁")
-    star = brand.emoji(bot, "hz_winterstar", "⭐")
+    crown = _e(bot, "red_crown", "👑")
+    house = _e(bot, "hz_house", "🏠")
+    bits = _e(bot, "hz_bitsicon", "💎")
+    book = _e(bot, "hz_book", "📖")
+    gift = _e(bot, "hz_gifticon", "🎁")
+    pc = _e(bot, "hz_pcicon", "🖥")
+    n = [_e(bot, f"number{i}", f"{i}⃣") for i in range(1, 4)]
     return (
-        f"{crown} **Банк семьи** — здесь лежат общие деньги: сборы, награбленное с мероприятий,\n"
-        "подарки от друзей семьи. Всё, что уходит, уходит только через отчёт и приёмку.\n\n"
-        f"{bits} **💰 Баланс казны** — сколько лежит сейчас. Показывает только своим.\n"
-        f"{book} **📜 Книга казны** — последние пополнения и траты: кто, сколько и за что.\n"
-        f"{gift} **➕ Пополнить** — записать взнос в казну, он тоже остаётся в книге.\n\n"
-        f"{house} Отчёт подаётся в канале ниже — деньги списываются только после приёмки.\n"
-        f"{star} Казна семьи видна всем, кто состоит в семье."
+        f"*{crown}  Казна не пустеет молча  {crown}*\n\n"
+        f"### {bits}  ЧТО ЗДЕСЬ\n"
+        f"{n[0]}  Общие деньги семьи: сборы, награбленное с мероприятий, подарки от друзей\n"
+        f"{n[1]}  Каждая трата проходит через **отчёт** и **приёмку**\n"
+        f"{n[2]}  Остаток видят только **свои** — управление казной и приёмка\n\n"
+        f"### {pc}  КНОПКИ\n"
+        f"{bits}  **💰 Баланс казны** — сколько лежит сейчас\n"
+        f"{book}  **📜 Книга казны** — кто, сколько и за что\n"
+        f"{gift}  **➕ Пополнить** — записать взнос, он тоже остаётся в книге\n\n"
+        f"> {house}  Отчёт подаётся в канале ниже. Деньги списываются **только после приёмки**."
     )
 
 
 def _reports_text(bot) -> str:
-    pencil = brand.emoji(bot, "hz_pencil", "✍️")
-    cart = brand.emoji(bot, "hz_shoppingcart", "🛒")
-    meg = brand.emoji(bot, "hz_megaphone", "📢")
-    book = brand.emoji(bot, "hz_book", "📖")
-    like = brand.emoji(bot, "hz_likeicon", "👍")
+    pencil = _e(bot, "hz_pencil", "✍️")
+    cart = _e(bot, "hz_shoppingcart", "🛒")
+    meg = _e(bot, "hz_megaphone", "📢")
+    book = _e(bot, "hz_book", "📖")
+    warn = _e(bot, "hz_warn", "⚠️")
+    crown = _e(bot, "red_crown", "👑")
+    n = [_e(bot, f"number{i}", f"{i}⃣") for i in range(1, 6)]
     return (
-        f"{pencil} **Как сдавать отчёт**\n\n"
-        "Нажми **«🧾 Подать отчёт»** и заполни форму:\n"
-        f"{cart} **Сумма** — сколько ушло из казны;\n"
-        f"{pencil} **На что** — статья расхода (мероприятие, форма, транспорт, откат после рейда);\n"
-        f"{like} **Кому** — на кого потратили и на сколько человек;\n"
-        f"{meg} **Детали** — всё, что стоит знать проверяющему.\n\n"
-        f"{book} Отчёт уйдёт в **✅ приёмку**. Как его примут — сумма снимется с баланса, а в\n"
-        "**📜 логах казны** появится запись. Отклонят — вернётся тебе с причиной."
+        f"*{pencil}  Потратил — отчитался  {pencil}*\n\n"
+        f"### {cart}  КАК СДАТЬ ОТЧЁТ\n"
+        f"{n[0]}  Нажми **«🧾 Подать отчёт»** и заполни форму\n"
+        f"{n[1]}  **Сумма** — сколько ушло из казны\n"
+        f"{n[2]}  **На что** — мероприятие, форма, транспорт, откат после рейда\n"
+        f"{n[3]}  **Кому** — на кого потратили и на сколько человек\n"
+        f"{n[4]}  **Детали** — всё, что стоит знать проверяющему\n\n"
+        f"### {meg}  ЧТО ДАЛЬШЕ\n"
+        f"✅  Приняли → сумма снялась с баланса, запись ушла в **📜 логи казны**\n"
+        f"❌  Отклонили → баланс **не тронут**, тебе вернётся причина\n\n"
+        f"> {warn}  Пиши как есть: {book} казна сходится до последней монеты, и это\n"
+        f"> спокойнее, чем объясняться потом. {crown}"
     )
 
 
-def _review_text() -> str:
+def _review_text(bot) -> str:
+    mod = _e(bot, "hz_moderator", "🛡")
+    purp = _e(bot, "hz_moderatorpurple", "👥")
+    book = _e(bot, "hz_book", "📖")
+    warn = _e(bot, "hz_warn", "⚠️")
+    crown = _e(bot, "red_crown", "👑")
+    bits = _e(bot, "hz_bitsicon", "💎")
     return (
-        "✅ **Приёмка отчётов**\n\n"
-        "Сюда падают отчёты о тратах. Роль, которой ты выдал приёмку, жмёт **«Принять»** или\n"
-        "**«Отклонить»**.\n\n"
-        "✔️ Принято → деньги снимаются с баланса, отчёт уходит в логи казны.\n"
-        "✖️ Отклонено → баланс не трогается, автор получает причину.\n\n"
-        "_Кнопки без нужной роли молчат — это не баг, это казна._"
+        f"*{crown}  Приёмка отчётов  {crown}*\n\n"
+        f"### {mod}  КТО РЕШАЕТ\n"
+        f"{purp}  Роль, которой выдана приёмка, жмёт **«Принять»** или **«Отклонить»**\n"
+        f"{book}  Без нужной роли кнопки молчат — это не баг, это казна\n\n"
+        f"### {bits}  ИСХОД ОТЧЁТА\n"
+        f"✅  **Принято** → деньги снимаются с баланса, отчёт уходит в **📜 логи казны**\n"
+        f"❌  **Отклонено** → баланс не трогается, автор получает причину\n\n"
+        f"> {warn}  Отчёт принимается один раз: повторная кнопка уже ничего не снимет."
     )
 
 
 def _logs_text(bot) -> str:
-    book = brand.emoji(bot, "hz_book", "📖")
-    train = brand.emoji(bot, "hz_trainicon", "🚂")
-    crown = brand.emoji(bot, "red_crown", "👑")
+    book = _e(bot, "hz_book", "📖")
+    train = _e(bot, "hz_trainicon", "🚂")
+    crown = _e(bot, "red_crown", "👑")
+    gift = _e(bot, "hz_gifticon", "🎁")
+    cart = _e(bot, "hz_shoppingcart", "🛒")
+    bits = _e(bot, "hz_bitsicon", "💎")
+    meg = _e(bot, "hz_megaphone", "📢")
     return (
-        f"{book} **Логи казны** — сюда падает всё принятое и все пополнения.\n"
-        f"{train} Канал только для записей бота: обсуждение — в отчётах, вопросы — руководству семьи.\n"
-        f"{crown} Тут история денег семьи: её не чистят и не правят руками."
+        f"*{book}  История денег семьи  {book}*\n\n"
+        f"### {train}  ЧТО СЮДА ПАДАЕТ\n"
+        f"{gift}  Каждое **пополнение** казны\n"
+        f"{cart}  Каждая **принятая трата** — сумма, статья и кому\n"
+        f"{bits}  Остаток после записи\n\n"
+        f"### {meg}  ПОРЯДОК В КАНАЛЕ\n"
+        f"{crown}  Тут только записи бота: обсуждение — в отчётах, вопросы — руководству\n\n"
+        f"> {book}  Логи не чистят и не правят руками — по ним семью и проверяют."
     )
 
 
 # ─────────────────────────── карточки ───────────────────────────
 def _balance_embed(bot, guild, st: dict) -> disnake.Embed:
-    crown = brand.emoji(bot, "red_crown", "👑")
-    bits = brand.emoji(bot, "hz_bitsicon", "💰")
-    gift = brand.emoji(bot, "hz_gifticon", "🎁")
-    cart = brand.emoji(bot, "hz_shoppingcart", "🛒")
-    book = brand.emoji(bot, "hz_book", "📖")
-    botv2 = brand.emoji(bot, "hz_botv2", "🤖")
-    emb = card(f"{crown} Баланс казны", guild=guild)
+    crown = _e(bot, "red_crown", "👑")
+    bits = _e(bot, "hz_bitsicon", "💎")
+    gift = _e(bot, "hz_gifticon", "🎁")
+    cart = _e(bot, "hz_shoppingcart", "🛒")
+    book = _e(bot, "hz_book", "📖")
+    botv2 = _e(bot, "hz_botv2", "🤖")
+    emb = card(f"{crown}  БАЛАНС КАЗНЫ", guild=guild)
     emb.description = (
-        f"{bits} **Остаток:** {_n(st['balance'])}\n\n"
-        f"{gift} Пополнено: **{_n(st['raised'])}** · {cart} Потрачено: **{_n(st['spent'])}**\n"
-        f"{book} Записей в книге: {len(st['moves'])} · {botv2} Отчётов подано: {st['seq']}"
+        f"### {bits}  {_n(st['balance'])}\n\n"
+        f"{gift}  Пополнено **{_n(st['raised'])}**\n"
+        f"{cart}  Потрачено **{_n(st['spent'])}**\n"
+        f"{book}  Записей в книге **{len(st['moves'])}**\n"
+        f"{botv2}  Отчётов подано **{st['seq']}**\n\n"
+        f"> {crown}  Деньги списываются только из принятого отчёта."
     )
     return emb
 
 
 def _book_embed(bot, guild, st: dict) -> disnake.Embed:
-    gift = brand.emoji(bot, "hz_gifticon", "➕")
-    cart = brand.emoji(bot, "hz_shoppingcart", "🧾")
-    book = brand.emoji(bot, "hz_book", "⚖️")
+    gift = _e(bot, "hz_gifticon", "➕")
+    cart = _e(bot, "hz_shoppingcart", "🧾")
+    bits = _e(bot, "hz_bitsicon", "⚖️")
+    book = _e(bot, "hz_book", "📖")
     rows = []
     for m in list(reversed(st["moves"]))[:12]:
-        icon = gift if m["kind"] == "topup" else (cart if m["kind"] == "spend" else book)
+        icon = gift if m["kind"] == "topup" else (cart if m["kind"] == "spend" else bits)
         sign = "+" if m["kind"] == "topup" else ("−" if m["kind"] == "spend" else "=")
-        rows.append([f"{icon} {sign}{_n(m['amount'])}",
-                     f"{clip(m['note'], 90)}\n<@{m['by']}> · {_when(m['ts'])} · остаток {_n(m['bal'])}"])
-    return list_embed(f"{book} Книга казны", rows, guild=guild, inline=False,
-                      empty="Книга чистая — трат ещё не было.",
-                      note=f"Остаток: **{_n(st['balance'])}** · последние 12 записей")
+        rows.append([f"{icon}  {sign}{_n(m['amount'])}",
+                     f"{clip(m['note'], 90)}\n<@{m['by']}> · {_when(m['ts'])} · "
+                     f"остаток **{_n(m['bal'])}**"])
+    return list_embed(f"{book}  КНИГА КАЗНЫ", rows, guild=guild, inline=False,
+                      empty=f"{book}  Книга чистая — трат ещё не было.",
+                      note=f"{_e(bot, 'hz_bitsicon', '💎')}  Остаток **{_n(st['balance'])}** · "
+                           f"последние 12 записей")
 
 
 def _report_embed(bot, guild, rep: dict) -> disnake.Embed:
     status = rep.get("status") or "wait"
-    icon = {"wait": "⏳", "ok": "✅", "no": "❌"}.get(status, "⏳")
-    cart = brand.emoji(bot, "hz_shoppingcart", "🧾")
-    bits = brand.emoji(bot, "hz_bitsicon", "💰")
-    pencil = brand.emoji(bot, "hz_pencil", "✍️")
-    like = brand.emoji(bot, "hz_likeicon", "👤")
-    meg = brand.emoji(bot, "hz_megaphone", "📢")
-    warn = brand.emoji(bot, "hz_warn", "📝")
-    emb = card(f"{cart} Отчёт #{rep['id']} · {icon}", guild=guild,
+    icon, word = {"ok": ("✅", "Принято — сумма списана"),
+                  "no": ("❌", "Отклонено — баланс не тронут"),
+                  "wait": ("⏳", "Ждёт приёмки")}.get(status, ("⏳", "Ждёт приёмки"))
+    cart = _e(bot, "hz_shoppingcart", "🧾")
+    bits = _e(bot, "hz_bitsicon", "💎")
+    pencil = _e(bot, "hz_pencil", "✍️")
+    like = _e(bot, "hz_membericon", "👤")
+    meg = _e(bot, "hz_megaphone", "📢")
+    book = _e(bot, "hz_book", "📖")
+    emb = card(f"{cart}  ОТЧЁТ #{rep['id']}", guild=guild,
                color_key={"ok": "success_color", "no": "error_color"}.get(status, "embed_color"))
     emb.description = (
-        f"{bits} **Сумма:** {_n(rep['amount'])}\n"
-        f"{pencil} **На что:** {clip(rep['purpose'], 200)}\n"
-        f"{like} **Кому:** {clip(rep['people'], 200)}"
+        f"### {bits}  {_n(rep['amount'])}\n\n"
+        f"{pencil}  **На что** — {clip(rep['purpose'], 200)}\n"
+        f"{like}  **Кому** — {clip(rep['people'], 200)}\n\n"
+        f"{icon}  **{word}**"
     )
     if rep.get("detail"):
-        emb.add_field(name=f"{meg} Детали", value=clip(rep["detail"], 900), inline=False)
-    foot = f"Подал <@{rep['by']}> · {_when(rep['ts'])}"
+        emb.add_field(name=f"{meg}  ДЕТАЛИ", value=clip(rep["detail"], 900), inline=False)
+    foot = f"{pencil}  Подал <@{rep['by']}> · {_when(rep['ts'])}"
     if status == "ok":
         foot += f"\n✅ Принял <@{rep.get('decided_by', 0)}> · {_when(rep.get('decided_ts', 0))}"
     elif status == "no":
         foot += (f"\n❌ Отклонил <@{rep.get('decided_by', 0)}> · {_when(rep.get('decided_ts', 0))}"
-                 f"\n{warn} {clip(rep.get('reason', ''), 200)}")
-    emb.add_field(name="Кто и когда", value=foot[:1024], inline=False)
+                 f"\n📝 {clip(rep.get('reason', ''), 200)}")
+    emb.add_field(name=f"{book}  ХРОНИКА", value=foot[:1024], inline=False)
     return emb
 
 
-def _mine_embed(bot, st: dict, uid: int) -> disnake.Embed:
-    pencil = brand.emoji(bot, "hz_pencil", "🧾")
+def _mine_embed(bot, st: dict, uid: int, guild=None) -> disnake.Embed:
+    pencil = _e(bot, "hz_pencil", "✍️")
+    bits = _e(bot, "hz_bitsicon", "💎")
+    mine = [r for r in (st["reports"] or {}).values() if int(r["by"]) == int(uid)]
     rows = []
-    for rep in sorted(st["reports"].values(), key=lambda r: -int(r["id"]))[:12]:
-        if int(rep["by"]) != int(uid):
-            continue
+    for rep in sorted(mine, key=lambda r: -int(r["id"]))[:12]:
         icon = {"wait": "⏳", "ok": "✅", "no": "❌"}.get(rep.get("status") or "wait", "⏳")
-        rows.append([f"{icon} #{rep['id']} · {_n(rep['amount'])}",
+        rows.append([f"{icon}  #{rep['id']} · {_n(rep['amount'])}",
                      f"{clip(rep['purpose'], 60)}\n{_when(rep['ts'])}"])
-    return list_embed(f"{pencil} Мои отчёты", rows, guild=None, inline=False,
-                      empty="Ты ещё не подавал отчётов — форма в этом же канале.",
-                      note="⏳ ждёт приёмку · ✅ принято · ❌ отклонён")
+    return list_embed(f"{pencil}  МОИ ОТЧЁТЫ", rows, guild=guild, inline=False,
+                      empty=f"{pencil}  Ты ещё не подавал отчётов.\n"
+                            f"{bits}  Форма — кнопка «🧾 Подать отчёт» в канале отчётов.",
+                      note="⏳ ждёт приёмку · ✅ принято — деньги списаны · ❌ отклонён")
 
 
 # ─────────────────────────── модалки ───────────────────────────
 class ReportModal(disnake.ui.Modal):
     def __init__(self):
         super().__init__(
-            title="Отчёт о трате из казны",
+            title="🧾 Отчёт о трате",
             custom_id="hzkazm:report",
             components=[
                 disnake.ui.TextInput(label="Сумма", custom_id="amount",
@@ -307,8 +367,11 @@ class ReportModal(disnake.ui.Modal):
     async def callback(self, inter: disnake.ModalInteraction):
         cog: Optional[Treasury] = inter.bot.get_cog("Treasury")
         if cog is None:
-            return await inter.response.send_message(embed=note_embed("⛔ Казна уснула."),
-                                                      ephemeral=inter.guild is not None)
+            return await inter.response.send_message(
+                embed=_warn(inter.bot, inter.guild, "КАЗНА СПИТ",
+                            f"{_e(inter.bot, 'hz_botv2', '🤖')}  Модуль казны не загружен — "
+                            "нужен рестарт бота."),
+                ephemeral=inter.guild is not None)
         await cog.submit(inter, str(inter.text_values["amount"]),
                          str(inter.text_values["purpose"]), str(inter.text_values["people"]),
                          str(inter.text_values.get("detail") or ""))
@@ -317,7 +380,7 @@ class ReportModal(disnake.ui.Modal):
 class TopUpModal(disnake.ui.Modal):
     def __init__(self):
         super().__init__(
-            title="Пополнение казны",
+            title="🎁 Пополнить казну",
             custom_id="hzkazm:topup",
             components=[
                 disnake.ui.TextInput(label="Сумма", custom_id="amount",
@@ -339,7 +402,7 @@ class SetBalanceModal(disnake.ui.Modal):
     def __init__(self, current: int):
         self.current = current
         super().__init__(
-            title="Задать остаток в казне",
+            title="💰 Остаток казны",
             custom_id="hzkazm:setbal",
             components=[
                 disnake.ui.TextInput(label="Новый остаток", custom_id="amount",
@@ -362,7 +425,7 @@ class RejectModal(disnake.ui.Modal):
     def __init__(self, rid: str):
         self.rid = rid
         super().__init__(
-            title="Отклонить отчёт",
+            title="🛡 Почему отклоняем",
             custom_id=f"hzkazm:reject:{rid}",
             components=[
                 disnake.ui.TextInput(label="Причина отказа", custom_id="reason",
@@ -438,8 +501,8 @@ class PanelView(disnake.ui.View):
     def __init__(self, st: dict):
         super().__init__(timeout=900)
         self.st = st
-        for key, placeholder in (("manage", "👑 Роль управления казной"),
-                                 ("approve", "✅ Роль приёмки отчётов")):
+        for key, placeholder in (("manage", "👑 Выбери роль управления казной (до 3)"),
+                                 ("approve", "🛡 Выбери роль приёмки отчётов (до 3)")):
             select = disnake.ui.RoleSelect(
                 custom_id=f"hzkazp:role:{key}", placeholder=placeholder,
                 max_values=3, row=2 if key == "manage" else 3,
@@ -495,25 +558,37 @@ class Treasury(commands.Cog):
                             contexts=disnake.InteractionContextTypes(guild=True))
     async def kazna_panel(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter):
-            return await inter.response.send_message(embed=_deny(), ephemeral=True)
+            return await inter.response.send_message(embed=_deny(self.bot, inter.guild), ephemeral=True)
         st = _load()
+        bank_i = _e(self.bot, "hz_bitsicon", "💎")
+        rep_i = _e(self.bot, "hz_pencil", "✍️")
+        rev_i = _e(self.bot, "hz_moderator", "🛡")
+        log_i = _e(self.bot, "hz_book", "📖")
+        crown_i = _e(self.bot, "red_crown", "👑")
+        purp_i = _e(self.bot, "hz_moderatorpurple", "👥")
+        house_i = _e(self.bot, "hz_house", "🏠")
         sections = []
-        for key, title in (("bank", "🏦 Банк семьи"), ("reports", "🧾 Отчёты"),
-                           ("review", "✅ Приёмка"), ("logs", "📜 Логи казны")):
+        for key, title in (("bank", f"{bank_i}  БАНК СЕМЬИ"), ("reports", f"{rep_i}  ОТЧЁТЫ"),
+                           ("review", f"{rev_i}  ПРИЁМКА"), ("logs", f"{log_i}  ЛОГИ КАЗНЫ")):
             cid = (st["channels"] or {}).get(key)
             ch = inter.guild.get_channel(int(cid)) if cid else None
-            sections.append((title, ch.mention if ch else "*не создан*"))
-        manage = " ".join(f"<@&{r}>" for r in _roles(st, "manage")) or "_не выбрана — только админы_"
-        approve = " ".join(f"<@&{r}>" for r in _roles(st, "approve")) or "_не выбрана — берёт управление_"
-        bits = brand.emoji(self.bot, "hz_bitsicon", "💰")
-        crown = brand.emoji(self.bot, "hz_moderatorpurple", "👑")
-        shield = brand.emoji(self.bot, "hz_moderator", "✅")
-        sections.append((f"{bits} Остаток", _n(st["balance"])))
-        sections.append((f"{crown} Управление казной", manage))
-        sections.append((f"{shield} Приёмка отчётов", approve))
-        emb = panel_embed(f"{brand.emoji(self.bot, 'red_crown', '👑')} Казна семьи",
-                          sections, guild=inter.guild,
-                          intro="Кнопки ниже: собрать ветку каналов, выбрать роли и задать остаток.")
+            sections.append((title, ch.mention if ch else
+                             f"_нет — нажми «🏗 Создать ветку казны» ниже_"))
+        manage = " ".join(f"<@&{r}>" for r in _roles(st, "manage")) or \
+            "_не выбрана — казной правят только админы семьи_"
+        approve = " ".join(f"<@&{r}>" for r in _roles(st, "approve")) or \
+            "_не выбрана — приёмка берёт роль управления_"
+        sections.append((f"{bank_i}  ОСТАТОК КАЗНЫ",
+                         f"**{_n(st['balance'])}**\n"
+                         f"{_e(self.bot, 'hz_gifticon', '🎁')}  собрано {_n(st['raised'])} · "
+                         f"{rep_i} отчётов {st['seq']} · {log_i} записей {len(st['moves'])}"))
+        sections.append((f"{purp_i}  УПРАВЛЕНИЕ КАЗНОЙ", manage))
+        sections.append((f"{rev_i}  ПРИЁМКА ОТЧЁТОВ", approve))
+        emb = panel_embed(
+            f"{crown_i}  КАЗНА СЕМЬИ", sections, guild=inter.guild,
+            intro=(f"*{crown_i}  Казна не пустеет молча  {crown_i}*\n"
+                   f"{house_i}  Одно нажатие поднимает ветку: банк, отчёты, приёмка и логи.\n"
+                   f"{rep_i}  Дальше — выбрать роли и задать остаток, кнопки ниже."))
         await inter.response.send_message(embed=emb, view=PanelView(st), ephemeral=True,
                                           file=_put_banner(emb, BANK_BANNER))
 
@@ -521,7 +596,11 @@ class Treasury(commands.Cog):
     async def build_branch(self, inter) -> None:
         guild = inter.guild
         if guild is None:
-            return await inter.followup.send(embed=note_embed("⛔ Только на сервере."), ephemeral=True)
+            return await inter.followup.send(
+                embed=_warn(self.bot, None, "ТОЛЬКО НА СЕРВЕРЕ",
+                            f"{_e(self.bot, 'hz_house', '🏠')}  Казна живёт на сервере семьи — "
+                            "собирать ветку нужно там, в `/казна`."),
+                ephemeral=True)
         st = _load()
         me = guild.me
         public = {guild.default_role: disnake.PermissionOverwrite(view_channel=True,
@@ -541,7 +620,7 @@ class Treasury(commands.Cog):
             cat = await guild.create_category(CATEGORY, overwrites=public,
                                               reason="Казна семьи")
             st["channels"]["category"] = cat.id
-            made.append(f"📁 {cat.mention}")
+            made.append(f"🗂 {cat.mention}")
         for key, name in CHANNELS.items():
             cid = int((st["channels"] or {}).get(key) or 0)
             ch = guild.get_channel(cid) if cid else None
@@ -549,7 +628,7 @@ class Treasury(commands.Cog):
                 ch = await guild.create_text_channel(name, category=cat,
                                                      overwrites=private if key in ("review", "logs")
                                                      else public,
-                                                     topic=_topic(key),
+                                                     topic=_topic(self.bot, key),
                                                      reason="Казна семьи")
                 st["channels"][key] = ch.id
                 made.append(ch.mention)
@@ -562,10 +641,20 @@ class Treasury(commands.Cog):
         await self._sync_perms(guild, st)
         await self._post_banners(guild, st)
         note = ("Ветка собрана: " + ", ".join(made)) if made else "Ветка уже стояла целиком."
+        crown = _e(self.bot, "red_crown", "👑")
+        house = _e(self.bot, "hz_house", "🏠")
+        pencil = _e(self.bot, "hz_pencil", "✍️")
+        bits = _e(self.bot, "hz_bitsicon", "💎")
+        n1 = _e(self.bot, "number1", "1⃣")
+        n2 = _e(self.bot, "number2", "2⃣")
         await inter.followup.send(embed=note_embed(
-            f"✅ {note}\n\nБаннеры и объяснения разложены, кнопки работают.\n"
-            "Осталось выбрать роли управления и приёмки в этом же сообщении — "
-            "и задать остаток казны.", "success", title="👑 Казна семьи"), ephemeral=True)
+            f"### {crown}  Ветка казны готова\n\n"
+            f"{house}  {clip(note, 300)}\n\n"
+            f"{pencil}  Осталось два шага — прямо в этом сообщении:\n"
+            f"{n1}  выбрать **роль управления** и **роль приёмки**\n"
+            f"{n2}  {bits}  задать остаток кнопкой **«⚖️ Задать остаток»**\n\n"
+            f"> {house}  Баннеры, объяснения и кнопки уже лежат в каналах.",
+            "success", title=f"{crown}  КАЗНА СЕМЬИ", guild=guild), ephemeral=True)
 
     async def _sync_perms(self, guild, st: dict) -> None:
         """Приёмка и логи — приватные: пускаем выбранные роли и админов семьи."""
@@ -590,13 +679,28 @@ class Treasury(commands.Cog):
 
     async def post_banners(self, inter) -> None:
         if inter.guild is None:
-            return await inter.followup.send(embed=note_embed("⛔ Только на сервере."), ephemeral=True)
+            return await inter.followup.send(
+                embed=_warn(self.bot, None, "ТОЛЬКО НА СЕРВЕРЕ",
+                            f"{_e(self.bot, 'hz_house', '🏠')}  Баннеры кладутся в каналы казны "
+                            "на сервере семьи."),
+                ephemeral=True)
         st = _load()
         done = await self._post_banners(inter.guild, st)
-        await inter.followup.send(
-            embed=note_embed("✅ Баннеры перезалиты." if done else
-                             "⛔ Сначала нажми «🏗 Создать ветку казны»."),
-            ephemeral=True)
+        star = _e(self.bot, "hz_winterstar", "⭐")
+        crown = _e(self.bot, "red_crown", "👑")
+        house = _e(self.bot, "hz_house", "🏠")
+        if done:
+            emb = note_embed(
+                f"### {star}  Витрина казны обновлена\n\n"
+                f"{crown}  **Банк** и **отчёты** — объяснение сверху, баннер под текстом\n"
+                f"{_e(self.bot, 'hz_moderator', '🛡')}  **Приёмка** и **логи** — памятки для своих\n\n"
+                f"> {house}  Старые карточки убраны, кнопки на местах.",
+                "success", title=f"{star}  БАННЕРЫ ПЕРЕЗАЛИТЫ", guild=inter.guild)
+        else:
+            emb = _warn(self.bot, inter.guild, "ВЕТКИ ЕЩЁ НЕТ",
+                        f"{_e(self.bot, 'hz_pencil', '✍️')}  Сначала «🏗 Создать ветку казны» — "
+                        "баннеры кладутся в уже готовые каналы.")
+        await inter.followup.send(embed=emb, ephemeral=True)
 
     async def _post_banners(self, guild, st: dict) -> bool:
         ch = {k: guild.get_channel(int((st["channels"] or {}).get(k) or 0))
@@ -611,17 +715,19 @@ class Treasury(commands.Cog):
                         await m.delete()
                     except disnake.DiscordException:
                         pass
-        bank_emb = card(f"{brand.emoji(self.bot, 'red_crown', '👑')} Банк семьи",
+        bank_emb = card(f"{_e(self.bot, 'red_crown', '👑')}  БАНК СЕМЬИ",
                         _bank_text(self.bot), guild=guild)
         # Картинка не отдельным сообщением, а под текстом — как в заявках.
         put = _put_banner(bank_emb, BANK_BANNER)
         await ch["bank"].send(embed=bank_emb, view=BankView(), file=put)
-        rep_emb = card(f"{brand.emoji(self.bot, 'hz_pencil', '🧾')} Отчёты казны",
+        rep_emb = card(f"{_e(self.bot, 'hz_pencil', '✍️')}  ОТЧЁТЫ КАЗНЫ",
                        _reports_text(self.bot), guild=guild)
         rput = _put_banner(rep_emb, REPORT_BANNER)
         await ch["reports"].send(embed=rep_emb, view=ReportsView(), file=rput)
-        for key, title, text in (("review", "✅ Приёмка отчётов", _review_text()),
-                                 ("logs", "📜 Логи казны", _logs_text(self.bot))):
+        for key, title, text in (
+                ("review", f"{_e(self.bot, 'hz_moderator', '🛡')}  ПРИЁМКА ОТЧЁТОВ",
+                 _review_text(self.bot)),
+                ("logs", f"{_e(self.bot, 'hz_book', '📖')}  ЛОГИ КАЗНЫ", _logs_text(self.bot))):
             c = ch[key]
             if c is None or await _has_bot_message(c, guild):
                 continue
@@ -631,55 +737,80 @@ class Treasury(commands.Cog):
     # ── роли ──
     async def save_roles(self, inter, key: str, values) -> None:
         if not is_admin(inter):
-            return await inter.response.send_message(embed=_deny(),
+            return await inter.response.send_message(embed=_deny(self.bot, inter.guild),
                                                      ephemeral=inter.guild is not None)
         st = _load()
         st["roles"][key] = [int(r.id) for r in list(values)[:3]]
         _save(st)
         if inter.guild:
             await self._sync_perms(inter.guild, st)
-        label = "управления казной" if key == "manage" else "приёмки отчётов"
-        names = " ".join(f"<@&{r}>" for r in st["roles"][key]) or "_сброшена — теперь только админы_"
-        await inter.response.send_message(embed=note_embed(f"✅ Роль {label}: {names}", "success"),
-                                          ephemeral=True)
+        label = "Роль управления казной" if key == "manage" else "Роль приёмки отчётов"
+        names = " ".join(f"<@&{r}>" for r in st["roles"][key]) or \
+            f"_{label.lower()} сброшена — казной правят только админы семьи_"
+        crown = _e(self.bot, "red_crown", "👑")
+        mod = _e(self.bot, "hz_moderator", "🛡")
+        bits = _e(self.bot, "hz_bitsicon", "💎")
+        pencil = _e(self.bot, "hz_pencil", "✍️")
+        await inter.response.send_message(
+            embed=note_embed(f"### {mod}  {label}\n{names}\n\n"
+                             f"{bits}  Доступ к приёмке и логам казны уже переставлен\n"
+                             f"{pencil}  Управление подаёт отчёты и пополняет казну\n"
+                             f"{crown}  Приёмка решает судьбу каждого отчёта",
+                             "success", title=f"{mod}  РОЛЬ ВЫБРАНА", guild=inter.guild),
+            ephemeral=True)
 
     # ── баланс ──
     async def set_balance(self, inter, raw: str, note: str) -> None:
         if not is_admin(inter):
-            return await inter.response.send_message(embed=_deny(), ephemeral=True)
+            return await inter.response.send_message(embed=_deny(self.bot, inter.guild), ephemeral=True)
         value = _amount(raw)
         if value is None:
             return await inter.response.send_message(
-                embed=note_embed("❌ Не понял сумму. Напиши цифрами: `15000` или `15к`."),
+                embed=_warn(self.bot, inter.guild, "НЕ ПОНЯЛ СУММУ",
+                            f"{_e(self.bot, 'hz_bitsicon', '💎')}  Остаток пишут цифрами: "
+                            "`15000` или `15к`."),
                 ephemeral=True)
         st = _load()
         old = int(st["balance"])
         st["balance"] = value
         _move(st, "set", value - old, inter.author.id, note or "ручная корректировка остатка")
         _save(st)
+        bits = _e(self.bot, "hz_bitsicon", "💎")
+        pencil = _e(self.bot, "hz_pencil", "✍️")
+        crown = _e(self.bot, "red_crown", "👑")
         await inter.response.send_message(
-            embed=note_embed(f"⚖️ Остаток казны: **{_n(old)} → {_n(value)}**.\n"
-                             f"📝 {note or 'без пояснения'}", "success"), ephemeral=True)
-        await self._log(inter.guild, f"⚖️ Остаток казны изменили: {_n(old)} → {_n(value)}",
+            embed=note_embed(f"### {bits}  {_n(old)}  →  {_n(value)}\n\n"
+                             f"{pencil}  {note or 'без пояснения'}\n\n"
+                             f"> {crown}  Остаток правит только руководство семьи.",
+                             "success", title=f"{bits}  ОСТАТОК КАЗНЫ", guild=inter.guild),
+            ephemeral=True)
+        await self._log(inter.guild, f"{bits}  Остаток казны изменили: {_n(old)} → {_n(value)}",
                         inter.author.id, note or "ручная корректировка")
 
     async def top_up(self, inter, raw: str, note: str) -> None:
         st = _load()
         if not _allowed(inter, st, "manage"):
-            return await inter.response.send_message(embed=_deny(), ephemeral=True)
+            return await inter.response.send_message(embed=_deny(self.bot, inter.guild), ephemeral=True)
         value = _amount(raw)
         if value is None:
             return await inter.response.send_message(
-                embed=note_embed("❌ Не понял сумму. Напиши `50000` или `50к`."), ephemeral=True)
+                embed=_warn(self.bot, inter.guild, "НЕ ПОНЯЛ СУММУ",
+                            f"{_e(self.bot, 'hz_gifticon', '🎁')}  Взнос пишут цифрами: "
+                            "`50000` или `50к`."), ephemeral=True)
         st["balance"] = int(st["balance"]) + value
         st["raised"] = int(st["raised"]) + value
         _move(st, "topup", value, inter.author.id, note or "пополнение казны")
         _save(st)
+        gift = _e(self.bot, "hz_gifticon", "🎁")
+        bits = _e(self.bot, "hz_bitsicon", "💎")
+        book = _e(self.bot, "hz_book", "📖")
         await inter.response.send_message(
-            embed=note_embed(f"➕ Пополнили казну на **{_n(value)}**.\n"
-                             f"Остаток: **{_n(st['balance'])}** · {_when(int(time.time()))}\n"
-                             f"📝 {note or 'взнос в казну'}", "success"), ephemeral=True)
-        await self._log(inter.guild, f"➕ Пополнение казны: **{_n(value)}**",
+            embed=note_embed(f"### {gift}  +{_n(value)}\n\n"
+                             f"{bits}  Остаток: **{_n(st['balance'])}** · {_when(int(time.time()))}\n"
+                             f"{book}  {note or 'взнос в казну'}",
+                             "success", title=f"{gift}  ПОПОЛНЕНИЕ КАЗНЫ", guild=inter.guild),
+            ephemeral=True)
+        await self._log(inter.guild, f"{gift}  Пополнение казны: **{_n(value)}**",
                         inter.author.id, note or "взнос в казну")
 
     # ── отчёты ──
@@ -687,17 +818,21 @@ class Treasury(commands.Cog):
         st = _load()
         if not _allowed(inter, st, "manage"):
             return await inter.response.send_message(
-                embed=note_embed("⛔ Отчёт подаёт управление казной или руководство семьи."),
+                embed=_need_manage(self.bot, inter.guild),
                 ephemeral=True)
         value = _amount(raw_amount)
         if value is None:
             return await inter.response.send_message(
-                embed=note_embed("❌ Не понял сумму. Напиши `15000` или `15к`."), ephemeral=True)
+                embed=_warn(self.bot, inter.guild, "НЕ ПОНЯЛ СУММУ",
+                            f"{_e(self.bot, 'hz_shoppingcart', '🛒')}  Сумму траты пишут цифрами: "
+                            "`15000` или `15к`."), ephemeral=True)
         review = inter.guild.get_channel(int((st["channels"] or {}).get("review") or 0)) \
             if inter.guild else None
         if review is None:
             return await inter.response.send_message(
-                embed=note_embed("⛔ Канала приёмки нет — нажми «🏗 Создать ветку казны» в `/казна`."),
+                embed=_warn(self.bot, inter.guild, "НЕТ КАНАЛА ПРИЁМКИ",
+                            f"{_e(self.bot, 'hz_moderator', '🛡')}  Приёмки ещё нет — на экране "
+                            "`/казна` нажми «🏗 Создать ветку казны», потом подавай отчёт."),
                 ephemeral=True)
         st["seq"] = int(st.get("seq") or 0) + 1
         rid = str(st["seq"])
@@ -714,9 +849,18 @@ class Treasury(commands.Cog):
                 st["reports"].pop(str(old["id"]), None)
         _save(st)
         await review.send(embed=_report_embed(self.bot, inter.guild, rep), view=ReviewView(rid))
+        meg = _e(self.bot, "hz_megaphone", "📢")
+        pencil = _e(self.bot, "hz_pencil", "✍️")
+        bits = _e(self.bot, "hz_bitsicon", "💎")
+        mod = _e(self.bot, "hz_moderator", "🛡")
         await inter.response.send_message(
-            embed=note_embed(f"🧾 Отчёт **#{rid}** отправлен в {review.mention}.\n"
-                             f"Сумма **{_n(value)}** спишется, когда его примут.", "success"),
+            embed=note_embed(
+                f"### {meg}  Отчёт #{rid} ушёл в {review.mention}\n\n"
+                f"{bits}  **{_n(value)}** спишутся только после приёмки\n"
+                f"{mod}  Решение за ролью приёмки — о нём придёт ЛС\n\n"
+                f"> {pencil}  Следующая трата — той же кнопкой.",
+                "success", title=f"{pencil}  ОТЧЁТ ОТПРАВЛЕН",
+                guild=inter.guild),
             ephemeral=True)
 
     async def decide(self, inter, rid: str, accept: bool, reason: str = "") -> None:
@@ -724,12 +868,17 @@ class Treasury(commands.Cog):
         rep = (st["reports"] or {}).get(rid)
         if not rep:
             return await inter.response.send_message(
-                embed=note_embed("⛔ Такой отчёт уже удалён."), ephemeral=True)
+                embed=_warn(self.bot, inter.guild, "ОТЧЁТ НЕ НАЙДЕН",
+                            f"{_e(self.bot, 'hz_book', '📖')}  Такой отчёт уже стёрли из книги — "
+                            "карточка в канале осталась старой."),
+                ephemeral=True)
         if (rep.get("status") or "wait") != "wait":
             return await inter.response.send_message(
-                embed=note_embed(f"ℹ️ Отчёт #{rid} уже закрыт."), ephemeral=True)
+                embed=_warn(self.bot, inter.guild, "ОТЧЁТ ЗАКРЫТ",
+                            f"{_e(self.bot, 'hz_bitsicon', '💎')}  Отчёт #{rid} уже решили — "
+                            "второй раз деньги не снимаются."), ephemeral=True)
         if not _allowed(inter, st, "approve"):
-            return await inter.response.send_message(embed=_deny(), ephemeral=True)
+            return await inter.response.send_message(embed=_deny(self.bot, inter.guild), ephemeral=True)
         rep["status"] = "ok" if accept else "no"
         rep["decided_by"] = int(inter.author.id)
         rep["decided_ts"] = int(time.time())
@@ -743,7 +892,9 @@ class Treasury(commands.Cog):
                   f"#{rid} · {rep['purpose']} · {rep['people']}")
         _save(st)
         if accept:
-            await self._log(inter.guild, f"🧾 Принят отчёт **#{rid}** — списано **{_n(rep['amount'])}**",
+            await self._log(inter.guild,
+                            f"{_e(self.bot, 'hz_shoppingcart', '🧾')}  Принят отчёт **#{rid}** — "
+                            f"списано **{_n(rep['amount'])}**",
                             int(rep["by"]), f"{rep['purpose']} · {rep['people']}",
                             balance=int(st["balance"]))
         await inter.response.edit_message(embed=_report_embed(self.bot, inter.guild, rep), view=None)
@@ -754,12 +905,25 @@ class Treasury(commands.Cog):
         if author is None:
             return
         ok = rep["status"] == "ok"
-        text = (f"✅ Отчёт #{rep['id']} принят: **{_n(rep['amount'])}** ушло из казны.\n"
-                f"Остаток: {_n(_load()['balance'])}" if ok else
-                f"❌ Отчёт #{rep['id']} отклонён.\n📝 {rep.get('reason', '')}")
+        crown = _e(self.bot, "red_crown", "👑")
+        bits = _e(self.bot, "hz_bitsicon", "💎")
+        book = _e(self.bot, "hz_book", "📖")
+        pencil = _e(self.bot, "hz_pencil", "✍️")
+        warn = _e(self.bot, "hz_warn", "📝")
+        if ok:
+            text = (f"### {bits}  −{_n(rep['amount'])}\n\n"
+                    f"{pencil}  Отчёт **#{rep['id']}** принят: «{clip(rep['purpose'], 90)}»\n"
+                    f"{bits}  Остаток казны: **{_n(_load()['balance'])}**\n"
+                    f"{book}  Запись уже в книге — её видно руководству\n\n"
+                    f"> {crown}  Спасибо, что отчитался.")
+        else:
+            text = (f"### {warn}  Отчёт **#{rep['id']}** отклонён\n\n"
+                    f"{pencil}  «{clip(rep['purpose'], 90)}» на **{_n(rep['amount'])}**\n"
+                    f"{bits}  Баланс казны **не тронут**\n\n"
+                    f"> {crown}  Пояснение: {clip(rep.get('reason', '') or 'без причины', 200)}")
         try:
             await author.send(embed=note_embed(text, "success" if ok else "error",
-                                               title="Казна семьи"))
+                                               title=f"{crown}  КАЗНА СЕМЬИ"))
         except disnake.DiscordException:
             pass
 
@@ -769,10 +933,14 @@ class Treasury(commands.Cog):
         ch = guild.get_channel(cid) if (guild and cid) else None
         if ch is None:
             return
+        member = _e(self.bot, "hz_membericon", "👤")
+        when = "🕒"
+        bits = _e(self.bot, "hz_bitsicon", "💎")
         emb = card(title, guild=guild)
-        emb.description = (f"{note}\n"
-                           f"**Кто:** <@{who}> · {_when(int(time.time()))}\n"
-                           + (f"**Остаток казны:** {_n(balance)}" if balance is not None else ""))
+        emb.description = (f"{note}\n\n"
+                           f"{member}  <@{who}>\n"
+                           f"{when}  {_when(int(time.time()))}\n"
+                           + (f"{bits}  Остаток: **{_n(balance)}**" if balance is not None else ""))
         try:
             await ch.send(embed=emb)
         except disnake.DiscordException:
@@ -789,27 +957,27 @@ class Treasury(commands.Cog):
 
         if action == "balance":
             if not _allowed(inter, st, "manage"):
-                return await inter.response.send_message(embed=_deny(), ephemeral=True)
+                return await inter.response.send_message(embed=_deny(self.bot, inter.guild), ephemeral=True)
             return await inter.response.send_message(embed=_balance_embed(self.bot, inter.guild, st),
                                                      ephemeral=True)
         if action == "book":
             if not _allowed(inter, st, "manage"):
-                return await inter.response.send_message(embed=_deny(), ephemeral=True)
+                return await inter.response.send_message(embed=_deny(self.bot, inter.guild), ephemeral=True)
             return await inter.response.send_message(embed=_book_embed(self.bot, inter.guild, st),
                                                      ephemeral=True)
         if action == "topup":
             if not _allowed(inter, st, "manage"):
-                return await inter.response.send_message(embed=_deny(), ephemeral=True)
+                return await inter.response.send_message(embed=_deny(self.bot, inter.guild), ephemeral=True)
             return await inter.response.send_modal(TopUpModal())
         if action == "new":
             if not _allowed(inter, st, "manage"):
                 return await inter.response.send_message(
-                    embed=note_embed("⛔ Отчёт подаёт управление казной или руководство семьи."),
+                    embed=_need_manage(self.bot, inter.guild),
                     ephemeral=True)
             return await inter.response.send_modal(ReportModal())
         if action == "mine":
             return await inter.response.send_message(
-                embed=_mine_embed(self.bot, st, inter.author.id), ephemeral=True)
+                embed=_mine_embed(self.bot, st, inter.author.id, inter.guild), ephemeral=True)
         if action in ("ok", "no"):
             rid = cid.split(":", 2)[2]
             if action == "ok":
@@ -817,13 +985,17 @@ class Treasury(commands.Cog):
             return await inter.response.send_modal(RejectModal(rid))
 
 
-def _topic(key: str) -> str:
+def _topic(bot, key: str) -> str:
+    crown = _e(bot, "red_crown", "👑")
+    cart = _e(bot, "hz_shoppingcart", "🧾")
+    mod = _e(bot, "hz_moderator", "🛡")
+    book = _e(bot, "hz_book", "📖")
     return {
-        "bank": "👑 Банк семьи — остаток казны и книга трат",
-        "reports": "🧾 Отчёты: сколько потратили, на что и кому",
-        "review": "✅ Приёмка отчётов казны",
-        "logs": "📜 Логи казны: принятые траты и пополнения",
-    }.get(key, "Казна семьи")
+        "bank": f"{crown}  Банк семьи — остаток казны и книга трат",
+        "reports": f"{cart}  Отчёты о тратах — сколько, на что и кому",
+        "review": f"{mod}  Приёмка отчётов — решает роль приёмки",
+        "logs": f"{book}  Логи казны — принятые траты и пополнения",
+    }.get(key, f"{crown}  Казна семьи")
 
 
 def setup(bot: commands.Bot):
