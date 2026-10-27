@@ -141,6 +141,7 @@ EXTRA_SCREENS = [
     ("🔕", "Логи: отвязать категорию", "FamLogs.logs_clear", "/logs clear"),
     ("👑", "Забрать админку", "AdminCog.remove_admin_command", "/removeadmin"),
     ("🎧", "Музыка: отправить панель", "Music.music_panel", "/music_panel"),
+    ("🎤", "Комнаты: отправить панель", "VoiceRooms.rooms_panel", "/rooms_panel"),
 ]
 
 

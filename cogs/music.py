@@ -8,7 +8,9 @@
 в PATH, поэтому берётся статический бинарник из imageio-ffmpeg (см. _ffmpeg_exe).
 """
 import asyncio
+import json
 import os
+import random
 import re
 import time
 from collections import deque
@@ -74,10 +76,66 @@ def _library_text() -> str:
     files = _library()
     if not files:
         return (f"Библиотека пуста: в {MEDIA_DIR} нет ни одного файла.\n"
-                "Нажми «📥 Закинуть трек» на панели и перетащи mp3 в окно.")
+                "Нажми «📥 Закинуть трек» на панели и прикрепи mp3.")
     lines = [f"`{i + 1}.` {os.path.splitext(f)[0]}" for i, f in enumerate(files[:25])]
     extra = f"\n…и ещё {len(files) - 25}" if len(files) > 25 else ""
     return "🎧 Библиотека семьи\n" + "\n".join(lines) + extra
+
+
+# ---------- плейлисты ----------
+# Лежат одним файлом рядом с треками: переживают деплой, но в git не попадают.
+PLAYLIST_FILE = os.path.join(MEDIA_DIR, "playlists.json")
+MAX_PLAYLISTS = 30
+MAX_IN_PLAYLIST = 50
+
+
+def _playlists() -> dict:
+    try:
+        with open(PLAYLIST_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): [str(t) for t in v if str(t).strip()]
+            for k, v in data.items() if isinstance(v, list)}
+
+
+def _playlists_write(data: dict) -> str:
+    """Пишет плейлисты целиком; файл меняется целиком, чтобы не оставлять обрезанный json."""
+    try:
+        os.makedirs(MEDIA_DIR, exist_ok=True)
+        tmp = PLAYLIST_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, PLAYLIST_FILE)
+        return ""
+    except Exception as e:
+        return f"Файл плейлистов не записался: `{e}`"
+
+
+def _pl_clean(name: str) -> str:
+    """Имя плейлиста: одна строка без путей — по нему потом ищем."""
+    return re.sub(r"\s+", " ", str(name or "")).strip()[:40]
+
+
+def _playlists_text(data: dict) -> str:
+    have = {os.path.splitext(f)[0].lower() for f in _library()}
+    lines = []
+    for name, tracks in data.items():
+        known = sum(1 for t in tracks if t.lower() in have)
+        lines.append(f"**{name}** — {len(tracks)} треков" +
+                     ("" if known == len(tracks) else f" (в библиотеке {known})"))
+    return "🎼 Плейлисты семьи\n" + "\n".join(lines)
+
+
+def _stem_to_path(stem: str):
+    """Путь к треку из плейлиста, если файл до сих пор в библиотеке."""
+    want = str(stem or "").strip().lower()
+    for f in _library():
+        if os.path.splitext(f)[0].lower() == want:
+            return os.path.join(MEDIA_DIR, f)
+    return None
 
 
 def _safe_name(name: str) -> str:
@@ -159,6 +217,60 @@ class GuildPlayer:
         self.source = None
         self.volume = 0.5
         self.text_channel = None
+        # 🔁 авто-диджей: когда очередь пустеет, берём случайный трек из библиотеки
+        self.dj = False
+        self.dj_recent: deque = deque(maxlen=8)
+        self.dj_fails = 0
+        # 🗳 голоса за скип текущего трека
+        self.votes: set = set()
+
+
+class _PlaylistSelect(disnake.ui.Select):
+    """В disnake колбэк у селекта — метод подкласса, не параметр."""
+
+    def __init__(self, options: list):
+        super().__init__(placeholder="Выбрать плейлист…", custom_id="music:pl_pick", options=options)
+
+    async def callback(self, inter: disnake.MessageInteraction):
+        cog: "Music" = inter.bot.get_cog("Music")
+        await inter.response.defer(ephemeral=True)
+        await cog.play_playlist(inter, self.values[0])
+
+
+class PlaylistPicker(disnake.ui.View):
+    """Список плейлистов в ephemeral-сообщении: выбираешь один — он ложится в очередь."""
+
+    def __init__(self, playlists: dict):
+        super().__init__(timeout=180)
+        options = [disnake.SelectOption(label=name[:100],
+                                       description=f"{len(tracks)} треков"[:100],
+                                       value=name[:100])
+                   for name, tracks in list(playlists.items())[:25]]
+        self.add_item(_PlaylistSelect(options))
+
+
+class PlaylistModal(disnake.ui.Modal):
+    """Имя для плейлиста, который соберётся из текущей очереди."""
+
+    def __init__(self, tracks: list):
+        self.tracks = tracks
+        super().__init__(
+            title="Как назвать плейлист?",
+            custom_id="music:pl_name",
+            components=[
+                disnake.ui.TextInput(
+                    label="Название",
+                    custom_id="name",
+                    style=disnake.TextInputStyle.short,
+                    placeholder="Например: Вечер на капту",
+                    max_length=40,
+                )
+            ],
+        )
+
+    async def callback(self, inter: disnake.ModalInteraction):
+        cog: "Music" = inter.bot.get_cog("Music")
+        await cog.save_playlist(inter, self.tracks, inter.text_values["name"].strip())
 
 
 class MusicModal(disnake.ui.Modal):
@@ -183,41 +295,6 @@ class MusicModal(disnake.ui.Modal):
         await cog.handle_play(inter, inter.text_values["query"].strip())
 
 
-class UploadModal(disnake.ui.Modal):
-    """Окно с зоной «Перетащите файлы сюда или выберите» — сюда кидают mp3."""
-
-    def __init__(self):
-        super().__init__(
-            title="Закинуть трек в библиотеку",
-            custom_id="music_upload_modal",
-            components=[
-                disnake.ui.Label(
-                    "Файл с музыкой",
-                    disnake.ui.FileUpload(custom_id="tracks", min_values=1, max_values=5),
-                    description=f"Прикрепи 1–5 треков (mp3, ogg, m4a, wav, flac), каждый до {MAX_TRACK_MB} МБ.",
-                )
-            ],
-        )
-
-    async def callback(self, inter: disnake.ModalInteraction):
-        await inter.response.defer(ephemeral=True)
-        files = inter.resolved_values.get("tracks") or []
-        lines = []
-        for att in files:
-            try:
-                name = await _save_track(att)
-            except Exception as e:
-                lines.append(f"❌ {e}")
-            else:
-                lines.append(f"✅ **{os.path.splitext(name)[0]}**")
-        _trim()
-        if not lines:
-            lines.append("❌ Файлы не пришли, попробуй ещё раз.")
-        if any(l.startswith("✅") for l in lines):
-            lines.append("\nТеперь нажми **«Включить музыку»** и выбери трек из списка.")
-        await inter.followup.send(embed=note_embed("\n".join(lines)), ephemeral=True)
-
-
 class TalkView(disnake.ui.View):
     """Показывается после 'Позвать в войс' — кнопка для выбора музыки."""
 
@@ -227,55 +304,6 @@ class TalkView(disnake.ui.View):
     @disnake.ui.button(label="Назвать музыку", emoji="🎵", style=disnake.ButtonStyle.success)
     async def pick(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         await inter.response.send_modal(MusicModal())
-
-
-class TrackSelect(disnake.ui.StringSelect):
-    """Выпадающий список треков из библиотеки: выбрал — сразу играет."""
-
-    def __init__(self, files: list):
-        options = [
-            disnake.SelectOption(label=os.path.splitext(f)[0][:100], value=f[:100], emoji="🎵")
-            for f in files[:25]
-        ]
-        super().__init__(placeholder="🎧 Выбери трек из библиотеки", options=options,
-                         min_values=1, max_values=1)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        cog: "Music" = inter.bot.get_cog("Music")
-        await inter.response.defer(ephemeral=True)
-        await cog.handle_play(inter, os.path.splitext(self.values[0])[0])
-
-
-class PlayPanelView(disnake.ui.View):
-    """Появляется после «Включить музыку»: выбор трека, свой запрос и загрузка файла."""
-
-    def __init__(self):
-        super().__init__(timeout=300)
-        files = _library()
-        if files:
-            self.add_item(TrackSelect(files))
-
-    @disnake.ui.button(label="Загрузить трек", emoji="📥", style=disnake.ButtonStyle.primary, row=1)
-    async def upload(self, button, inter: disnake.MessageInteraction):
-        await inter.bot.get_cog("Music").ask_file(inter)
-
-    @disnake.ui.button(label="По названию / ссылке", emoji="🔎", style=disnake.ButtonStyle.secondary, row=1)
-    async def by_name(self, button, inter: disnake.MessageInteraction):
-        await inter.response.send_modal(MusicModal())
-
-
-def _play_panel_embed() -> disnake.Embed:
-    files = _library()
-    if files:
-        text = (f"В библиотеке **{len(files)}** треков. Выбери трек из списка ниже — бот зайдёт "
-                "к тебе в войс и сразу включит.\n\n"
-                "Нет нужного? Нажми **«📥 Загрузить трек»** и перетащи mp3 в окно — "
-                "или введи название / прямую ссылку на звук через **«🔎»**.")
-    else:
-        text = ("Библиотека пока пустая.\n\n"
-                "Нажми **«📥 Загрузить трек»** и перетащи mp3 в окно (до 5 файлов сразу), "
-                "потом снова нажми «Включить музыку».")
-    return disnake.Embed(title="🎵 Музыка", description=text, color=_color())
 
 
 class MusicPanelView(disnake.ui.View):
@@ -289,7 +317,7 @@ class MusicPanelView(disnake.ui.View):
         if not inter.author.voice or not inter.author.voice.channel:
             return await inter.response.send_message(
                 embed=note_embed("❌ Сначала зайдите в голосовой канал, сэр."), ephemeral=True)
-        await inter.response.send_message(embed=_play_panel_embed(), view=PlayPanelView(), ephemeral=True)
+        await inter.response.send_modal(MusicModal())
 
     @disnake.ui.button(label="Позвать в войс", emoji="🎙", style=disnake.ButtonStyle.primary,
                        custom_id="music:join", row=0)
@@ -339,6 +367,7 @@ class MusicPanelView(disnake.ui.View):
         if not vc:
             return
         if vc.is_playing() or vc.is_paused():
+            cog.get_player(inter.guild).votes.clear()
             vc.stop()
             await inter.response.send_message(embed=note_embed("⏭ Трек пропущен."), ephemeral=True)
         else:
@@ -351,10 +380,14 @@ class MusicPanelView(disnake.ui.View):
         vc = await cog.check_control(inter)
         if not vc:
             return
-        cog.get_player(inter.guild).queue.clear()
+        p = cog.get_player(inter.guild)
+        p.queue.clear()
+        p.dj = False
+        p.votes.clear()
         if vc.is_playing() or vc.is_paused():
             vc.stop()
-        await inter.response.send_message(embed=note_embed("⏹ Остановлено, очередь очищена."), ephemeral=True)
+        await inter.response.send_message(embed=note_embed("⏹ Остановлено: очередь очищена, "
+                                                            "авто-диджей выключен."), ephemeral=True)
 
     @disnake.ui.button(label="Очередь", emoji="📜", style=disnake.ButtonStyle.secondary,
                        custom_id="music:queue", row=1)
@@ -368,7 +401,14 @@ class MusicPanelView(disnake.ui.View):
             lines.append(f"`{i}.` {t['title']} `{_fmt_duration(t['duration'])}`")
         if len(p.queue) > 10:
             lines.append(f"…и ещё {len(p.queue) - 10}")
+        if p.dj:
+            lines.append("🔁 Авто-диджей включён: когда очередь кончится, включит случайный трек.")
         await inter.response.send_message(embed=note_embed("\n".join(lines) or "Очередь пуста."), ephemeral=True)
+
+    @disnake.ui.button(label="Голос за скип", emoji="🗳", style=disnake.ButtonStyle.secondary,
+                       custom_id="music:vote", row=1)
+    async def vote(self, button, inter: disnake.MessageInteraction):
+        await inter.bot.get_cog("Music").vote_skip(inter)
 
     # ---------- ряд 3 ----------
     @disnake.ui.button(label="Тише", emoji="🔉", style=disnake.ButtonStyle.secondary,
@@ -381,7 +421,12 @@ class MusicPanelView(disnake.ui.View):
     async def vol_up(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").change_volume(inter, +0.1)
 
-    # ---------- ряд 4: библиотека ----------
+    @disnake.ui.button(label="Авто-диджей", emoji="🔁", style=disnake.ButtonStyle.secondary,
+                       custom_id="music:dj", row=2)
+    async def dj(self, button, inter: disnake.MessageInteraction):
+        await inter.bot.get_cog("Music").toggle_dj(inter)
+
+    # ---------- ряд 4: библиотека и плейлисты ----------
     @disnake.ui.button(label="Закинуть трек", emoji="📥", style=disnake.ButtonStyle.primary,
                        custom_id="music:add", row=3)
     async def add(self, button, inter: disnake.MessageInteraction):
@@ -392,12 +437,24 @@ class MusicPanelView(disnake.ui.View):
     async def library(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").show_library(inter)
 
+    @disnake.ui.button(label="Плейлисты", emoji="🎼", style=disnake.ButtonStyle.secondary,
+                       custom_id="music:pl", row=3)
+    async def playlists(self, button, inter: disnake.MessageInteraction):
+        await inter.bot.get_cog("Music").show_playlists(inter)
+
+    @disnake.ui.button(label="Очередь в плейлист", emoji="📌", style=disnake.ButtonStyle.secondary,
+                       custom_id="music:pl_save", row=3)
+    async def pl_save(self, button, inter: disnake.MessageInteraction):
+        await inter.bot.get_cog("Music").start_playlist_save(inter)
+
 
 class Music(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.players: dict[int, GuildPlayer] = {}
         self._last_play: dict[int, float] = {}
+        # кто нажал «📥 Закинуть трек»: id → (канал, когда)
+        self._pending: dict[int, tuple[int, float]] = {}
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -408,12 +465,179 @@ class Music(commands.Cog):
             _log(f"библиотека: {len(_library())} треков в {MEDIA_DIR}")
 
     # ---------- библиотека без слэш-команд ----------
+    ASK_SECONDS = 90
+
     async def ask_file(self, inter):
-        """Кнопка «Закинуть трек»: открываем окно с зоной загрузки файлов."""
-        await inter.response.send_modal(UploadModal())
+        """Кнопка «Закинуть трек»: ждём вложение ответом в этом же канале."""
+        self._pending[inter.author.id] = (inter.channel.id, time.time())
+        await inter.response.send_message(
+            embed=note_embed("📥 Прикрепи mp3 к сообщению здесь — заберу его в библиотеку. "
+                             f"Жду {self.ASK_SECONDS} сек."), ephemeral=True)
 
     async def show_library(self, inter):
         await inter.response.send_message(embed=note_embed(_library_text()), ephemeral=True)
+
+    # ---------- плейлисты ----------
+    async def show_playlists(self, inter):
+        data = _playlists()
+        if not data:
+            return await inter.response.send_message(
+                embed=note_embed("Плейлистов ещё нет.\n"
+                                 "Собери очередь и нажми «📌 Очередь в плейлист»."), ephemeral=True)
+        await inter.response.send_message(embed=note_embed(_playlists_text(data)),
+                                          view=PlaylistPicker(data), ephemeral=True)
+
+    async def start_playlist_save(self, inter):
+        p = self.get_player(inter.guild)
+        names = [t["title"] for t in list(p.queue)]
+        if p.current:
+            names.insert(0, p.current["title"])
+        if not names:
+            return await inter.response.send_message(
+                embed=note_embed("Пусто: сначала закажи треки, потом сохраняй очередь в плейлист."),
+                ephemeral=True)
+        await inter.response.send_modal(PlaylistModal(names[:MAX_IN_PLAYLIST]))
+
+    async def save_playlist(self, inter, tracks: list, name: str):
+        name = _pl_clean(name)
+        if not name:
+            return await inter.response.send_message(
+                embed=note_embed("Нужно название — например «Вечер на капту»."), ephemeral=True)
+        data = _playlists()
+        if name not in data and len(data) >= MAX_PLAYLISTS:
+            return await inter.response.send_message(
+                embed=note_embed(f"Больше {MAX_PLAYLISTS} плейлистов не держу — удали старый "
+                                 "(файл `media/playlists.json`)."), ephemeral=True)
+        existed = name in data
+        data[name] = tracks
+        err = _playlists_write(data)
+        if err:
+            return await inter.response.send_message(embed=note_embed(f"❌ {err}"), ephemeral=True)
+        have = {os.path.splitext(f)[0].lower() for f in _library()}
+        missing = [t for t in tracks if t.lower() not in have]
+        answer = (f"{'Обновлён' if existed else '📌 Сохранён'}: **{name}** — {len(tracks)} треков."
+                  + (f"\n⚠️ В библиотеке нет: {', '.join(missing[:5])}" if missing else ""))
+        await inter.response.send_message(embed=note_embed(answer), ephemeral=True)
+
+    async def play_playlist(self, inter, name: str):
+        tracks = _playlists().get(str(name or "").strip())
+        if not tracks:
+            return await inter.followup.send(
+                embed=note_embed(f"Плейлиста «{name}» больше нет — треки могли убрать из библиотеки."),
+                ephemeral=True)
+        vc = await self.ensure_voice(inter)
+        if not vc:
+            return
+        p = self.get_player(inter.guild)
+        room = MAX_QUEUE - len(p.queue)
+        if room <= 0:
+            return await inter.followup.send(
+                embed=note_embed(f"Очередь полная ({MAX_QUEUE}). Почисти кнопкой ⏹."), ephemeral=True)
+        added, missing = [], []
+        for stem in tracks[:room]:
+            path = _stem_to_path(stem)
+            if path is None:
+                missing.append(stem)
+                continue
+            p.queue.append({"title": stem[:120], "stream_url": path, "webpage_url": stem,
+                            "duration": None, "thumbnail": None, "ts": time.time(),
+                            "requester": f"🎼 {name}"})
+            added.append(stem)
+        if not added:
+            return await inter.followup.send(
+                embed=note_embed("Ни одного трека из плейлиста в библиотеке не осталось."), ephemeral=True)
+        p.text_channel = inter.channel
+        answer = (f"🎼 **{name}**: {len(added)} треков в очереди"
+                  + (f"\n⚠️ Нет в библиотеке: {', '.join(missing[:5])}" if missing else ""))
+        await inter.followup.send(embed=note_embed(answer), ephemeral=True)
+        if not (vc.is_playing() or vc.is_paused()):
+            await self._play_next(inter.guild)
+
+    # ---------- авто-диджей и голосовой скип ----------
+    async def toggle_dj(self, inter):
+        vc = await self.check_control(inter)
+        if not vc:
+            return
+        p = self.get_player(inter.guild)
+        p.dj = not p.dj
+        p.dj_fails = 0
+        if p.dj:
+            answer = ("🔁 Авто-диджей включён. Кончится очередь — сам возьмёт случайный трек "
+                      f"из библиотеки ({len(_library())} шт.).")
+            if not _library():
+                p.dj = False
+                answer = "❌ Библиотека пуста — включать нечего. Закинь треки кнопкой «📥 Закинуть трек»."
+        else:
+            answer = "🔁 Авто-диджей выключен: после последнего трека тишина."
+        await inter.response.send_message(embed=note_embed(answer), ephemeral=True)
+        if p.dj and not (vc.is_playing() or vc.is_paused()):
+            await self._play_next(inter.guild)
+
+    def _dj_track(self, p: GuildPlayer):
+        """Случайный трек, которого не было в последних восьми."""
+        files = [f for f in _library() if f not in p.dj_recent]
+        if not files:
+            files = _library()
+        if not files:
+            return None
+        picked = random.choice(files)
+        p.dj_recent.append(picked)
+        stem = os.path.splitext(picked)[0]
+        return {"title": stem[:120], "stream_url": os.path.join(MEDIA_DIR, picked),
+                "webpage_url": stem, "duration": None, "thumbnail": None, "ts": time.time(),
+                "requester": "🔁 авто-диджей"}
+
+    async def vote_skip(self, inter):
+        vc = await self.check_control(inter)
+        if not vc:
+            return
+        if not (vc.is_playing() or vc.is_paused()):
+            return await inter.response.send_message(
+                embed=note_embed("Сейчас ничего не играет."), ephemeral=True)
+        p = self.get_player(inter.guild)
+        listeners = [m for m in vc.channel.members if not m.bot]
+        need = max(2, (len(listeners) + 1) // 2)
+        if inter.author.id in p.votes:
+            p.votes.discard(inter.author.id)
+            return await inter.response.send_message(
+                embed=note_embed(f"↩️ Голос убран. За скип: {len(p.votes)}/{need}."), ephemeral=True)
+        p.votes.add(inter.author.id)
+        if len(p.votes) >= need:
+            p.votes.clear()
+            title = (p.current or {}).get("title", "трек")
+            vc.stop()
+            return await inter.response.send_message(
+                embed=note_embed(f"🗳 {len(listeners)} слушают, {need} голосов — **{title}** пропущен."),
+                ephemeral=True)
+        await inter.response.send_message(
+            embed=note_embed(f"🗳 За скип: {len(p.votes)}/{need} (нужно большинство в канале)."),
+            ephemeral=True)
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot:
+            return
+        stamp = self._pending.get(message.author.id)
+        if not stamp or stamp[0] != message.channel.id:
+            return
+        if time.time() - stamp[1] > self.ASK_SECONDS:
+            self._pending.pop(message.author.id, None)
+            return
+        if not message.attachments:
+            return
+        self._pending.pop(message.author.id, None)
+        try:
+            name = await _save_track(message.attachments[0])
+        except Exception as e:
+            answer = f"❌ {e}"
+        else:
+            _trim()
+            stem = os.path.splitext(name)[0]
+            answer = f"🎧 В библиотеке: **{stem}** — заходи в войс и `/play {stem}`"
+        try:
+            await message.reply(embed=note_embed(answer), mention_author=False)
+        except Exception:
+            pass
 
     # ---------- helpers ----------
     def get_player(self, guild: disnake.Guild) -> GuildPlayer:
@@ -575,9 +799,18 @@ class Music(commands.Cog):
         if vc.is_playing() or vc.is_paused():
             return
         if not p.queue:
-            p.current = None
-            p.source = None
-            return
+            if p.dj:
+                picked = self._dj_track(p)
+                if picked is None:
+                    p.dj = False
+                    if p.text_channel:
+                        await p.text_channel.send("🔁 Библиотека кончилась — авто-диджей выключен.")
+                    return
+                p.queue.append(picked)
+            else:
+                p.current = None
+                p.source = None
+                return
 
         track = p.queue.popleft()
         try:
@@ -586,22 +819,26 @@ class Music(commands.Cog):
                 fresh = await self._extract(track["webpage_url"])
                 track.update(fresh)
             source = disnake.PCMVolumeTransformer(
-                disnake.FFmpegPCMAudio(
-                    track["stream_url"], executable=_ffmpeg_exe(),
-                    # -reconnect* понимает только http(s); для файла с диска они ломают ffmpeg
-                    before_options=FFMPEG_BEFORE if track["stream_url"].lower().startswith("http") else None,
-                    options=FFMPEG_OPTS),
+                disnake.FFmpegPCMAudio(track["stream_url"], executable=_ffmpeg_exe(),
+                                       before_options=FFMPEG_BEFORE, options=FFMPEG_OPTS),
                 volume=p.volume,
             )
         except Exception as e:
+            p.dj_fails += 1
+            gave_up = p.dj and p.dj_fails >= 4
+            if gave_up:
+                p.dj = False
+            why = ("На хосте нет ffmpeg — добавь `imageio-ffmpeg` в requirements.txt и "
+                   "перезапусти бота." if _ffmpeg_exe() is None else
+                   "Дальше поможет рестарт: возможно, ffmpeg не успевает стартовать.")
             if p.text_channel:
                 await p.text_channel.send(
-                    f"❌ Не смог проиграть **{track['title']}**: `{e}`\n"
-                    + ("На хосте нет ffmpeg — добавь `imageio-ffmpeg` в requirements.txt и "
-                       "перезапусти бота." if _ffmpeg_exe() is None else
-                       "Дальше поможет рестарт: возможно, ffmpeg не успевает стартовать."))
+                    f"❌ Не смог проиграть **{track['title']}**: `{e}`\n{why}"
+                    + (" Авто-диджей выключен, чтобы не гонять ошибки по кругу." if gave_up else ""))
             return await self._play_next(guild)
 
+        p.dj_fails = 0
+        p.votes.clear()
         p.current = track
         p.source = source
 
@@ -642,9 +879,13 @@ class Music(commands.Cog):
                 "Зайдите в голосовой канал и нажмите **«Включить музыку»**.\n"
                 "Бот спросит название из библиотеки семьи (или ссылку на звук), зайдёт к вам "
                 "в войс и поставит трек.\n\n"
-                "Треки кладутся кнопкой **«📥 Закинуть трек»** — просто перетащи mp3 в окно. "
+                "Треки кладутся кнопкой **«📥 Закинуть трек»** — просто прикрепи mp3. "
                 "«🎧 Треки» покажет, что уже есть.\n\n"
-                "Управление: ⏯ пауза • ⏭ скип • ⏹ стоп • 📜 очередь • 🔉🔊 громкость"
+                "Управление: ⏯ пауза • ⏭ скип • ⏹ стоп • 📜 очередь • 🔉🔊 громкость\n\n"
+                "Ещё: 🎼 **плейлисты** (собрал очередь — сохрани под именем, потом включи одним "
+                "нажатием), 🗳 **скип голосованием** (нужно большинство в канале, а не один "
+                "нахал) и 🔁 **авто-диджей** (очередь кончилась — бот сам берёт случайный трек, "
+                "вечер не затихает)"
             ),
             color=_color(),
         )
