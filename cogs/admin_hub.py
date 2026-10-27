@@ -111,6 +111,9 @@ SECTIONS = [
         ("🗓", "Календарь семьи", "Dates.dates_panel", "/даты"),
         ("📡", "Стримы: анонсы", "Streams.streams_panel", "/стримы"),
     ]),
+    ("💰", "Казна", [
+        ("👑", "Казна: банк и отчёты", "Treasury.kazna_panel", "/казна"),
+    ]),
     ("🔧", "Сервис и откат", [
         ("💾", "Снимок состояния", "StateSave.update_save", "/update_save"),
         ("↩️", "Откат настроек", "Reverse.reverse", "/reverse"),
