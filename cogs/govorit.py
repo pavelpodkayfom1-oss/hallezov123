@@ -22,6 +22,7 @@ import edge_tts
 from disnake.ext import commands
 
 from utils.embeds import get_color, note_embed
+from utils.ffmpeg_path import ffmpeg_exe
 
 IDLE_DISCONNECT_SECONDS = 120
 PLAYBACK_TIMEOUT = 180
@@ -174,14 +175,10 @@ async def tts_save(text: str, s: dict, path: str):
 
 
 _FFMPEG_MISSING = "⚠️ На хостинге нет **ffmpeg** — бот не может воспроизвести звук. Установи ffmpeg и перезапусти бота."
-_FFMPEG_OK: Optional[bool] = None
 
 
 def has_ffmpeg() -> bool:
-    global _FFMPEG_OK
-    if _FFMPEG_OK is None:
-        _FFMPEG_OK = bool(shutil.which("ffmpeg") or os.environ.get("FFmpegPath"))
-    return _FFMPEG_OK
+    return ffmpeg_exe() is not None
 
 
 class PanelView(disnake.ui.View):
@@ -196,7 +193,7 @@ class PanelView(disnake.ui.View):
             await inter.response.send_message("Это не твоя панель. Открой свою: /golos", ephemeral=True)
             return False
         if not can_speak(inter.author):
-            await inter.response.send_message(note_embed(NO_ACCESS, "error"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed(NO_ACCESS, "error"), ephemeral=True)
             return False
         return True
 
@@ -255,14 +252,14 @@ class PanelView(disnake.ui.View):
     async def test(self, button, inter: disnake.MessageInteraction):
         channel = voice_user_channel(inter)
         if not channel:
-            await inter.response.send_message(note_embed(NOT_IN_VC, "warning"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed(NOT_IN_VC, "warning"), ephemeral=True)
             return
         await inter.response.send_message("Говорю...", ephemeral=True)
         err = await self.cog.speak(
             inter.guild, channel,
             "Говорю спокойно и чётко. Так звучит мой голос.", self.s,
         )
-        await inter.edit_original_response(note_embed(err or "✅ Сказал.", None if err else "success"))
+        await inter.edit_original_response(embed=note_embed(err or "✅ Сказал.", None if err else "success"))
 
     @disnake.ui.button(label="Сброс", emoji="♻️", style=disnake.ButtonStyle.danger, row=3)
     async def reset(self, button, inter):
@@ -297,19 +294,19 @@ class SayModal(disnake.ui.Modal):
 
     async def callback(self, inter: disnake.ModalInteraction):
         if not can_speak(inter.author):
-            await inter.response.send_message(note_embed(NO_ACCESS, "error"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed(NO_ACCESS, "error"), ephemeral=True)
             return
         channel = voice_user_channel(inter)
         if not channel:
-            await inter.response.send_message(note_embed(NOT_IN_VC, "warning"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed(NOT_IN_VC, "warning"), ephemeral=True)
             return
         text = (inter.text_values.get("text") or "").strip()
         if not text:
-            await inter.response.send_message(note_embed("⚠️ Пустой текст.", "warning"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed("⚠️ Пустой текст.", "warning"), ephemeral=True)
             return
         await inter.response.defer(ephemeral=True)
         err = await self.cog.speak(inter.guild, channel, text, get_settings(inter.author.id))
-        await inter.edit_original_response(note_embed(err or "✅ Сказал.", None if err else "success"))
+        await inter.edit_original_response(embed=note_embed(err or "✅ Сказал.", None if err else "success"))
 
 
 class AccessView(disnake.ui.View):
@@ -323,7 +320,7 @@ class AccessView(disnake.ui.View):
     async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
         if inter.author.id != self.user_id or not is_server_admin(inter.author):
             await inter.response.send_message(
-                note_embed("⚠️ Нужно право «Управление сервером».", "warning"), ephemeral=True
+                embed=note_embed("⚠️ Нужно право «Управление сервером».", "warning"), ephemeral=True
             )
             return False
         return True
@@ -357,7 +354,7 @@ class ControlView(disnake.ui.View):
 
     async def interaction_check(self, inter: disnake.MessageInteraction) -> bool:
         if not can_speak(inter.author):
-            await inter.response.send_message(note_embed(NO_ACCESS, "error"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed(NO_ACCESS, "error"), ephemeral=True)
             return False
         return True
 
@@ -378,10 +375,10 @@ class ControlView(disnake.ui.View):
         vc = inter.guild.voice_client
         if vc and vc.is_playing():
             vc.stop()
-            await inter.response.send_message(note_embed("✅ Замолчал.", "success"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed("✅ Замолчал.", "success"), ephemeral=True)
         else:
             await inter.response.send_message(
-                note_embed("ℹ️ Я сейчас ничего не говорю."), ephemeral=True
+                embed=note_embed("ℹ️ Я сейчас ничего не говорю."), ephemeral=True
             )
 
     @disnake.ui.button(label="Позвать в войс", emoji="🎙️", style=disnake.ButtonStyle.primary, row=1)
@@ -401,7 +398,7 @@ class ControlView(disnake.ui.View):
     async def access(self, button, inter: disnake.MessageInteraction):
         if not is_server_admin(inter.author):
             await inter.response.send_message(
-                note_embed("⚠️ Менять доступ могут только админы («Управление сервером»).", "warning"),
+                embed=note_embed("⚠️ Менять доступ могут только админы («Управление сервером»).", "warning"),
                 ephemeral=True,
             )
             return
@@ -443,7 +440,7 @@ class Govorit(commands.Cog):
     async def do_join(self, inter: disnake.MessageInteraction):
         channel = voice_user_channel(inter)
         if not channel:
-            await inter.response.send_message(note_embed(NOT_IN_VC, "warning"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed(NOT_IN_VC, "warning"), ephemeral=True)
             return
         async with self._lock(inter.guild.id):
             vc = inter.guild.voice_client
@@ -453,23 +450,23 @@ class Govorit(commands.Cog):
                 elif vc.channel.id != channel.id:
                     await vc.move_to(channel)
             except Exception as e:
-                await inter.response.send_message(note_embed(f"❌ Не смог зайти: {e}", "error"), ephemeral=True)
+                await inter.response.send_message(embed=note_embed(f"❌ Не смог зайти: {e}", "error"), ephemeral=True)
                 return
         self._schedule_idle(inter.guild)
         await inter.response.send_message(
-            note_embed(f"✅ Зашёл в **{channel.name}**.", "success"), ephemeral=True
+            embed=note_embed(f"✅ Зашёл в **{channel.name}**.", "success"), ephemeral=True
         )
 
     async def do_leave(self, inter: disnake.MessageInteraction):
         vc = inter.guild.voice_client
         if not vc:
             await inter.response.send_message(
-                note_embed("ℹ️ Я не в голосовом канале."), ephemeral=True
+                embed=note_embed("ℹ️ Я не в голосовом канале."), ephemeral=True
             )
             return
         if _stay_on(inter.guild.id):
             await inter.response.send_message(
-                note_embed(
+                embed=note_embed(
                     "⚠️ Включён режим «всегда в войсе», я вернусь обратно. "
                     "Выключи его в /golos-server.",
                     "warning",
@@ -478,7 +475,7 @@ class Govorit(commands.Cog):
             )
             return
         await vc.disconnect()
-        await inter.response.send_message(note_embed("✅ Вышел.", "success"), ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ Вышел.", "success"), ephemeral=True)
 
     async def speak(self, guild: disnake.Guild, channel, text: str, s: dict):
         """Возвращает None при успехе или текст ошибки (для карточки)."""
@@ -509,7 +506,7 @@ class Govorit(commands.Cog):
                 done = asyncio.Event()
                 loop = asyncio.get_running_loop()
                 vc.play(
-                    disnake.FFmpegPCMAudio(path),
+                    disnake.FFmpegPCMAudio(path, executable=ffmpeg_exe() or "ffmpeg"),
                     after=lambda err: loop.call_soon_threadsafe(done.set),
                 )
                 try:
@@ -536,33 +533,33 @@ class Govorit(commands.Cog):
     ):
         if not inter.guild:
             await inter.response.send_message(
-                note_embed("ℹ️ Только на сервере."), ephemeral=True
+                embed=note_embed("ℹ️ Только на сервере."), ephemeral=True
             )
             return
         if not can_speak(inter.author):
-            await inter.response.send_message(note_embed(NO_ACCESS, "error"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed(NO_ACCESS, "error"), ephemeral=True)
             return
         channel = voice_user_channel(inter)
         if not channel:
-            await inter.response.send_message(note_embed(NOT_IN_VC, "warning"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed(NOT_IN_VC, "warning"), ephemeral=True)
             return
         text = text.strip()
         if not text:
             await inter.response.send_message(
-                note_embed("⚠️ Пустой текст.", "warning"), ephemeral=True
+                embed=note_embed("⚠️ Пустой текст.", "warning"), ephemeral=True
             )
             return
         await inter.response.defer(ephemeral=True)
         err = await self.speak(inter.guild, channel, text, get_settings(inter.author.id))
-        await inter.edit_original_response(note_embed(err or "✅ Сказал.", None if err else "success"))
+        await inter.edit_original_response(embed=note_embed(err or "✅ Сказал.", None if err else "success"))
 
     @commands.slash_command(name="govorit-panel", description="Панель управления голосом бота (для роли с доступом)")
     async def govorit_panel(self, inter: disnake.ApplicationCommandInteraction):
         if not inter.guild:
-            await inter.response.send_message(note_embed("ℹ️ Только на сервере."), ephemeral=True)
+            await inter.response.send_message(embed=note_embed("ℹ️ Только на сервере."), ephemeral=True)
             return
         if not can_speak(inter.author):
-            await inter.response.send_message(note_embed(NO_ACCESS, "error"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed(NO_ACCESS, "error"), ephemeral=True)
             return
         view = ControlView(self, inter.guild)
         await inter.response.send_message(embed=view.make_embed(), view=view, ephemeral=True)
@@ -570,10 +567,10 @@ class Govorit(commands.Cog):
     @commands.slash_command(name="golos", description="Панель настройки голоса бота")
     async def golos(self, inter: disnake.ApplicationCommandInteraction):
         if not inter.guild:
-            await inter.response.send_message(note_embed("ℹ️ Только на сервере."), ephemeral=True)
+            await inter.response.send_message(embed=note_embed("ℹ️ Только на сервере."), ephemeral=True)
             return
         if not can_speak(inter.author):
-            await inter.response.send_message(note_embed(NO_ACCESS, "error"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed(NO_ACCESS, "error"), ephemeral=True)
             return
         view = PanelView(self, inter.author.id)
         await inter.response.send_message(embed=view.make_embed(), view=view, ephemeral=True)
@@ -581,23 +578,23 @@ class Govorit(commands.Cog):
     @commands.slash_command(name="zamolchi", description="Остановить речь и выйти из голосового канала")
     async def zamolchi(self, inter: disnake.ApplicationCommandInteraction):
         if not inter.guild:
-            await inter.response.send_message(note_embed("ℹ️ Только на сервере."), ephemeral=True)
+            await inter.response.send_message(embed=note_embed("ℹ️ Только на сервере."), ephemeral=True)
             return
         if not can_speak(inter.author):
-            await inter.response.send_message(note_embed(NO_ACCESS, "error"), ephemeral=True)
+            await inter.response.send_message(embed=note_embed(NO_ACCESS, "error"), ephemeral=True)
             return
         vc = inter.guild.voice_client
         if not vc:
-            await inter.response.send_message(note_embed("ℹ️ Я не в голосовом канале."), ephemeral=True)
+            await inter.response.send_message(embed=note_embed("ℹ️ Я не в голосовом канале."), ephemeral=True)
             return
         if _stay_on(inter.guild.id):
             vc.stop()
             await inter.response.send_message(
-                note_embed("✅ Замолчал. Остаюсь в канале.", "success"), ephemeral=True
+                embed=note_embed("✅ Замолчал. Остаюсь в канале.", "success"), ephemeral=True
             )
             return
         await vc.disconnect()
-        await inter.response.send_message(note_embed("✅ Вышел.", "success"), ephemeral=True)
+        await inter.response.send_message(embed=note_embed("✅ Вышел.", "success"), ephemeral=True)
 
 
 def setup(bot: commands.Bot):

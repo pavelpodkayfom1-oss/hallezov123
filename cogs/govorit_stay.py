@@ -10,6 +10,7 @@ import edge_tts
 from disnake.ext import commands
 
 from utils.embeds import get_color
+from utils.ffmpeg_path import ffmpeg_exe
 
 # Отдельный ког: режим «всегда в войсе» + приветствие зашедших.
 # Не трогает /govorit и /golos. Голос берёт из тех же настроек (golos_settings.json).
@@ -360,7 +361,7 @@ class GovoritStay(commands.Cog):
                 return
             loop = asyncio.get_running_loop()
             done = asyncio.Event()
-            greet = _OneShot(disnake.FFmpegPCMAudio(path), lambda: loop.call_soon_threadsafe(done.set))
+            greet = _OneShot(disnake.FFmpegPCMAudio(path, executable=ffmpeg_exe() or "ffmpeg"), lambda: loop.call_soon_threadsafe(done.set))
 
             vc.pause()
             try:
@@ -422,7 +423,7 @@ class GovoritStay(commands.Cog):
                 done = asyncio.Event()
                 loop = asyncio.get_running_loop()
                 vc.play(
-                    disnake.FFmpegPCMAudio(path),
+                    disnake.FFmpegPCMAudio(path, executable=ffmpeg_exe() or "ffmpeg"),
                     after=lambda err: loop.call_soon_threadsafe(done.set),
                 )
                 await done.wait()

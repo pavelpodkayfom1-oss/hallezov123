@@ -443,6 +443,100 @@ html[data-theme=light] .login::after{background:radial-gradient(closest-side,rgb
   .grid2,.cols{grid-template-columns:1fr}
   .item{flex-wrap:wrap}
 }
+
+/* ============================================================
+   Строгий и быстрый слой: графит и приглушённый красный,
+   плоские поверхности, без размытия и бесконечных анимаций.
+   Лежит в конце, поэтому перекрывает всё выше.
+   ============================================================ */
+:root{
+  --bg:#08090c; --bg2:#0d0e12;
+  --panel:#12141a; --panel2:#171a21; --panel3:#1f232c;
+  --line:rgba(255,255,255,.07); --line2:rgba(255,255,255,.13);
+  --text:#e8eaef; --muted:#8a8f9b; --faint:#5c616d;
+  --accent:#c4202e; --accent2:#e5434f; --accent-d:#97141f;
+  --accent-soft:rgba(229,67,79,.11); --accent-line:rgba(229,67,79,.4);
+  --ok:#3fcf8e; --warn:#e8a33a; --err:#f0646d;
+  --field:#0d0f14; --code:#07080b;
+  --radius:12px; --radius-s:8px;
+  --glow:0 1px 2px rgba(0,0,0,.45); --edge:none;
+}
+body::before{background:
+  radial-gradient(900px 540px at 10% -10%, rgba(196,32,46,.20), transparent 70%),
+  radial-gradient(820px 620px at 108% 112%, rgba(58,92,168,.16), transparent 70%),
+  linear-gradient(180deg,var(--bg2),var(--bg))}
+body::after{opacity:1;
+  background-image:
+    linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);
+  background-size:56px 56px;
+  -webkit-mask-image:radial-gradient(ellipse 90% 70% at 28% 0%,#000,transparent 78%);
+  mask-image:radial-gradient(ellipse 90% 70% at 28% 0%,#000,transparent 78%)}
+h1,h2,h3{font-weight:600}
+.head h1{font-size:1.7rem;font-weight:650}
+
+/* скорость: ни размытия, ни вечных анимаций, короткие переходы */
+.side,.login,.mbar,.scrim,dialog::backdrop{backdrop-filter:none;-webkit-backdrop-filter:none}
+*,*::before,*::after{transition-duration:.1s!important}
+.login,.login>*,.login::before,dialog[open],.toast,.dot,.skel::after{animation:none!important}
+#content>*{animation:fadein .12s ease-out both}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+.btn:hover,.r:hover,.card:hover,.tile:hover,.stat:hover,.guild:hover,
+.grid2>.card:hover,.cols>.card:hover,.tiles .sticker:hover img{transform:none}
+.skel::after{display:none}
+
+/* строгие плоские поверхности */
+.card,.r,.stat,.tile,.guild{background:var(--panel);box-shadow:var(--glow)}
+.card:hover,.r:hover{border-color:var(--line2)}
+.side{background:rgba(10,11,15,.92)}
+.login{background:var(--panel);box-shadow:0 24px 60px rgba(0,0,0,.55);border-radius:18px}
+.login::after{display:none}
+.stat::after{display:none}
+.stat::before{height:2px;opacity:1;background:var(--accent)}
+.stat.ok::before{background:var(--ok)} .stat.warn::before{background:var(--warn)}
+.stat b{font-weight:650}
+.logo{background:var(--accent);box-shadow:none;border-radius:12px}
+.brand .logo{border-radius:10px}
+.btn{box-shadow:none;background:var(--panel2);font-weight:550}
+.btn:hover{background:var(--panel3)}
+.btn.primary{background:var(--accent);box-shadow:none}
+.btn.primary:hover{background:var(--accent2);box-shadow:none}
+.nav button.active{background:var(--accent-soft)}
+.nav button.active .ico{background:var(--accent);box-shadow:none}
+.nav button.active::before{box-shadow:none}
+.pager button.active{background:var(--accent);box-shadow:none}
+.switch.on{background:var(--accent);box-shadow:none}
+input[type=checkbox]:checked,input[type=radio]:checked{background:var(--accent);box-shadow:none}
+.tile .ic{border-radius:9px}
+.bar i{background:var(--accent)}
+.bar i.warn{background:var(--warn)} .bar i.ok{background:var(--ok)}
+.card.pinned::before{display:none}
+.card.danger-zone{background:var(--panel)}
+.section-title::after{background:var(--line)}
+
+html[data-theme=light]{
+  --bg:#eef0f4; --bg2:#f6f7fa; --panel:#ffffff; --panel2:#f4f5f8; --panel3:#e9ebf0;
+  --line:rgba(15,20,40,.10); --line2:rgba(15,20,40,.18);
+  --text:#14171f; --muted:#626877; --faint:#9298a6;
+  --accent:#b8202c; --accent2:#d63a46; --field:#fff; --code:#10121a;
+  --glow:0 1px 2px rgba(20,25,50,.07);
+}
+html[data-theme=light] body::before{background:
+  radial-gradient(900px 540px at 10% -10%, rgba(196,32,46,.10), transparent 70%),
+  radial-gradient(820px 620px at 108% 112%, rgba(58,92,168,.09), transparent 70%),
+  linear-gradient(180deg,var(--bg2),var(--bg))}
+html[data-theme=light] body::after{
+  background-image:
+    linear-gradient(rgba(15,20,40,.05) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(15,20,40,.05) 1px,transparent 1px);
+  background-size:56px 56px}
+html[data-theme=light] .side{background:rgba(255,255,255,.94)}
+html[data-theme=light] .login{background:#fff}
+@media (max-width:1000px){
+  .side{background:var(--panel)}
+  .mbar{background:rgba(10,11,15,.96)}
+  html[data-theme=light] .mbar{background:rgba(255,255,255,.96)}
+}
 </style>
 </head>
 <body>
