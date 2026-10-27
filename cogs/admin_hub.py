@@ -104,6 +104,13 @@ SECTIONS = [
         ("🎫", "Стикеры из папки", "HallRecruit.hr_sticker_upload", "/hr_sticker_upload"),
         ("💬", "Баллы рекрута", "HallRecruit.points", "/points"),
     ]),
+    ("🎉", "Жизнь семьи", [
+        ("⚖️", "Наказания: мут", "ModPanel.mod_panel", "/наказания"),
+        ("📊", "Опрос: создать", "Polls.poll_new", "/опрос"),
+        ("🗳", "Опросы: активные", "Polls.poll_list", "/опросы"),
+        ("🗓", "Календарь семьи", "Dates.dates_panel", "/даты"),
+        ("📡", "Стримы: анонсы", "Streams.streams_panel", "/стримы"),
+    ]),
     ("🔧", "Сервис и откат", [
         ("💾", "Снимок состояния", "StateSave.update_save", "/update_save"),
         ("↩️", "Откат настроек", "Reverse.reverse", "/reverse"),
