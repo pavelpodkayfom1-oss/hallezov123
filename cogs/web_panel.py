@@ -352,6 +352,8 @@ class WebPanel(commands.Cog):
             app.router.add_post("/api/texts/save", self.h_text_save)
             app.router.add_post("/api/texts/reset", self.h_text_reset)
             app.router.add_post("/api/texts/preview", self.h_text_preview)
+            app.router.add_get("/api/refresh", self.h_refresh_targets)
+            app.router.add_post("/api/refresh", self.h_refresh_apply)
             app.router.add_get("/api/stickers", self.h_stickers)
             app.router.add_get("/api/stickers/image", self.h_sticker_image)
             app.router.add_post("/api/stickers/send", self.h_sticker_send)
@@ -766,6 +768,29 @@ class WebPanel(commands.Cog):
             return _json({"error": err}, 503)
         body = await _body(request)
         return _json(tools.text_preview(self.bot, str(body.get("id") or ""), body.get("value")))
+
+    # ---- «Обновить в Discord»: переложить готовые карточки текущими текстами ----
+    async def h_refresh_targets(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        try:
+            return _json(await tools.refresh_targets(self.bot))
+        except ValueError as e:
+            return _json({"targets": [], "error": str(e)})
+
+    async def h_refresh_apply(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        try:
+            res = await tools.refresh_apply(self.bot, str(body.get("ref") or ""))
+        except Exception as e:
+            res = {"error": f"Discord не ответил: {e.__class__.__name__}"}
+        print(f"🔄 Панель: обновление «{body.get('ref')}»: "
+              f"{str(res.get('error') or res.get('did'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
 
     # ---- стикеры ----
     async def h_stickers(self, request: web.Request) -> web.Response:

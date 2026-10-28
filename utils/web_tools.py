@@ -2077,7 +2077,64 @@ def text_preview(bot, item_id: str, value: Any) -> Dict[str, Any]:
     return out
 
 
-# ═══════════════════════════════ Стикеры ═══════════════════════════════
+# ═══════════════════════════ Обновить в Discord ═══════════════════════════
+# Сохранённая надпись сразу попадает в новые сообщения, но карточки, которые бот уже
+# выложил в каналы, Discord хранит у себя — он их сам не переклеивает. Кнопка сверху
+# просит нужный ког переложить его витрину текущими текстами; список того, что умеет,
+# коги объявляют сами, поэтому выключенный модуль в меню не показывается.
+
+REFRESH_LABELS = {"kazna": "Казна: витрины в каналах", "afk": "Панель АФК"}
+
+
+def _refresh_guild(bot):
+    guild = _safe_guild(bot)
+    if guild is None:
+        raise ValueError("Бот ни на одном сервере — обновлять негде")
+    return guild
+
+
+async def refresh_targets(bot) -> Dict[str, Any]:
+    """Что панель может переложить в Discord прямо сейчас."""
+    guild = _refresh_guild(bot)
+    out = []
+    treasury = bot.get_cog("Treasury")
+    if treasury is not None:
+        chans = [f"#{c.name}" for c in treasury.showcase_channels(guild) if c is not None]
+        if chans:
+            out.append({"ref": "kazna", "title": REFRESH_LABELS["kazna"], "where": ", ".join(chans)})
+        else:
+            out.append({"ref": "kazna", "title": REFRESH_LABELS["kazna"],
+                        "where": "ветки казны ещё нет — собери её в `/казна`", "off": True})
+    panel = bot.get_cog("HallPanel")
+    if panel is not None:
+        hp = _hall_mod()
+        st = (hp.load_settings() if hp else {}) or {}
+        ch = guild.get_channel(int(st.get("afk_panel_channel_id") or 0))
+        out.append({"ref": "afk", "title": REFRESH_LABELS["afk"],
+                    "where": (f"#{ch.name}" if ch else "канал для панели ещё не выбран"),
+                    "off": ch is None})
+    return {"targets": out}
+
+
+async def refresh_apply(bot, ref: str) -> Dict[str, Any]:
+    guild = _refresh_guild(bot)
+    if ref == "kazna":
+        treasury = bot.get_cog("Treasury")
+        if treasury is None:
+            return {"error": "Модуль казны не загружен"}
+        where = await treasury.apply_texts(guild)
+        if not where:
+            return {"error": "Ветки казны ещё нет — сначала «🏗 Создать ветку казны» в `/казна`"}
+        return {"ok": True, "did": "Переложила карточки казны: " + ", ".join(where)}
+    if ref == "afk":
+        panel = bot.get_cog("HallPanel")
+        if panel is None:
+            return {"error": "Модуль панели семьи не загружен"}
+        done, note = await panel.publish_afk_panel(guild)
+        return {"ok": True, "did": note} if done else {"error": note}
+    return {"error": "Не знаю такого обновления"}
+
+
 # Папка stickers/ лежит в репозитории и на хостинге; в Discord стикером её делает
 # hall_recruit, а здесь картинку можно кинуть в канал прямо с сайта — эмбедом,
 # чтобы подпись и стиль были как у остальных постов бота.

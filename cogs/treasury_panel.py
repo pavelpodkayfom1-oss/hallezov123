@@ -533,23 +533,23 @@ class RejectModal(disnake.ui.Modal):
 # «Текстов» попадала в кнопки только после рестарта. Этот проход перечитывает надпись
 # каждый раз, когда вьюх собирается, — и новые посты, и экран `/казна` выходят уже свежими.
 BTN_TEXTS = {
-    "hzkaz:balance": ("kazna_btn_balance", "💰 Баланс казны"),
-    "hzkaz:book": ("kazna_btn_book", "📜 Книга казны"),
-    "hzkaz:topup": ("kazna_btn_topup", "➕ Пополнить"),
-    "hzkaz:new": ("kazna_btn_new", "🧾 Подать отчёт"),
-    "hzkaz:mine": ("kazna_btn_mine", "📋 Мои отчёты"),
-    "hzkazp:setup": ("kazna_btn_setup", "🏗 Создать ветку казны"),
-    "hzkazp:banners": ("kazna_btn_banners", "🖼 Перезалить баннеры"),
-    "hzkazp:set": ("kazna_btn_setbal", "⚖️ Задать остаток"),
+    "hzkaz:balance": "kazna_btn_balance",
+    "hzkaz:book": "kazna_btn_book",
+    "hzkaz:topup": "kazna_btn_topup",
+    "hzkaz:new": "kazna_btn_new",
+    "hzkaz:mine": "kazna_btn_mine",
+    "hzkazp:setup": "kazna_btn_setup",
+    "hzkazp:banners": "kazna_btn_banners",
+    "hzkazp:set": "kazna_btn_setbal",
 }
 
 
 def relabel(view: disnake.ui.View) -> disnake.ui.View:
-    """Свежие надписи кнопок казны: Discord держит лимит 80 знаков и не любит пустоту."""
+    """Свежие надписи кнопок казны: пустая правка не должна оставлять кнопку без слова."""
     for child in view.children:
         key = BTN_TEXTS.get(getattr(child, "custom_id", None) or "")
         if key and hasattr(child, "label"):
-            child.label = (get_text(key[0], key[1]) or key[1])[:80]
+            child.label = (get_text(key, "") or child.label or "")[:80]
     return view
 
 
@@ -844,6 +844,33 @@ class Treasury(commands.Cog):
                 continue
             await c.send(embed=card(title, text, guild=guild))
         return True
+
+    # ── применить тексты из веб-панели ──
+    def showcase_channels(self, guild):
+        """Каналы витрин: чтобы панель показала, куда именно пойдёт обновление."""
+        st = _load()
+        return [guild.get_channel(int((st["channels"] or {}).get(k) or 0))
+                for k in ("bank", "reports")]
+
+    async def apply_texts(self, guild) -> List[str]:
+        """Переложить витрины казны текущими правками: тексты, кнопки и описания каналов.
+
+        Нужен именно этот вызов: сообщение, которое уже лежит в канале, Discord хранит у
+        себя и сам — бот его не «переклеивает» при сохранении на сайте.
+        """
+        st = _load()
+        if not await self._post_banners(guild, st):
+            return []
+        for key in CHANNELS:
+            ch = guild.get_channel(int((st["channels"] or {}).get(key) or 0))
+            new = _topic(self.bot, key)
+            if ch is not None and new and ch.topic != new:
+                try:
+                    await ch.edit(topic=new, reason="Казна: тексты из веб-панели")
+                except disnake.DiscordException:
+                    pass
+        return [f"#{c.name}" for c in self.showcase_channels(guild) if c is not None]
+
 
     # ── роли ──
     async def save_roles(self, inter, key: str, values) -> None:
