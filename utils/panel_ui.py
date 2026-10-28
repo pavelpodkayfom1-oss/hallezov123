@@ -800,6 +800,16 @@ html[data-theme=light] .hudfield input::selection{background:rgba(0,0,0,.2)}
 
 .tsplit>*,.split>*,.cols>*,.grid2>*{min-width:0}
 .tside,.ted,.tsearch{max-width:100%}
+.drop{border:2px dashed var(--line);border-radius:var(--radius);padding:1.15rem;text-align:center;
+  color:var(--muted);cursor:pointer;transition:border-color .16s,background .16s,color .16s}
+.drop:hover,.drop.over{border-color:var(--accent2);background:rgba(255,255,255,.035);color:var(--text)}
+.drop b{color:var(--text)}
+.shots{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.6rem}
+.shots figure{position:relative;margin:0}
+.shots img{width:98px;height:98px;object-fit:cover;border-radius:10px;border:1px solid var(--line);display:block}
+.shots figcaption{font-size:.7rem;color:var(--muted);text-align:center;margin-top:.15rem}
+.shots button{position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:50%;
+  border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer;line-height:1;padding:0}
 </style>
 </head>
 <body>
@@ -1018,6 +1028,7 @@ const PAGES = [
   ['screens', 'Экраны', 'screen', 'Семья'],
   ['texts', 'Тексты', 'type', 'Семья'],
   ['stickers', 'Стикеры', 'image', 'Семья'],
+  ['kazna', 'Казна', 'bank', 'Семья'],
   ['emojis', 'Эмодзи', 'smile', 'Семья'],
   ['diag', 'Диагностика', 'pulse', 'Служба'],
   ['audit', 'Ревизия', 'search', 'Служба'],
@@ -1045,6 +1056,7 @@ const ICONS = {
   power: '<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>',
   out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
+  bank: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
   menu: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
 };
 function icon(name) {
@@ -1170,7 +1182,7 @@ async function go(page) {
   content.replaceChildren(skeleton());
   try {
     const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, screens: pageScreens,
-      texts: pageTexts, stickers: pageStickers, emojis: pageEmojis,
+      texts: pageTexts, stickers: pageStickers, kazna: pageKazna, emojis: pageEmojis,
       diag: pageDiag, audit: pageAudit, shots: pageShots,
       modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
     if (state.page === page) content.replaceChildren(view);
@@ -2799,6 +2811,110 @@ function skeleton() {
       h('div', { class: 'skel', style: 'width:' + (18 + (i % 2) * 22) + '%' })));
   }
   return box;
+}
+
+/* ---------- Казна: отчёт со скринами ---------- */
+async function apiForm(path, form) {
+  /* Тот же api(), но с FormData: файлы в JSON не влезают. */
+  let res;
+  try {
+    res = await fetch(path, { method: 'POST', body: form, credentials: 'same-origin',
+      cache: 'no-store', headers: { 'X-Requested-With': 'hz-panel' } });
+  } catch (e) { throw new Error('Нет связи с панелью'); }
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* пустой ответ */ }
+  if (res.status === 401) { showLogin('Сессия истекла, войдите снова'); throw new Error('Нужен вход'); }
+  if (!res.ok) {
+    const fallback = res.status === 403 ? 'Нет прав на это действие'
+      : res.status >= 500 ? 'Внутренняя ошибка бота (' + res.status + ')' : 'Ошибка ' + res.status;
+    throw new Error((data && data.error) || fallback);
+  }
+  return data;
+}
+
+async function pageKazna() {
+  const rep = await api('/api/kazna/reporters');
+  if (rep.error) {
+    return h('div', null, pageHead('Казна', null), h('p', { class: 'err' }, rep.error));
+  }
+  const who = h('select', null, rep.rows.length
+    ? rep.rows.map((p) => h('option', { value: p.id }, p.name))
+    : [h('option', { value: '' }, 'нет людей с правом отчёта')]);
+  const sum = h('input', { type: 'text', maxlength: '20', placeholder: '15 000 или 15к' });
+  const what = h('input', { type: 'text', maxlength: '200', placeholder: 'Форма, транспорт, печать афиш' });
+  const to = h('input', { type: 'text', maxlength: '200', placeholder: 'На кого и на сколько человек' });
+  const det = h('textarea', { class: 'msg', placeholder: 'Где брали, кто платил, почему столько (необязательно)' });
+  const file = h('input', { type: 'file', accept: 'image/*', multiple: true, style: 'display:none' });
+  const drop = h('div', { class: 'drop' },
+    h('div', null, '📎  ', h('b', null, 'Перетащите сюда чек или скрин перевода')),
+    h('div', { class: 'muted small' }, 'до 3 файлов, не больше 8 МБ каждый · или нажми, чтобы выбрать'));
+  const shots = h('div', { class: 'shots' });
+  const out = h('div');
+  let files = [];
+
+  function draw() {
+    shots.replaceChildren(...files.map((f, i) => h('figure', null,
+      h('img', { src: URL.createObjectURL(f), alt: f.name }),
+      h('button', { title: 'Убрать', onclick: () => { files.splice(i, 1); draw(); } }, '×'),
+      h('figcaption', null, Math.round(f.size / 1024) + ' КБ'))));
+  }
+  function add(list) {
+    for (const f of list) {
+      if (files.length >= 3) { toast('Больше трёх скринов не нужно', 'err'); break; }
+      if (!(f.type || '').startsWith('image/')) { toast('«' + f.name + '» — не картинка', 'err'); continue; }
+      if (f.size > 8 * 1024 * 1024) { toast('«' + f.name + '» больше 8 МБ', 'err'); continue; }
+      files.push(f);
+    }
+    draw();
+  }
+  drop.addEventListener('click', () => file.click());
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', (e) => { e.preventDefault(); add(e.dataTransfer.files); });
+  file.addEventListener('change', () => { add(file.files); file.value = ''; });
+
+  const send = h('button', { class: 'btn primary', onclick: async () => {
+    if (!who.value) { toast('Выбери, кто подаёт отчёт', 'err'); return; }
+    if (!sum.value.trim() || !what.value.trim()) { toast('Нужны сумма и статья траты', 'err'); return; }
+    send.disabled = true;
+    out.replaceChildren(spinner('Отправляю…'));
+    const fd = new FormData();
+    fd.append('actor', who.value);
+    fd.append('сумма', sum.value);
+    fd.append('на_что', what.value);
+    fd.append('кому', to.value);
+    fd.append('детали', det.value);
+    files.forEach((f) => fd.append('скрин', f, f.name));
+    try {
+      const r = await apiForm('/api/kazna/report', fd);
+      out.replaceChildren(h('p', null, chip('отчёт #' + r.rid, 'ok'),
+        ' Ушёл в приёмку: ' + r.review + ' · скринов ' + r.photos +
+        ' · сумма спишется после одобрения.'));
+      toast('Отчёт #' + r.rid + ' отправлен', 'ok');
+      sum.value = what.value = to.value = det.value = '';
+      files = [];
+      draw();
+    } catch (e) {
+      out.replaceChildren(h('p', { class: 'err' }, e.message));
+      toast(e.message, 'err');
+    }
+    send.disabled = false;
+  } }, 'Отправить отчёт');
+
+  return h('div', null,
+    pageHead('Казна: отчёт о трате',
+      'Скрины перетаскиваются прямо в форму — как в Discord, только без отдельной команды. '
+      + 'Отчёт уйдёт в приёмку, деньги спишутся после одобрения.',
+      h('button', { class: 'btn', onclick: () => go('kazna') }, 'Обновить')),
+    h('div', { class: 'card form' },
+      h('h2', null, '💰 Что потратили'),
+      h('label', null, 'Кто подаёт', who),
+      h('div', { class: 'grid2' }, h('label', null, 'Сумма', sum), h('label', null, 'На что', what)),
+      h('label', null, 'Кому', to),
+      h('label', null, 'Детали', det),
+      h('label', null, 'Скрины', drop, file, shots),
+      h('div', { class: 'row end' }, send),
+      out));
 }
 
 window.addEventListener('beforeunload', (e) => { if (state.isDirty()) { e.preventDefault(); e.returnValue = ''; } });

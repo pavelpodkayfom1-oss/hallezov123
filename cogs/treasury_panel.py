@@ -8,6 +8,7 @@
 потратить» нельзя: каждая сумма оставляет запись в книге казны.
 """
 import asyncio
+import io
 import json
 import os
 import time
@@ -83,7 +84,7 @@ def _allowed(inter, st: dict, key: str) -> bool:
     want = set(_roles(st, key))
     if key == "approve" and not want:
         want = set(_roles(st, "manage"))
-    member = getattr(inter, "author", None)
+    member = getattr(inter, "author", None) or inter
     return bool(want) and any(r.id in want for r in getattr(member, "roles", []))
 
 
@@ -264,8 +265,10 @@ def _reports_text(bot, chip: str = "`/отчёт`") -> str:
         f"{n[3]}  **Кому** — на кого потратили и на сколько человек\n"
         f"{n[4]}  **Детали** — всё, что стоит знать проверяющему\n\n"
         f"### 📎  СКРИНЫ\n"
-        f"Со скринами отчёт подаётся командой {chip} — там есть поле «Скриншот», "
-        f"куда можно перетащить чек или скрин перевода (до {MAX_PHOTOS} штук).\n"
+        f"Проще всего — в веб-панели семьи: раздел **💰 Казна**, скрины перетаскиваются "
+        f"прямо в форму отчёта (до {MAX_PHOTOS} штук) и сразу уходят в приёмку вместе с суммой.\n"
+        f"В Discord — командой {chip}: там тоже есть поле «Скриншот», куда можно "
+        f"перетащить чек или скрин перевода.\n"
         f"Кнопка **«🧾 Подать отчёт»** — это быстрая форма без файлов: после неё можно "
         f"прикрепить скрины ответом в этом канале в течение 2 минут.\n\n"
         f"### {meg}  ЧТО ДАЛЬШЕ\n"
@@ -960,27 +963,24 @@ class Treasury(commands.Cog):
         else:
             await inter.response.send_message(embed=emb, ephemeral=True)
 
-    async def submit(self, inter, raw_amount: str, purpose: str, people: str, detail: str,
-                     files: Optional[List[disnake.File]] = None) -> None:
+    async def file_report(self, guild, author_id: int, raw_amount: str, purpose: str,
+                          people: str, detail: str,
+                          files: Optional[List[disnake.File]] = None) -> dict:
+        """Записать отчёт и положить карточку в приёмку.
+
+        Общий вход для Discord (кнопка, модалка, `/отчёт`) и для веб-панели: права проверяются
+        до вызова, здесь остаются только сумма, хроника и карточка.
+        """
         st = _load()
-        if not _allowed(inter, st, "manage"):
-            return await self._answer(inter, _need_manage(self.bot, inter.guild))
         value = _amount(raw_amount)
         if value is None:
-            return await self._answer(
-                inter, _warn(self.bot, inter.guild, "НЕ ПОНЯЛ СУММУ",
-                             f"{_e(self.bot, 'hz_shoppingcart', '🛒')}  Сумму траты пишут цифрами: "
-                             "`15000` или `15к`."))
-        review = inter.guild.get_channel(int((st["channels"] or {}).get("review") or 0)) \
-            if inter.guild else None
+            return {"error": "sum"}
+        review = guild.get_channel(int((st["channels"] or {}).get("review") or 0)) if guild else None
         if review is None:
-            return await self._answer(
-                inter, _warn(self.bot, inter.guild, "НЕТ КАНАЛА ПРИЁМКИ",
-                             f"{_e(self.bot, 'hz_moderator', '🛡')}  Приёмки ещё нет — на экране "
-                             "`/казна` нажми «🏗 Создать ветку казны», потом подавай отчёт."))
+            return {"error": "review"}
         st["seq"] = int(st.get("seq") or 0) + 1
         rid = str(st["seq"])
-        rep = {"id": rid, "by": int(inter.author.id), "amount": value,
+        rep = {"id": rid, "by": int(author_id), "amount": value,
                "purpose": (purpose or "без статьи")[:200],
                "people": (people or "не указано")[:200], "detail": detail[:900],
                "ts": int(time.time()), "status": "wait",
@@ -993,20 +993,80 @@ class Treasury(commands.Cog):
             for old in closed[: len(st["reports"]) - MAX_REPORTS]:
                 st["reports"].pop(str(old["id"]), None)
         _save(st)
-        review_msg = await review.send(embed=_report_embed(self.bot, inter.guild, rep),
+        review_msg = await review.send(embed=_report_embed(self.bot, guild, rep),
                                        view=ReviewView(rid), files=files or [])
+        return {"rid": rid, "value": value, "review": review, "card": review_msg,
+                "photos": len(files or [])}
+
+    def reporters(self, guild) -> dict:
+        """Кто имеет право подать отчёт: управление казной плюс админы семьи.
+
+        Панель спрашивает это не для красоты — список «кто подаёт» должен совпадать с теми,
+        кого пропустит проверка прав, иначе форма обещает человеку отчёт, которого он не сдаст.
+        """
+        st = _load()
+        want = set(_roles(st, "manage"))
+        rows = [{"id": str(m.id), "name": m.display_name} for m in guild.members
+                if not m.bot and (is_admin(m) or any(r.id in want for r in m.roles))]
+        rows.sort(key=lambda r: r["name"].lower())
+        return {"rows": rows[:60]}
+
+    async def panel_report(self, member, raw_amount: str, purpose: str, people: str,
+                           detail: str, photos: List[tuple]) -> dict:
+        """Отчёт из веб-панели: те же права и та же карточка, только без взаимодействия.
+
+        `photos` — список (имя, mime, байты): на 256 МБ хостинга файл в Discord уходит прямо
+        из памяти, писать скрины на диск незачем.
+        """
+        st = _load()
+        if not _allowed(member, st, "manage"):
+            return {"error": "Отчёт подаёт управление казной — роль выдаёт экран `/казна`."}
+        files = []
+        for name, mime, data in photos[:MAX_PHOTOS]:
+            if not (mime or "").startswith("image/"):
+                return {"error": f"«{name}» — не картинка, прикладывай png или jpg."}
+            if len(data) > MAX_PHOTO_MB * 1024 * 1024:
+                return {"error": f"«{name}» больше {MAX_PHOTO_MB} МБ — сожми его."}
+            files.append(disnake.File(io.BytesIO(data), filename=str(name)[:80] or "screen.png"))
+        res = await self.file_report(member.guild, int(member.id), raw_amount, purpose,
+                                     people, detail, files)
+        if res.get("error") == "sum":
+            return {"error": "Сумму пишут цифрами: 15000 или 15к."}
+        if res.get("error") == "review":
+            return {"error": "Канала приёмки ещё нет — собери ветку в `/казна`."}
+        return {"ok": True, "rid": res["rid"], "amount": _n(res["value"]),
+                "review": res["review"].name, "photos": res["photos"]}
+
+    async def submit(self, inter, raw_amount: str, purpose: str, people: str, detail: str,
+                     files: Optional[List[disnake.File]] = None) -> None:
+        st = _load()
+        if not _allowed(inter, st, "manage"):
+            return await self._answer(inter, _need_manage(self.bot, inter.guild))
+        res = await self.file_report(inter.guild, int(inter.author.id), raw_amount, purpose,
+                                     people, detail, files)
+        if res.get("error") == "sum":
+            return await self._answer(
+                inter, _warn(self.bot, inter.guild, "НЕ ПОНЯЛ СУММУ",
+                             f"{_e(self.bot, 'hz_shoppingcart', '🛒')}  Сумму траты пишут цифрами: "
+                             "`15000` или `15к`."))
+        if res.get("error") == "review":
+            return await self._answer(
+                inter, _warn(self.bot, inter.guild, "НЕТ КАНАЛА ПРИЁМКИ",
+                             f"{_e(self.bot, 'hz_moderator', '🛡')}  Приёмки ещё нет — на экране "
+                             "`/казна` нажми «🏗 Создать ветку казны», потом подавай отчёт."))
+        rid, value, review = res["rid"], res["value"], res["review"]
         meg = _e(self.bot, "hz_megaphone", "📢")
         pencil = _e(self.bot, "hz_pencil", "✍️")
         bits = _e(self.bot, "hz_bitsicon", "💎")
         mod = _e(self.bot, "hz_moderator", "🛡")
         photo = "📎"
-        if files:
-            photos = f"{photo}  **Скринов приложено:** {len(files)}\n"
+        if res["photos"]:
+            photos = f"{photo}  **Скринов приложено:** {res['photos']}\n"
             tail = f"> {pencil}  Следующая трата — `/отчёт` или кнопкой в канале отчётов."
         else:
             PHOTO_SECONDS = 120
             self._pending_photos[int(inter.author.id)] = (
-                rid, review_msg.id, int(inter.channel.id), time.time() + PHOTO_SECONDS)
+                rid, res["card"].id, int(inter.channel.id), time.time() + PHOTO_SECONDS)
             photos = (f"{photo}  **Прикрепи скрины** ответом в этот канал — до 3 штук, "
                       f"жду {PHOTO_SECONDS} сек.\n")
             tail = f"> {pencil}  Следующая трата — той же кнопкой."

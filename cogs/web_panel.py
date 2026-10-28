@@ -53,6 +53,8 @@ SESSION_TTL = 12 * 3600
 MIN_PASSWORD_LEN = 8
 SLEEP_MAX = 720
 MAX_FILE_BYTES = 1_000_000
+KAZNA_PHOTOS = 3
+KAZNA_FILE_MB = 8
 FILE_NAME_RE = re.compile(r"^[A-Za-z0-9_\-]{1,64}\.json$")
 HIDDEN_FILES = {"panel_state.json"}
 PUBLIC_API = {"/api/session", "/api/login", "/api/logout"}
@@ -321,7 +323,9 @@ class WebPanel(commands.Cog):
     # ---- запуск сервера ----
     async def _start(self) -> None:
         try:
-            app = web.Application(middlewares=[self._middleware], client_max_size=2 * 1024 * 1024)
+            # 2 МБ хватало всем экранам, кроме формы отчёта: три скрина по 8 МБ — это единственный
+            # запрос, который тянет файлы (multipart читается частями, в памяти лежит один скрин)
+            app = web.Application(middlewares=[self._middleware], client_max_size=28 * 1024 * 1024)
             app.router.add_get("/", self.h_index)
             app.router.add_get("/favicon.ico", self.h_favicon)
             app.router.add_get("/api/session", self.h_session)
@@ -351,6 +355,8 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/stickers", self.h_stickers)
             app.router.add_get("/api/stickers/image", self.h_sticker_image)
             app.router.add_post("/api/stickers/send", self.h_sticker_send)
+            app.router.add_get("/api/kazna/reporters", self.h_kazna_reporters)
+            app.router.add_post("/api/kazna/report", self.h_kazna_report)
             app.router.add_get("/api/emojis", self.h_emojis)
             app.router.add_get("/api/emojis/image", self.h_emoji_image)
             app.router.add_post("/api/emojis/upload", self.h_emoji_upload)
@@ -429,7 +435,8 @@ class WebPanel(commands.Cog):
         csp = (
             "default-src 'none'; "
             f"script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
-            "img-src 'self' data: https://cdn.discordapp.com; connect-src 'self'; "
+            # blob: нужен превьюшкам скринов в форме отчёта — их рисует createObjectURL
+            "img-src 'self' data: blob: https://cdn.discordapp.com; connect-src 'self'; "
             "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
         )
         return web.Response(
@@ -787,6 +794,45 @@ class WebPanel(commands.Cog):
                                        str(body.get("color") or ""))
         print(f"🎴 Панель: стикер в {res.get('where', '?')}: "
               f"{str(res.get('error') or res.get('link'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    # ---- казна: отчёт со скринами ----
+    async def h_kazna_reporters(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        return _json(tools.kazna_reporters(self.bot))
+
+    async def h_kazna_report(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        fields: Dict[str, str] = {}
+        photos: List[tuple] = []
+        try:
+            reader = await request.multipart()
+            while True:
+                part = await reader.next()
+                if part is None:
+                    break
+                data = await part.read(decode=True)
+                if part.filename:
+                    if len(photos) >= KAZNA_PHOTOS:
+                        return _json({"error": f"Скринов нужно не больше {KAZNA_PHOTOS}"}, 400)
+                    if len(data) > KAZNA_FILE_MB * 1024 * 1024:
+                        return _json({"error": f"«{part.filename}» больше {KAZNA_FILE_MB} МБ"}, 400)
+                    photos.append((part.filename, str(part.headers.get("Content-Type") or ""), data))
+                else:
+                    fields[str(part.name or "")[:20]] = data.decode("utf-8", "replace")[:900]
+        except web.HTTPException as e:
+            # aiohttp сам отвечает 413, если тело больше лимита приложения:
+            # превращаем в текст для формы, иначе человек увидит пустую ошибку
+            return _json({"error": f"Форма не дошла целиком ({e.status} {e.reason})"}, e.status)
+        except Exception as e:
+            return _json({"error": f"Форма не дошла целиком ({e.__class__.__name__})"}, 400)
+        res = await tools.kazna_report(self.bot, fields, photos)
+        print(f"💰 Панель: отчёт казны от {fields.get('actor', '?')} — "
+              f"{str(res.get('error') or ('#' + str(res.get('rid'))))[:120]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
 
     # ---- эмодзи из папки emojis/ ----

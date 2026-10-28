@@ -2261,3 +2261,40 @@ async def emoji_upload(bot, names: Any) -> Dict[str, Any]:
     except Exception:
         pass
     return {"uploaded": done, "failed": failed, "left": rest}
+
+
+# ───────────────────────── 7. казна: отчёт со скринами ─────────────────────────
+
+def kazna_reporters(bot) -> Dict[str, Any]:
+    """Кто подаёт отчёт: список панели совпадает с проверкой прав в казне, а не с «всеми»."""
+    guild = guild_of(bot)
+    if guild is None:
+        return {"rows": [], "error": "Бот ни на одном сервере"}
+    cog = bot.get_cog("Treasury")
+    if cog is None:
+        return {"rows": [], "error": "Казна выключена — ког Treasury не загружен"}
+    return cog.reporters(guild)
+
+
+async def kazna_report(bot, fields: Dict[str, Any], photos: List[tuple]) -> Dict[str, Any]:
+    """Отчёт о трате из панели: те же права, та же карточка в приёмке, скрины из формы.
+
+    `photos` — (имя файла, mime, байты); в Discord они уходят из памяти, на 256 МБ хостинга
+    писать скрины на диск незачем.
+    """
+    guild = guild_of(bot)
+    if guild is None:
+        return {"error": "Бот ни на одном сервере"}
+    cog = bot.get_cog("Treasury")
+    if cog is None:
+        return {"error": "Казна выключена — ког Treasury не загружен"}
+    actor = str(fields.get("actor") or "").strip()
+    if not actor.isdigit():
+        return {"error": "Выбери, кто подаёт отчёт"}
+    member = guild.get_member(int(actor))
+    if member is None:
+        return {"error": "Этого человека нет на сервере"}
+    return await cog.panel_report(member, str(fields.get("сумма") or ""),
+                                  str(fields.get("на_что") or ""),
+                                  str(fields.get("кому") or ""),
+                                  str(fields.get("детали") or ""), photos)
