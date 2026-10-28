@@ -105,32 +105,40 @@ def _warn(bot=None, guild=None, head: str = "ТАК НЕ ВЫЙДЕТ", text: st
 _CHIP_ID: dict = {}
 
 
-async def _report_chip(bot, guild) -> str:
-    """`</имя:id>` — формат, из-за которого Discord рисует в сообщении кликабельную команду.
+def _chip_text(guild) -> str:
+    """Тот же чип, но без ожидания: кнопка обязана ответить за ~3 секунды.
 
-    Локальные `get_*_command_named` в disnake 2.12 читают кэш и не знают про команды, которые
-    синк зарегистрировал сам, поэтому id берём одним HTTP-запросом на сервер и держим в кэше.
-    Без id текст всё равно остаётся читаемым — `/отчёт` руками тоже находится.
+    Сетевой запрос под лимитом ждёт десятки секунд, и если сделать его внутри колбэка,
+    Discord выдаёт «Приложение не ответило вовремя». Поэтому id команды прогревают фоном
+    (см. on_ready), а тут берут из кэша; без него текст всё равно читаемый.
     """
     key = int(guild.id) if guild is not None else 0
     cid = _CHIP_ID.get(key)
-    if cid is None:
-        hit = None
-        try:
-            app = bot.application_id
-            # команды бота лежат либо на сервере (когда задан GUILD_ID), либо глобально
-            cmds = await bot.http.get_guild_commands(app, key) if key else []
+    return f"</отчёт:{cid}>" if cid else "`/отчёт`"
+
+
+async def _warm_chip(bot, guild) -> None:
+    """Запросить id slash-команды «отчёт» и положить в кэш.
+
+    Локальные `get_*_command_named` в disnake 2.12 читают кэш и не знают про команды, которые
+    синк зарегистрировал сам, поэтому id берём одним HTTP-запросом — на сервере, а если команды
+    глобальные, то там.
+    """
+    key = int(guild.id) if guild is not None else 0
+    if not key or _CHIP_ID.get(key):
+        return
+    hit = None
+    try:
+        app = bot.application_id
+        cmds = await bot.http.get_guild_commands(app, key)
+        hit = next((c for c in cmds if c.get("name") == "отчёт"), None)
+        if hit is None:
+            cmds = await bot.http.get_global_commands(app)
             hit = next((c for c in cmds if c.get("name") == "отчёт"), None)
-            if hit is None:
-                cmds = await bot.http.get_global_commands(app)
-                hit = next((c for c in cmds if c.get("name") == "отчёт"), None)
-        except Exception:
-            hit = None
-        if not hit:
-            return "`/отчёт`"
-        cid = int(hit["id"])
-        _CHIP_ID[key] = cid
-    return f"</отчёт:{cid}>"
+    except Exception:
+        return
+    if hit:
+        _CHIP_ID[key] = int(hit["id"])
 
 
 def _need_manage(bot=None, guild=None) -> disnake.Embed:
@@ -609,6 +617,15 @@ class Treasury(commands.Cog):
             self.bot.add_view(BankView())
             self.bot.add_view(ReportsView())
             self.bot._treasury_view_added = True
+        # чип «/отчёт» просят из колбэка кнопки, а там 3 секунды на ответ — id команды
+        # собираем фоном сразу после старта и не ждём его в момент нажатия
+        if not getattr(self.bot, "_treasury_chip_warm", False):
+            self.bot._treasury_chip_warm = True
+            self.bot.loop.create_task(self._warm_chips())
+
+    async def _warm_chips(self):
+        for guild in self.bot.guilds:
+            await _warm_chip(self.bot, guild)
 
     # ── команда ──
     @commands.slash_command(name="казна", description="Казна семьи: банк, отчёты, приёмка",
@@ -1150,7 +1167,7 @@ class Treasury(commands.Cog):
                     embed=_need_manage(self.bot, inter.guild),
                     ephemeral=True)
             pencil = _e(self.bot, "hz_pencil", "✍️")
-            chip = await _report_chip(self.bot, inter.guild)
+            chip = _chip_text(inter.guild)
             # чип команды клиент рисует только в тексте сообщения, в эмбеде он мог бы
             # остаться сырым </отчёт:123...>
             return await inter.response.send_message(
