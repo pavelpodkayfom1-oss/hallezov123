@@ -213,6 +213,9 @@ def _reports_text(bot) -> str:
         f"{n[2]}  **На что** — мероприятие, форма, транспорт, откат после рейда\n"
         f"{n[3]}  **Кому** — на кого потратили и на сколько человек\n"
         f"{n[4]}  **Детали** — всё, что стоит знать проверяющему\n\n"
+        f"### 📎  СКРИНЫ\n"
+        f"После отправки формы бот ждёт **до 3 фото** в этом канале — чеки, скрины перевода, "
+        f"подтверждения. Прикрепи ответом в течение 2 минут.\n\n"
         f"### {meg}  ЧТО ДАЛЬШЕ\n"
         f"✅  Приняли → сумма снялась с баланса, запись ушла в **📜 логи казны**\n"
         f"❌  Отклонили → баланс **не тронут**, тебе вернётся причина\n\n"
@@ -544,6 +547,8 @@ class PanelView(disnake.ui.View):
 class Treasury(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        # ожидание скринов к отчёту: user_id → (channel_id, deadline, rid, review_msg_id)
+        self._pending_photos: dict = {}
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -848,16 +853,23 @@ class Treasury(commands.Cog):
             for old in closed[: len(st["reports"]) - MAX_REPORTS]:
                 st["reports"].pop(str(old["id"]), None)
         _save(st)
-        await review.send(embed=_report_embed(self.bot, inter.guild, rep), view=ReviewView(rid))
+        review_msg = await review.send(embed=_report_embed(self.bot, inter.guild, rep),
+                                       view=ReviewView(rid))
+        PHOTO_SECONDS = 120
+        self._pending_photos[int(inter.author.id)] = (
+            int(inter.channel.id), time.time() + PHOTO_SECONDS, rid, review_msg.id)
         meg = _e(self.bot, "hz_megaphone", "📢")
         pencil = _e(self.bot, "hz_pencil", "✍️")
         bits = _e(self.bot, "hz_bitsicon", "💎")
         mod = _e(self.bot, "hz_moderator", "🛡")
+        photo = "📎"
         await inter.response.send_message(
             embed=note_embed(
                 f"### {meg}  Отчёт #{rid} ушёл в {review.mention}\n\n"
                 f"{bits}  **{_n(value)}** спишутся только после приёмки\n"
                 f"{mod}  Решение за ролью приёмки — о нём придёт ЛС\n\n"
+                f"{photo}  **Прикрепи скрины** ответом в этот канал — до 3 штук, "
+                f"жду {PHOTO_SECONDS} сек.\n"
                 f"> {pencil}  Следующая трата — той же кнопкой.",
                 "success", title=f"{pencil}  ОТЧЁТ ОТПРАВЛЕН",
                 guild=inter.guild),
@@ -943,6 +955,59 @@ class Treasury(commands.Cog):
                            + (f"{bits}  Остаток: **{_n(balance)}**" if balance is not None else ""))
         try:
             await ch.send(embed=emb)
+        except disnake.DiscordException:
+            pass
+
+    # ── скрины к отчёту ──
+    @commands.Cog.listener()
+    async def on_message(self, message: disnake.Message):
+        if message.author.bot:
+            return
+        pending = self._pending_photos.get(int(message.author.id))
+        if not pending:
+            return
+        channel_id, deadline, rid, msg_id = pending
+        if int(message.channel.id) != channel_id:
+            return
+        if time.time() > deadline:
+            self._pending_photos.pop(int(message.author.id), None)
+            return
+        if not message.attachments:
+            return
+        images = [a for a in message.attachments
+                  if (a.content_type or "").startswith("image/") or
+                  str(a.filename or "").lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))]
+        if not images:
+            return
+        self._pending_photos.pop(int(message.author.id), None)
+        review = message.guild.get_channel(int((_load()["channels"] or {}).get("review") or 0)) \
+            if message.guild else None
+        if review is None:
+            return
+        try:
+            review_msg = await review.fetch_message(int(msg_id))
+        except disnake.DiscordException:
+            return
+        files = []
+        for att in images[:3]:
+            try:
+                files.append(await att.to_file())
+            except Exception:
+                pass
+        if not files:
+            return
+        try:
+            await review_msg.edit(files=files)
+        except disnake.DiscordException:
+            return
+        try:
+            await message.delete()
+        except disnake.DiscordException:
+            pass
+        try:
+            await message.channel.send(
+                embed=note_embed(f"📎  Скрины к отчёту **#{rid}** прикреплены ({len(files)} шт.).",
+                                 "success", title="📎  ФОТО ДОБАВЛЕНЫ", guild=message.guild))
         except disnake.DiscordException:
             pass
 
