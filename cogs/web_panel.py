@@ -351,6 +351,9 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/stickers", self.h_stickers)
             app.router.add_get("/api/stickers/image", self.h_sticker_image)
             app.router.add_post("/api/stickers/send", self.h_sticker_send)
+            app.router.add_get("/api/emojis", self.h_emojis)
+            app.router.add_get("/api/emojis/image", self.h_emoji_image)
+            app.router.add_post("/api/emojis/upload", self.h_emoji_upload)
             app.router.add_get("/api/commands", self.h_commands)
             app.router.add_post("/api/commands/run", self.h_command_run)
             app.router.add_post("/api/commands/press", self.h_command_press)
@@ -401,9 +404,11 @@ class WebPanel(commands.Cog):
             raise
         except asyncio.CancelledError:
             raise
-        except Exception:
+        except Exception as exc:
             traceback.print_exc()
-            resp = _json({"error": "Внутренняя ошибка панели, подробности в консоли бота"}, 500)
+            # называем причину прямо в ответе: «ошибка 500» без слов ничего не объясняет
+            resp = _json({"error": f"Ошибка внутри бота: {exc.__class__.__name__}: {str(exc)[:200]}",
+                          "detail": "Полный текст ошибки лежит в разделе «Логи»."}, 500)
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["X-Frame-Options"] = "DENY"
         resp.headers["Referrer-Policy"] = "no-referrer"
@@ -622,7 +627,7 @@ class WebPanel(commands.Cog):
         try:
             from utils import web_tools
         except Exception as e:
-            return None, f"Раздел не заведён: utils/web_tools.py не загружается ({e})"
+            return None, f"Раздел не загрузился: utils/web_tools.py не импортируется ({e.__class__.__name__}: {e}). Смотрите «Логи» при старте бота."
         return web_tools, None
 
     @staticmethod
@@ -632,7 +637,7 @@ class WebPanel(commands.Cog):
     async def h_apps(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(await tools.apps_list(request.query.get("status"),
                                           request.query.get("q"),
                                           request.query.get("limit") or 60))
@@ -640,7 +645,7 @@ class WebPanel(commands.Cog):
     async def h_app_detail(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         if not request.match_info["app_id"].isdigit():
             return _json({"error": "Непонятный номер заявки"})
         return _json(await tools.app_detail(self.bot, int(request.match_info["app_id"])))
@@ -648,7 +653,7 @@ class WebPanel(commands.Cog):
     async def h_app_act(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         body = await _body(request)
         action = str(body.get("action") or "")
         if action not in ("review", "interview", "accept", "reject"):
@@ -664,32 +669,32 @@ class WebPanel(commands.Cog):
     async def h_staff(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(tools.staff_list(self.bot))
 
     async def h_channels(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(tools.channel_rows(self.bot, request.query.get("q", "")))
 
     async def h_members(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(tools.member_rows(self.bot, request.query.get("q", ""),
                                       request.query.get("limit") or 50))
 
     async def h_voices(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(tools.voice_choices(self.bot))
 
     async def h_send(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         body = await _body(request)
         res = await tools.post_channel(self.bot, body.get("channel"),
                                       str(body.get("text") or ""), str(body.get("title") or ""),
@@ -701,7 +706,7 @@ class WebPanel(commands.Cog):
     async def h_dm(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         body = await _body(request)
         res = await tools.post_dm(self.bot, body.get("user"), str(body.get("text") or ""),
                                  str(body.get("title") or ""), str(body.get("color") or ""))
@@ -712,7 +717,7 @@ class WebPanel(commands.Cog):
     async def h_broadcast(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         body = await _body(request)
         res = await tools.broadcast(self.bot, body.get("users"), str(body.get("text") or ""),
                                    str(body.get("title") or ""), str(body.get("color") or ""),
@@ -725,14 +730,14 @@ class WebPanel(commands.Cog):
     async def h_texts(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         force = request.query.get("fresh") == "1"
         return _json(tools.texts_catalog(self.bot, force=force))
 
     async def h_text_save(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         body = await _body(request)
         res = tools.text_save(self.bot, str(body.get("id") or ""), body.get("value"))
         print(f"📝 Панель: текст {res.get('key') or body.get('id')}: "
@@ -742,7 +747,7 @@ class WebPanel(commands.Cog):
     async def h_text_reset(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         body = await _body(request)
         res = tools.text_reset(self.bot, str(body.get("id") or ""))
         print(f"📝 Панель: вернул как в коде {body.get('id')}: {str(res.get('error'))[:80]}", flush=True)
@@ -751,7 +756,7 @@ class WebPanel(commands.Cog):
     async def h_text_preview(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         body = await _body(request)
         return _json(tools.text_preview(self.bot, str(body.get("id") or ""), body.get("value")))
 
@@ -759,13 +764,13 @@ class WebPanel(commands.Cog):
     async def h_stickers(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(tools.sticker_rows())
 
     async def h_sticker_image(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         data, mime = tools.sticker_image(request.query.get("name"))
         if data is None:
             return _json({"error": "Картинки нет в папке stickers/"}, 404)
@@ -775,7 +780,7 @@ class WebPanel(commands.Cog):
     async def h_sticker_send(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         body = await _body(request)
         res = await tools.post_sticker(self.bot, body.get("channel"), body.get("name"),
                                        str(body.get("text") or ""), str(body.get("title") or ""),
@@ -784,16 +789,43 @@ class WebPanel(commands.Cog):
               f"{str(res.get('error') or res.get('link'))[:120]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
 
+    # ---- эмодзи из папки emojis/ ----
+    async def h_emojis(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        return _json(tools.emoji_catalog(self.bot))
+
+    async def h_emoji_image(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        data, mime = tools.emoji_image(request.query.get("file"))
+        if data is None:
+            return _json({"error": "Такой картинки нет в папке emojis/"}, 404)
+        return web.Response(body=data, content_type=mime,
+                            headers={"Cache-Control": "public, max-age=600"})
+
+    async def h_emoji_upload(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        res = await tools.emoji_upload(self.bot, body.get("names"))
+        print(f"🙂 Панель: эмодзи загружено {len(res.get('uploaded', []))}, "
+              f"не вышло {len(res.get('failed', []))}: {str(res.get('error') or '')[:100]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
     async def h_commands(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(tools.command_rows(self.bot))
 
     async def h_command_run(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         body = await _body(request)
         args = body.get("args") if isinstance(body.get("args"), dict) else {}
         res = await tools.run_screen(self.bot, str(body.get("ref") or ""), body.get("actor"),
@@ -805,7 +837,7 @@ class WebPanel(commands.Cog):
     async def h_command_press(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         body = await _body(request)
         values = body.get("values") if isinstance(body.get("values"), list) else []
         res = await tools.press(self.bot, body.get("token"), body.get("index"), body.get("actor"),
@@ -815,7 +847,7 @@ class WebPanel(commands.Cog):
     async def h_command_modal(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         body = await _body(request)
         fields = body.get("fields") if isinstance(body.get("fields"), dict) else {}
         res = await tools.submit_modal(self.bot, body.get("token"),
@@ -826,52 +858,52 @@ class WebPanel(commands.Cog):
     async def h_diag_day(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         hours = request.query.get("hours") or 24
         return _json(await tools.day_report(int(hours) if hours.isdigit() else 24))
 
     async def h_diag_system(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(tools.system_report(self.bot))
 
     async def h_diag_silents(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         days = request.query.get("days") or 7
         return _json(await tools.silents(self.bot, int(days) if days.isdigit() else 7))
 
     async def h_audit_channels(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         limit = request.query.get("limit") or 40
         return _json(await tools.channel_audit(self.bot, int(limit) if limit.isdigit() else 40))
 
     async def h_audit_emojis(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(tools.emoji_audit(self.bot))
 
     async def h_snapshots(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(tools.snapshot_rows())
 
     async def h_snapshot_get(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(tools.snapshot_diff(request.match_info["name"]))
 
     async def h_snapshot_restore(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         res = await tools.snapshot_restore(request.match_info["name"], self.bot)
         print(f"↩️ Панель: откат к {request.match_info['name']}: "
               f"{str(res.get('error') or res.get('steps'))[:200]}", flush=True)
@@ -1074,7 +1106,7 @@ class WebPanel(commands.Cog):
     async def h_center(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
         if err:
-            return _json({"error": err}, 500)
+            return _json({"error": err}, 503)
         return _json(tools.control_center(self.bot))
 
     async def _restart(self) -> None:

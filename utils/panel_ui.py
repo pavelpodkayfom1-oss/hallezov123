@@ -611,62 +611,195 @@ input[type=radio]:checked::after{background:var(--on-accent)}
 }
 
 /* ---------- вход в стиле HUD ---------- */
-.hudwrap{position:relative;min-height:100vh;display:grid;place-items:center;padding:1.2rem;overflow:hidden}
+.hudwrap{position:relative;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:1.2rem;overflow:hidden}
 .hudwrap::before{content:"";position:absolute;inset:0;pointer-events:none;
-  background:radial-gradient(closest-side at 50% 42%,rgba(255,255,255,.10),transparent 70%)}
-html[data-theme=light] .hudwrap::before{background:radial-gradient(closest-side at 50% 42%,rgba(0,0,0,.07),transparent 70%)}
-.hudwrap::after{content:"";position:absolute;left:0;right:0;top:-160px;height:160px;pointer-events:none;
-  background:linear-gradient(180deg,transparent,rgba(255,255,255,.055),transparent);animation:scan 8s linear infinite}
-html[data-theme=light] .hudwrap::after{background:linear-gradient(180deg,transparent,rgba(0,0,0,.05),transparent)}
-@keyframes scan{to{transform:translateY(calc(100vh + 160px))}}
-.hud{position:relative;z-index:1;width:100%;max-width:430px;display:flex;flex-direction:column;gap:.8rem;
-  padding:1.6rem 2.2rem 1.2rem;text-align:center;border:1px solid var(--line);background:rgba(0,0,0,.5);
-  animation:hudin .5s ease-out both!important}
-html[data-theme=light] .hud{background:rgba(255,255,255,.7)}
+  background:radial-gradient(closest-side at 50% 40%,rgba(255,255,255,.13),transparent 72%)}
+html[data-theme=light] .hudwrap::before{background:radial-gradient(closest-side at 50% 40%,rgba(0,0,0,.08),transparent 72%)}
+.hudwrap::after{content:"";position:absolute;left:0;right:0;top:-180px;height:180px;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(255,255,255,.05),transparent);animation:scan 9s linear infinite}
+html[data-theme=light] .hudwrap::after{background:linear-gradient(180deg,transparent,rgba(0,0,0,.045),transparent)}
+@keyframes scan{to{transform:translateY(calc(100vh + 180px))}}
+.hudgrid{position:absolute;inset:0;pointer-events:none;opacity:.9;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M24 20v8M20 24h8' stroke='white' stroke-opacity='.22' fill='none'/%3E%3C/svg%3E");
+  -webkit-mask-image:radial-gradient(ellipse 70% 62% at 50% 46%,#000,transparent 80%);mask-image:radial-gradient(ellipse 70% 62% at 50% 46%,#000,transparent 80%)}
+html[data-theme=light] .hudgrid{
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M24 20v8M20 24h8' stroke='black' stroke-opacity='.25' fill='none'/%3E%3C/svg%3E")}
+.tele{position:absolute;font:.62rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.24em;text-transform:uppercase;color:var(--faint)}
+.tele.tl{top:1.4rem;left:1.6rem}.tele.tr{top:1.4rem;right:1.6rem}
+.tele.bl{bottom:1.4rem;left:1.6rem}.tele.br{bottom:1.4rem;right:1.6rem}
+.tele.tl::before,.tele.bl::before{content:"";display:inline-block;width:18px;height:1px;background:var(--faint);vertical-align:middle;margin-right:.8em}
+.tele.tr::after,.tele.br::after{content:"";display:inline-block;width:18px;height:1px;background:var(--faint);vertical-align:middle;margin-left:.8em}
+
+.hud{position:relative;z-index:1;width:100%;max-width:440px;display:flex;flex-direction:column;gap:.75rem;
+  padding:1.5rem 2.2rem 1.2rem;text-align:center;border:1px solid var(--line);background:rgba(0,0,0,.55);
+  transition:transform .6s cubic-bezier(.2,.7,.3,1),opacity .6s;animation:hudin .55s ease-out both}
+html[data-theme=light] .hud{background:rgba(255,255,255,.75)}
 @keyframes hudin{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
-.hud .c{position:absolute;width:18px;height:18px;border:2px solid var(--text);pointer-events:none}
+.hud .c{position:absolute;width:20px;height:20px;border:2px solid var(--text);pointer-events:none;transition:border-color .2s,width .3s,height .3s}
 .hud .c.tl{top:-2px;left:-2px;border-right:0;border-bottom:0}
 .hud .c.tr{top:-2px;right:-2px;border-left:0;border-bottom:0}
 .hud .c.bl{bottom:-2px;left:-2px;border-right:0;border-top:0}
 .hud .c.br{bottom:-2px;right:-2px;border-left:0;border-top:0}
-.reactor{width:200px;height:200px;margin:0 auto;color:var(--text);filter:drop-shadow(0 0 12px rgba(255,255,255,.35))}
+.hud:focus-within .c{width:28px;height:28px}
+
+.reactor{width:220px;height:220px;margin:0 auto;color:var(--text);filter:drop-shadow(0 0 14px rgba(255,255,255,.35))}
 html[data-theme=light] .reactor{filter:none}
 .reactor svg{width:100%;height:100%;display:block;overflow:visible}
-.rg{transform-box:fill-box;transform-origin:center}
-.r1{animation:spin 36s linear infinite}
-.r2{animation:spin 20s linear infinite reverse}
-.r3{animation:spin 12s linear infinite}
+.rg{transform-box:view-box;transform-origin:110px 110px}
+.r1{animation:spin 40s linear infinite}
+.r2{animation:spin 22s linear infinite reverse}
+.r3{animation:spin 13s linear infinite}
+.r4{animation:spin 9s linear infinite reverse}
 @keyframes spin{to{transform:rotate(360deg)}}
-.reactor .core{animation:corepulse 3s ease-in-out infinite}
-@keyframes corepulse{0%,100%{opacity:1}50%{opacity:.55}}
+.reactor .core{animation:corepulse 3.2s ease-in-out infinite;transform-box:view-box;transform-origin:110px 110px}
+.reactor .core2{opacity:.95}
+@keyframes corepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(.92)}}
+.hud.checking .r1{animation-duration:4s}.hud.checking .r2{animation-duration:3s}
+.hud.checking .r3{animation-duration:2s}.hud.checking .r4{animation-duration:1.4s}
 .hudcap{font:600 .68rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.34em;text-transform:uppercase;color:var(--muted);padding-left:.34em}
 .hud h1{margin:0;font-size:1.3rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
-.hudfield{display:block;margin-top:.4rem}
-.hudfield input{width:100%;background:transparent;border:0;border-bottom:1px solid var(--line2);border-radius:0;
-  text-align:center;letter-spacing:.5em;padding:.7em 0 .7em .5em;font:1.15rem ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;box-shadow:none}
-.hudfield input:focus{border-bottom-color:var(--text);box-shadow:0 10px 18px -14px var(--text)}
-.hudbtn{border:1px solid var(--text);background:transparent;color:var(--text);padding:.8em 1em;cursor:pointer;
-  font:600 .78rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.32em;text-transform:uppercase}
+
+.hudlog{display:flex;flex-direction:column;gap:.3rem;margin:.2rem 0 .1rem;text-align:left;
+  font:.68rem/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.hudlog>div{display:flex;align-items:center;gap:.5em;opacity:0;animation:logline .35s ease-out forwards}
+.hudlog i{flex:1;border-bottom:1px dotted var(--line2);transform:translateY(2px)}
+.hudlog b{font-weight:600;color:var(--text)}
+.hudlog>div:last-child b{color:var(--muted)}
+@keyframes logline{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+
+.hudfield{display:block;margin-top:.4rem;position:relative}
+.hudfield::after{content:"";position:absolute;left:50%;bottom:0;height:1px;width:0;background:var(--text);
+  transform:translateX(-50%);transition:width .3s cubic-bezier(.2,.7,.3,1)}
+.hudfield:focus-within::after{width:100%}
+.hudfield input{width:100%;background:transparent;border:0;border-bottom:1px solid var(--line2);border-radius:0;outline:0;
+  text-align:center;letter-spacing:.45em;padding:.7em 0 .7em .45em;font:1.1rem ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;box-shadow:none}
+.hudfield input:focus{box-shadow:none;border-bottom-color:var(--line2)}
+.hudfield input::placeholder{letter-spacing:.3em;color:var(--faint)}
+.hudbtn{position:relative;overflow:hidden;border:1px solid var(--text);background:transparent;color:var(--text);padding:.85em 1em;cursor:pointer;
+  font:600 .78rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.32em;text-transform:uppercase;
+  transition:background .15s,color .15s}
+.hudbtn span{position:relative;z-index:1;padding-left:.32em}
 .hudbtn:hover:not(:disabled){background:var(--text);color:var(--bg)}
-.hudbtn:disabled{opacity:.5;cursor:wait}
+.hudbtn:focus-visible{outline:2px solid var(--text);outline-offset:3px}
+.hudbtn:disabled{cursor:wait}
+.hud.checking .hudbtn::after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-40%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);animation:sweepbtn 1s linear infinite}
+@keyframes sweepbtn{to{left:110%}}
 .hudstat{font:.72rem/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);min-height:1em}
 .hudstat::after{content:"_";animation:blink 1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
 .hud .hud-err{margin:0;min-height:1.2em;font:.74rem/1.3 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.06em;color:var(--err)}
-.hudfoot{display:flex;justify-content:space-between;margin-top:.3rem;padding-top:.65rem;border-top:1px solid var(--line);
+.hudfoot{display:flex;justify-content:space-between;margin-top:.2rem;padding-top:.65rem;border-top:1px solid var(--line);
   font:.64rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
 .hudfoot span:first-child::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ok);margin-right:.6em;vertical-align:1px}
-.hud.deny{animation:shake .38s!important}
+.hud.deny{animation:shake .4s}
 .hud.deny .c{border-color:var(--err)}
 .hud.deny .hudstat{color:var(--err)}
 @keyframes shake{20%{transform:translateX(-9px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(3px)}}
-.hud.granted .reactor{filter:drop-shadow(0 0 26px rgba(255,255,255,.9))}
-.hud.granted .r1,.hud.granted .r2,.hud.granted .r3{animation-duration:1.2s}
+.hud.granted .reactor{filter:drop-shadow(0 0 30px rgba(255,255,255,.95))}
+.hud.granted .r1,.hud.granted .r2,.hud.granted .r3,.hud.granted .r4{animation-duration:1s}
 .hud.granted .hudstat{color:var(--text)}
-@media (max-width:480px){.hud{padding:1.4rem 1.2rem 1rem}.reactor{width:170px;height:170px}.hud h1{font-size:1.1rem}}
-@media (prefers-reduced-motion:reduce){
-  .hudwrap::after,.reactor *,.hud{animation:none!important}
+.hud.granted{transform:scale(1.04);opacity:0;transition-delay:.45s}
+.hudflash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:5}
+.hudwrap.granted .hudflash{animation:flash .9s ease-out .35s forwards}
+@keyframes flash{0%{opacity:0}35%{opacity:.85}100%{opacity:0}}
+@media (max-width:560px){
+  .tele{display:none}
+  .hud{padding:1.3rem 1.2rem 1rem}
+  .reactor{width:176px;height:176px}
+  .hud h1{font-size:1.08rem}
 }
+@media (max-height:700px){.reactor{width:150px;height:150px}.hudlog{display:none}}
+@media (prefers-reduced-motion:reduce){
+  .hudwrap::after,.reactor *,.hud,.hudlog>div,.hudflash{animation:none!important}
+  .hudlog>div{opacity:1}
+}
+
+/* ---------- эмодзи, предпросмотр в стиле Discord, тексты ---------- */
+img.emo{width:1.3em;height:1.3em;vertical-align:-.3em;object-fit:contain;display:inline-block}
+.embed div,.embed b{white-space:pre-wrap;word-break:break-word}
+.epick{max-width:640px}
+.egrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:.35rem;padding:.6rem;max-height:52vh;overflow:auto}
+.egrid .none,.egrid>p{grid-column:1/-1;padding:1rem;color:var(--muted);text-align:center}
+.ebtn{display:flex;flex-direction:column;align-items:center;gap:.3rem;padding:.55rem .3rem;background:none;border:1px solid transparent;
+  border-radius:10px;color:var(--text);cursor:pointer}
+.ebtn:hover{background:var(--hover);border-color:var(--line2)}
+.ebtn img{width:40px;height:40px;object-fit:contain}
+.ebtn span{font-size:.66rem;color:var(--muted);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ebtn.off img{opacity:.38;filter:grayscale(1)}
+.efoot{padding:.65rem 1rem;border-top:1px solid var(--line);font-size:.78rem;color:var(--muted)}
+.egallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:.8rem}
+.ecard{display:flex;flex-direction:column;align-items:center;gap:.5rem;text-align:center;padding:.9rem .7rem}
+.ecard b{font-size:.85rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ecard.off .eimg img{opacity:.4;filter:grayscale(1)}
+.eimg{background:var(--hover);border:0;border-radius:14px;padding:.6rem;cursor:pointer;display:grid;place-items:center}
+.eimg img{width:64px;height:64px;object-fit:contain;transition:transform .15s}
+.eimg:hover img{transform:scale(1.12)}
+.tsplit{grid-template-columns:minmax(290px,370px) 1fr!important;align-items:start}
+.tside{position:sticky;top:1.2rem;display:flex;flex-direction:column;gap:.7rem;max-height:calc(100vh - 2.4rem)}
+.tsearch input{width:100%}
+.tside .pager{margin:0;max-height:5.6rem;overflow:auto}
+.tscroll{overflow:auto;min-height:0;padding-right:.2rem}
+.tlist{display:flex;flex-direction:column;gap:.4rem}
+.tlist .section-title{margin:.9rem 0 .2rem}
+.tlist .section-title:first-child{margin-top:.1rem}
+.ted{display:flex;flex-direction:column;gap:.8rem;min-width:0}
+.thead{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;flex-wrap:wrap}
+.thead h2{margin:0 0 .15rem}
+.ttools{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.ttools select{padding-top:.3em;padding-bottom:.3em;font-size:.82rem}
+.meter{height:4px;border-radius:4px;background:var(--panel3);overflow:hidden;margin-top:-.4rem}
+.meter i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.meter.warn i{background:var(--warn)} .meter.bad i{background:var(--err)}
+.ted textarea.msg.tall{min-height:200px}
+.actbar{position:sticky;bottom:0;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;padding:.8rem 0 .2rem;margin-top:.2rem;
+  border-top:1px solid var(--line);background:linear-gradient(180deg,transparent,var(--panel) 40%)}
+.dcprev{display:flex;gap:.8rem;padding:1rem;border-radius:12px;background:#313338;color:#dbdee1;text-align:left}
+html[data-theme=light] .dcprev{background:#313338}
+.dcava{flex:none;width:40px;height:40px;border-radius:50%;background:#5865f2;color:#fff;display:grid;place-items:center;font-weight:700}
+.dcbody{min-width:0;flex:1}
+.dchead{display:flex;align-items:center;gap:.4rem;margin-bottom:.3rem}
+.dchead b{color:#fff;font-size:.95rem}
+.dctag{background:#5865f2;color:#fff;font-size:.58rem;font-weight:700;padding:.12em .4em;border-radius:4px}
+.dcprev .embed{background:#2b2d31;border-left:4px solid #fff;margin:0;max-width:520px;color:#dbdee1}
+.dcprev .embed b{color:#fff}
+.dcbtn{display:inline-block;background:#4e5058;color:#fff;border-radius:6px;padding:.45em 1em;font-size:.88rem;font-weight:500}
+.dcfield label{display:block;color:#b5bac1;font-size:.75rem;font-weight:700;text-transform:uppercase;margin-bottom:.35rem}
+.dcinput{background:#1e1f22;border-radius:6px;padding:.6em .8em;color:#949ba4;font-size:.9rem}
+@media (max-width:1000px){.tsplit{grid-template-columns:1fr!important}.tside{position:static;max-height:none}.tscroll{max-height:42vh}}
+
+/* ---------- поиск, карточка ошибки, проверка JSON ---------- */
+.searchbtn{display:flex;align-items:center;gap:.6rem;width:100%;margin:0 0 .4rem;padding:.55em .7em;background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;color:var(--muted);cursor:pointer;font-size:.88rem;text-align:left}
+.searchbtn:hover{border-color:var(--line2);color:var(--text)}
+.searchbtn .ico{display:grid;place-items:center}
+.searchbtn kbd{margin-left:auto;font:.66rem ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:.15em .45em;
+  border:1px solid var(--line2);border-radius:6px;color:var(--faint)}
+dialog.pal{padding:0;max-width:560px;margin:12vh auto auto;overflow:hidden}
+.pal input{width:100%;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:1em 1.1em;font-size:1rem;background:transparent;box-shadow:none}
+.pal input:focus{box-shadow:none;border-color:var(--line)}
+.palist{max-height:50vh;overflow:auto;padding:.4rem}
+.paitem{display:flex;align-items:center;gap:.7rem;width:100%;padding:.6em .7em;background:none;border:0;border-radius:9px;
+  color:var(--text);cursor:pointer;text-align:left;font-size:.93rem}
+.paitem .grow{flex:1}
+.paitem .ico{display:grid;place-items:center;color:var(--muted)}
+.paitem small{color:var(--faint);font-size:.7rem;text-transform:uppercase;letter-spacing:.1em}
+.paitem.on,.paitem:hover{background:var(--hover)}
+.pal .none{padding:1rem;color:var(--muted);text-align:center}
+.errcard{max-width:660px}
+.errdetail{margin:.6rem 0 1rem;padding:.75rem .9rem;background:var(--code);color:#ffb3b8;border:1px solid var(--line);
+  border-radius:9px;white-space:pre-wrap;word-break:break-word;font-size:.8rem}
+html[data-theme=light] .errdetail{color:#ff9aa0}
+.ok-text{color:var(--ok)} .err-text{color:var(--err)}
+
+.searchbtn span{flex:1;white-space:nowrap}
+.searchbtn kbd{white-space:nowrap}
+.hudfield input::selection{background:rgba(255,255,255,.28);color:inherit}
+html[data-theme=light] .hudfield input::selection{background:rgba(0,0,0,.2)}
+.embed strong,.dcprev strong{font-weight:700}
+
+.tsplit>*,.split>*,.cols>*,.grid2>*{min-width:0}
+.tside,.ted,.tsearch{max-width:100%}
 </style>
 </head>
 <body>
@@ -733,7 +866,14 @@ async function api(path, opts = {}) {
   let data = null;
   try { data = await res.json(); } catch (e) { /* пустой ответ */ }
   if (res.status === 401 && path !== '/api/login') { showLogin('Сессия истекла, войдите снова'); throw new Error('Нужен вход'); }
-  if (!res.ok) throw new Error((data && data.error) || ('Ошибка ' + res.status));
+  if (!res.ok) {
+    const fallback = res.status === 403 ? 'Нет прав на это действие'
+      : res.status >= 500 ? 'Внутренняя ошибка бота (' + res.status + ')' : 'Ошибка ' + res.status;
+    const er = new Error((data && data.error) || fallback);
+    er.status = res.status;
+    er.detail = data && data.detail;
+    throw er;
+  }
   return data;
 }
 
@@ -748,49 +888,67 @@ function fmtUptime(s) {
 }
 
 /* ---------- вход ---------- */
-/* Экран входа в стиле HUD: дуговой реактор, угловые рамки, часы, ответ «доступ разрешён/запрещён». */
-const REACTOR_SVG = '<svg viewBox="0 0 200 200" fill="none" stroke="currentColor" focusable="false">'
-  + '<g class="rg r1"><circle cx="100" cy="100" r="95" stroke-width="1" stroke-dasharray="2 7" opacity=".7"/>'
-  + '<circle cx="100" cy="100" r="88" stroke-width=".7" opacity=".35"/>'
-  + '<circle cx="100" cy="100" r="81" stroke-width="7" stroke-dasharray="2.4 8.7" opacity=".85"/></g>'
-  + '<g class="rg r2"><circle cx="100" cy="100" r="68" stroke-width="2" stroke-dasharray="70 18 110 18 80 18 90 18"/>'
-  + '<circle cx="100" cy="100" r="62" stroke-width=".7" opacity=".4"/></g>'
-  + '<g class="rg r3"><path d="M100 54 L140 123 L60 123 Z" stroke-width="1.2" opacity=".75"/>'
-  + '<circle cx="100" cy="100" r="46" stroke-width="1" stroke-dasharray="1 5" opacity=".7"/></g>'
-  + '<circle cx="100" cy="100" r="33" stroke-width="2"/>'
-  + '<circle cx="100" cy="100" r="26" stroke-width="10" stroke-dasharray="7.5 8.8" opacity=".9"/>'
-  + '<circle class="core" cx="100" cy="100" r="13" fill="currentColor" stroke="none"/></svg>';
+/* Экран входа в стиле HUD: реактор, бегущая проверка систем, телеметрия по углам,
+   ответ «доступ разрешён / запрещён». Всё без внешних файлов и без лишней нагрузки. */
+const REACTOR_SVG = '<svg viewBox="0 0 220 220" fill="none" stroke="currentColor" focusable="false">'
+  + '<defs><radialGradient id="rcore"><stop offset="0" stop-color="currentColor" stop-opacity="1"/>'
+  + '<stop offset=".55" stop-color="currentColor" stop-opacity=".85"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient></defs>'
+  + '<g class="rg r1"><circle cx="110" cy="110" r="106" stroke-width="1" stroke-dasharray="1 6" opacity=".6"/>'
+  + '<circle cx="110" cy="110" r="98" stroke-width="8" stroke-dasharray="2 8.65" opacity=".9"/>'
+  + '<circle cx="110" cy="110" r="90" stroke-width=".8" opacity=".35"/></g>'
+  + '<g class="rg r2"><circle cx="110" cy="110" r="78" stroke-width="2.4" stroke-dasharray="86 20 120 20 96 20 100 20"/>'
+  + '<circle cx="110" cy="110" r="71" stroke-width=".8" opacity=".45"/></g>'
+  + '<g class="rg r3"><path d="M110 62 L152 134 L68 134 Z" stroke-width="1.2" opacity=".7"/>'
+  + '<circle cx="110" cy="110" r="54" stroke-width="1" stroke-dasharray="1 5" opacity=".7"/></g>'
+  + '<g class="rg r4"><circle cx="110" cy="110" r="42" stroke-width="2" stroke-dasharray="14 6"/></g>'
+  + '<circle cx="110" cy="110" r="32" stroke-width="10" stroke-dasharray="7.2 8.1" opacity=".9"/>'
+  + '<circle class="core" cx="110" cy="110" r="22" fill="url(#rcore)" stroke="none"/>'
+  + '<circle cx="110" cy="110" r="9" fill="currentColor" stroke="none" class="core2"/></svg>';
 
 function clockText() {
   const d = new Date(), p = (n) => String(n).padStart(2, '0');
   return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds());
 }
+function dateText() {
+  const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear();
+}
 
 function showLogin(msg) {
   stopTimer();
   state.isDirty = () => false;
-  const input = h('input', { type: 'password', placeholder: '········', autocomplete: 'current-password', 'aria-label': 'Пароль' });
-  const err = h('div', { class: 'err hud-err' }, msg || '');
+  const input = h('input', { type: 'password', placeholder: '••••••••', autocomplete: 'current-password', 'aria-label': 'Пароль', spellcheck: 'false' });
+  const err = h('div', { class: 'err hud-err', role: 'alert' }, msg || '');
   const stat = h('div', { class: 'hudstat' }, msg ? 'Сессия завершена' : 'Ожидание идентификации');
   const clock = h('span', { id: 'hudclock' }, clockText());
   const reactor = h('div', { class: 'reactor', 'aria-hidden': 'true' });
   reactor.innerHTML = REACTOR_SVG;
-  const btn = h('button', { class: 'hudbtn', type: 'submit' }, 'Авторизация');
+  const btn = h('button', { class: 'hudbtn', type: 'submit' }, h('span', null, 'Авторизация'));
+  const checks = [['Ядро питания', 'норма'], ['Канал шифрования', 'активен'], ['Идентификация', 'ожидание']];
+  const log = h('div', { class: 'hudlog', 'aria-hidden': 'true' }, checks.map(([t, v], i) =>
+    h('div', { style: 'animation-delay:' + (0.45 + i * 0.4).toFixed(2) + 's' }, h('span', null, t), h('i'), h('b', null, v))));
+  const wrap = h('div', { class: 'hudwrap' });
   const form = h('form', {
     class: 'hud',
+    autocomplete: 'on',
     onsubmit: async (e) => {
       e.preventDefault();
+      if (btn.disabled) return;
       err.textContent = '';
       form.classList.remove('deny');
+      form.classList.add('checking');
       btn.disabled = true;
-      stat.textContent = 'Проверка доступа…';
+      stat.textContent = 'Проверка доступа';
       try {
         await api('/api/login', { method: 'POST', body: { password: input.value } });
+        form.classList.remove('checking');
         form.classList.add('granted');
+        wrap.classList.add('granted');
         stat.textContent = 'Доступ разрешён';
-        await sleep(550);
+        await sleep(950);
         await boot();
       } catch (ex) {
+        form.classList.remove('checking');
         btn.disabled = false;
         void form.offsetWidth;
         form.classList.add('deny');
@@ -804,12 +962,21 @@ function showLogin(msg) {
     reactor,
     h('div', { class: 'hudcap' }, 'Защищённый доступ'),
     h('h1', null, 'Панель управления'),
+    log,
     h('label', { class: 'hudfield' }, input),
     btn,
     stat,
     err,
     h('div', { class: 'hudfoot' }, h('span', null, 'Система в сети'), clock));
-  $app.replaceChildren(h('div', { class: 'hudwrap' }, form));
+  wrap.append(
+    h('div', { class: 'hudgrid' }),
+    h('div', { class: 'tele tl' }, 'Узел доступа'),
+    h('div', { class: 'tele tr' }, dateText()),
+    h('div', { class: 'tele bl' }, 'Шифрование AES-256'),
+    h('div', { class: 'tele br' }, 'Соединение защищено'),
+    form,
+    h('div', { class: 'hudflash' }));
+  $app.replaceChildren(wrap);
   state.timer = setInterval(() => { const c = document.getElementById('hudclock'); if (c) c.textContent = clockText(); }, 1000);
   input.focus();
 }
@@ -850,7 +1017,8 @@ const PAGES = [
   ['send', 'Сообщения', 'send', 'Семья'],
   ['screens', 'Экраны', 'screen', 'Семья'],
   ['texts', 'Тексты', 'type', 'Семья'],
-  ['stickers', 'Стикеры', 'smile', 'Семья'],
+  ['stickers', 'Стикеры', 'image', 'Семья'],
+  ['emojis', 'Эмодзи', 'smile', 'Семья'],
   ['diag', 'Диагностика', 'pulse', 'Служба'],
   ['audit', 'Ревизия', 'search', 'Служба'],
   ['shots', 'Снимки', 'camera', 'Служба'],
@@ -876,6 +1044,7 @@ const ICONS = {
   term: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
   power: '<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>',
   out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+  image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
   menu: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
 };
 function icon(name) {
@@ -889,6 +1058,57 @@ function setMenu(open) {
   if (shell) shell.classList.toggle('open', !!open);
 }
 
+function openPalette() {
+  if (!document.getElementById('shell')) return;
+  const old = document.getElementById('pal');
+  if (old) old.remove();
+  const dlg = h('dialog', { id: 'pal', class: 'pal' });
+  const input = h('input', { type: 'search', placeholder: 'Куда перейти или что сделать…', 'aria-label': 'Поиск по разделам' });
+  const list = h('div', { class: 'palist', role: 'listbox' });
+  const items = PAGES.map(([id, label, ico, g]) => ({ label, hint: g, ico, run: () => go(id) })).concat([
+    { label: 'Обновить страницу', hint: 'Действие', ico: 'pulse', run: () => go(state.page) },
+    { label: 'Сменить тему', hint: 'Действие', ico: 'screen', run: toggleTheme },
+    { label: 'Выйти', hint: 'Действие', ico: 'out', run: logout },
+  ]);
+  let shown = [], sel = 0;
+  function pick(i) { const it = shown[i]; if (!it) return; dlg.close(); it.run(); }
+  function draw() {
+    const q = input.value.trim().toLowerCase();
+    shown = items.filter((it) => !q || it.label.toLowerCase().includes(q));
+    sel = Math.min(sel, Math.max(0, shown.length - 1));
+    list.replaceChildren(...(shown.length ? shown.map((it, i) =>
+      h('button', { class: 'paitem' + (i === sel ? ' on' : ''), type: 'button', onclick: () => pick(i) },
+        icon(it.ico), h('span', { class: 'grow' }, it.label), h('small', null, it.hint)))
+      : [h('div', { class: 'none' }, 'Ничего не найдено')]));
+    const on = list.querySelector('.on');
+    if (on) on.scrollIntoView({ block: 'nearest' });
+  }
+  input.addEventListener('input', () => { sel = 0; draw(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); sel = Math.min(shown.length - 1, sel + 1); draw(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); sel = Math.max(0, sel - 1); draw(); }
+    else if (e.key === 'Enter') { e.preventDefault(); pick(sel); }
+  });
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+  dlg.append(input, list);
+  document.body.append(dlg);
+  draw();
+  dlg.showModal();
+  input.focus();
+}
+
+function bindHotkeys() {
+  if (window.__hzKeys) return;
+  window.__hzKeys = true;
+  window.addEventListener('keydown', (e) => {
+    const t = (e.target && e.target.tagName) || '';
+    const typing = t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT';
+    if ((e.ctrlKey || e.metaKey) && (e.code === 'KeyK' || String(e.key).toLowerCase() === 'k')) { e.preventDefault(); openPalette(); }
+    else if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); openPalette(); }
+  });
+}
+
 function renderShell() {
   const nav = h('nav', { class: 'nav', 'aria-label': 'Разделы панели' });
   let group = null;
@@ -900,6 +1120,7 @@ function renderShell() {
     h('div', { class: 'brand' },
       h('div', { class: 'logo' }, (state.botName || 'H').slice(0, 1).toUpperCase()),
       h('div', null, h('b', null, state.botName), h('span', null, 'Панель управления'))),
+    h('button', { class: 'searchbtn', type: 'button', onclick: openPalette }, icon('search'), h('span', null, 'Поиск'), h('kbd', null, 'Ctrl K')),
     nav,
     h('div', { class: 'sidefoot' },
       h('div', { class: 'status' }, h('span', { class: 'dot', id: 'live', title: 'Бот на связи' }),
@@ -911,7 +1132,8 @@ function renderShell() {
     h('button', { class: 'btn icon', 'aria-label': 'Открыть меню', onclick: () => setMenu(true) }, icon('menu')),
     h('div', { class: 'logo' }, (state.botName || 'H').slice(0, 1).toUpperCase()),
     h('b', null, state.botName),
-    h('div', { class: 'spacer' }));
+    h('div', { class: 'spacer' }),
+    h('button', { class: 'btn icon', 'aria-label': 'Поиск по разделам', onclick: openPalette }, icon('search')));
   const shell = h('div', { class: 'shell', id: 'shell' },
     side,
     h('div', { class: 'scrim', onclick: () => setMenu(false) }),
@@ -948,15 +1170,38 @@ async function go(page) {
   content.replaceChildren(skeleton());
   try {
     const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, screens: pageScreens,
-      texts: pageTexts, stickers: pageStickers,
+      texts: pageTexts, stickers: pageStickers, emojis: pageEmojis,
       diag: pageDiag, audit: pageAudit, shots: pageShots,
       modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
     if (state.page === page) content.replaceChildren(view);
     markLive(true);
   } catch (e) {
     markLive(false);
-    if (state.page === page) content.replaceChildren(h('p', { class: 'err' }, e.message));
+    if (state.page === page) content.replaceChildren(errorCard(e, () => go(page)));
   }
+}
+
+function friendlyError(e) {
+  const st = e && e.status, m = (e && e.message) || '';
+  if (st === 401) return 'Сессия закончилась. Войдите снова.';
+  if (st === 403) return 'Это действие запрещено. Если это про Discord, у бота не хватает прав в канале или на сервере.';
+  if (st === 404) return 'Такого раздела или записи уже нет.';
+  if (/не загрузился|не импортируется/.test(m)) return 'Раздел не смог загрузиться при старте бота. Причина записана в логах.';
+  if (st === 503) return 'Раздел сейчас недоступен.';
+  if (st >= 500) return 'Внутри бота что-то сломалось. Это не ваша ошибка: полный текст лежит в разделе «Логи».';
+  if (/Нет связи/.test(m)) return 'Панель не отвечает. Возможно, бот перезапускается: подождите полминуты.';
+  return 'Не получилось загрузить данные.';
+}
+
+function errorCard(e, retry) {
+  return h('div', { class: 'card errcard' },
+    h('h2', null, 'Не получилось открыть раздел'),
+    h('p', { class: 'muted' }, friendlyError(e)),
+    h('pre', { class: 'errdetail mono' }, (e && e.message) || String(e)),
+    e && e.detail ? h('p', { class: 'muted small' }, e.detail) : null,
+    h('div', { class: 'row' },
+      h('button', { class: 'btn primary', onclick: retry }, 'Повторить'),
+      h('button', { class: 'btn', onclick: () => go('logs') }, 'Открыть логи')));
 }
 
 function pageHead(title, sub, ...actions) {
@@ -974,19 +1219,29 @@ const DB_LABELS = {
 
 async function pageOverview() {
   const d = await api('/api/overview');
-  const stat = (label, value, kind) => h('div', { class: 'card stat ' + (kind || '') }, h('small', null, label), h('b', null, value));
+  const refs = {};
+  const stat = (label, value, kind, key) => {
+    const b = h('b', null, value);
+    const card = h('div', { class: 'card stat ' + (kind || '') }, h('small', null, label), b);
+    if (key) refs[key] = { card, b };
+    return card;
+  };
+  const put = (key, value, kind) => {
+    const r = refs[key];
+    if (r) { r.b.textContent = String(value); r.card.className = 'card stat ' + (kind || ''); }
+  };
   const stats = h('div', { class: 'stats' },
-    stat('Статус', d.ready ? 'В сети' : 'Запускается', d.ready ? 'ok' : 'warn'),
-    stat('Пинг', d.latency_ms == null ? '—' : d.latency_ms + ' мс'),
-    stat('Работает', fmtUptime(d.uptime_s)),
-    stat('Память', d.memory_mb == null ? '—' : d.memory_mb + ' МБ'),
-    stat('Серверов', d.guilds.length),
-    stat('Модулей', d.modules_loaded + ' / ' + d.modules_total)
+    stat('Статус', d.ready ? 'В сети' : 'Запускается', d.ready ? 'ok' : 'warn', 'st'),
+    stat('Пинг', d.latency_ms == null ? '—' : d.latency_ms + ' мс', '', 'ping'),
+    stat('Работает', fmtUptime(d.uptime_s), '', 'up'),
+    stat('Память', d.memory_mb == null ? '—' : d.memory_mb + ' МБ', '', 'mem'),
+    stat('Серверов', d.guilds.length, '', 'srv'),
+    stat('Модулей', d.modules_loaded + ' / ' + d.modules_total, '', 'mod')
   );
   const dbKeys = Object.keys(d.stats || {});
   const db = dbKeys.length ? [
     h('div', { class: 'section-title' }, 'База данных'),
-    h('div', { class: 'stats' }, dbKeys.map((k) => stat(DB_LABELS[k] || k, d.stats[k])))
+    h('div', { class: 'stats' }, dbKeys.map((k) => stat(DB_LABELS[k] || k, d.stats[k], '', 'db_' + k)))
   ] : null;
   const guilds = h('div', { class: 'guilds' }, d.guilds.map((g) => {
     const okIcon = typeof g.icon === 'string' && g.icon.startsWith('https://cdn.discordapp.com/');
@@ -994,8 +1249,21 @@ async function pageOverview() {
       okIcon ? h('img', { src: g.icon, alt: '', referrerpolicy: 'no-referrer' }) : h('div', { class: 'ava' }, (g.name || '?').slice(0, 1).toUpperCase()),
       h('div', { style: null }, h('b', null, g.name), h('span', { class: 'muted small' }, (g.members == null ? '?' : g.members) + ' участников')));
   }));
+  state.timer = setInterval(async () => {
+    try {
+      const n = await api('/api/overview');
+      put('st', n.ready ? 'В сети' : 'Запускается', n.ready ? 'ok' : 'warn');
+      put('ping', n.latency_ms == null ? '—' : n.latency_ms + ' мс');
+      put('up', fmtUptime(n.uptime_s));
+      put('mem', n.memory_mb == null ? '—' : n.memory_mb + ' МБ');
+      put('srv', n.guilds.length);
+      put('mod', n.modules_loaded + ' / ' + n.modules_total);
+      Object.keys(n.stats || {}).forEach((k) => put('db_' + k, n.stats[k]));
+      markLive(true);
+    } catch (e) { markLive(false); }
+  }, 15000);
   return h('div', null,
-    pageHead(d.bot_name || 'Бот', d.user ? d.user + (d.user_id ? ' · ID ' + d.user_id : '') : 'Не авторизован в Discord',
+    pageHead(d.bot_name || 'Бот', (d.user ? d.user + (d.user_id ? ' · ID ' + d.user_id : '') : 'Не авторизован в Discord') + ' · данные обновляются сами раз в 15 секунд',
       h('button', { class: 'btn', onclick: () => go('overview') }, 'Обновить')),
     stats, db,
     h('div', { class: 'section-title' }, 'Серверы'),
@@ -1070,16 +1338,33 @@ async function pageSettings() {
   let current = null, original = '', dirty = false;
   const area = h('textarea', { class: 'editor', spellcheck: 'false', wrap: 'off', disabled: true });
   const err = h('div', { class: 'err' });
+  const vstat = h('div', { class: 'small muted' });
+  let valid = true;
   const title = h('h2', null, 'Выберите файл');
   const saveBtn = h('button', { class: 'btn primary', disabled: true, onclick: () => save() }, 'Сохранить');
   const resetBtn = h('button', { class: 'btn', disabled: true, onclick: () => { area.value = original; markDirty(); err.textContent = ''; } }, 'Отменить правки');
   const buttons = new Map();
+  const fmtBtn = h('button', { class: 'btn', disabled: true, onclick: () => {
+    try { area.value = JSON.stringify(JSON.parse(area.value), null, 2) + '\n'; markDirty(); toast('Файл выровнен', 'ok'); }
+    catch (e) { toast('Нельзя выровнять, в файле ошибка: ' + e.message, 'err'); }
+  } }, 'Выровнять');
+
+  function validate() {
+    if (current === null) { vstat.textContent = ''; valid = true; return; }
+    try {
+      JSON.parse(area.value);
+      valid = true; vstat.className = 'small ok-text'; vstat.textContent = '✓ JSON корректен';
+    } catch (e) {
+      valid = false; vstat.className = 'small err-text'; vstat.textContent = '✗ Ошибка в файле: ' + e.message;
+    }
+    saveBtn.disabled = !(dirty && valid);
+  }
 
   state.isDirty = () => dirty;
   function markDirty() {
     dirty = current !== null && area.value !== original;
-    saveBtn.disabled = !dirty;
     resetBtn.disabled = !dirty;
+    validate();
     title.textContent = current ? current + (dirty ? ' •' : '') : 'Выберите файл';
   }
   area.addEventListener('input', markDirty);
@@ -1101,7 +1386,7 @@ async function pageSettings() {
     try {
       const d = await api('/api/files/' + encodeURIComponent(name));
       current = name; original = d.content;
-      area.value = d.content; area.disabled = false; err.textContent = '';
+      area.value = d.content; area.disabled = false; fmtBtn.disabled = false; err.textContent = '';
       buttons.forEach((b, n) => b.classList.toggle('active', n === name));
       markDirty();
     } catch (e) { toast(e.message, 'err'); }
@@ -1127,7 +1412,7 @@ async function pageSettings() {
     pageHead('Настройки', 'Редактор файлов настроек бота. Перед сохранением файл проверяется на ошибки JSON.'),
     h('div', { class: 'note' }, 'config.json бот перечитывает при каждом обращении, поэтому изменения применяются сразу. Остальные файлы модули могут держать в памяти: если правка не подхватилась, перезагрузите нужный модуль на вкладке «Модули». Ctrl+S сохраняет.'),
     h('div', { class: 'split' }, fileList,
-      h('div', null, h('div', { class: 'row' }, title, h('div', { class: 'spacer' }), resetBtn, saveBtn), area, err))
+      h('div', null, h('div', { class: 'row' }, title, h('div', { class: 'spacer' }), fmtBtn, resetBtn, saveBtn), area, vstat, err))
   );
 }
 
@@ -1135,11 +1420,13 @@ async function pageSettings() {
 async function pageLogs() {
   const src = h('select', null, h('option', { value: 'console' }, 'Консоль бота'), h('option', { value: 'file' }, 'Файл bot.log'));
   const cnt = h('select', null, ['200', '500', '1000'].map((n) => h('option', { value: n }, n + ' строк')));
+  const lvl = h('select', null, [['', 'Все строки'], ['e', 'Только ошибки'], ['w', 'Ошибки и предупреждения']].map(([v, l]) => h('option', { value: v }, l)));
   const q = h('input', { type: 'search', placeholder: 'Фильтр по тексту…' });
   const auto = h('input', { type: 'checkbox', checked: true });
   const box = h('div', { class: 'logbox mono' });
+  const count = h('span', { class: 'muted small' });
   auto.checked = true;
-  let loading = false;
+  let loading = false, lastLines = [];
 
   const level = (l) => {
     if (/error|ошибк|❌|traceback|exception|critical/i.test(l)) return 'e';
@@ -1147,28 +1434,59 @@ async function pageLogs() {
     if (/✅|успешно/i.test(l)) return 'o';
     return '';
   };
+  const pass = (l) => {
+    if (!lvl.value) return true;
+    const k = level(l);
+    return lvl.value === 'e' ? k === 'e' : (k === 'e' || k === 'w');
+  };
+
+  function draw() {
+    const rows = lastLines.filter(pass);
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    box.replaceChildren(...(rows.length ? rows.map((l) => h('div', { class: 'ln ' + level(l) }, l)) : [h('div', { class: 'ln' }, 'Пусто')]));
+    if (atBottom) box.scrollTop = box.scrollHeight;
+    count.textContent = rows.length + ' из ' + lastLines.length + ' строк';
+  }
 
   async function load() {
     if (loading) return;
     loading = true;
     try {
       const d = await api('/api/logs?source=' + encodeURIComponent(src.value) + '&lines=' + encodeURIComponent(cnt.value) + '&q=' + encodeURIComponent(q.value.trim()));
-      const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-      box.replaceChildren(...(d.lines.length ? d.lines.map((l) => h('div', { class: 'ln ' + level(l) }, l)) : [h('div', { class: 'ln' }, 'Пусто')]));
-      if (atBottom) box.scrollTop = box.scrollHeight;
+      lastLines = d.lines || [];
+      draw();
     } catch (e) { /* покажем при следующей попытке */ }
     loading = false;
   }
+
+  const copyBtn = h('button', { class: 'btn', onclick: async () => {
+    const text = lastLines.filter(pass).join('\n');
+    try { await navigator.clipboard.writeText(text); toast('Скопировано: ' + lastLines.filter(pass).length + ' строк', 'ok'); }
+    catch (e) { toast('Браузер не дал доступ к буферу обмена: выделите строки вручную', 'err'); }
+  } }, 'Копировать');
+  const saveBtn = h('button', { class: 'btn', onclick: () => {
+    const blob = new Blob([lastLines.filter(pass).join('\n') + '\n'], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'bot-log-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.txt';
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } }, 'Скачать');
+
   src.addEventListener('change', load);
   cnt.addEventListener('change', load);
+  lvl.addEventListener('change', draw);
   q.addEventListener('input', () => { clearTimeout(q._t); q._t = setTimeout(load, 300); });
   await load();
   box.scrollTop = box.scrollHeight;
   state.timer = setInterval(() => { if (auto.checked) load(); }, 3000);
 
   return h('div', null,
-    pageHead('Логи', 'Свежие строки внизу. Страница обновляется сама каждые 3 секунды.'),
-    h('div', { class: 'toolbar' }, src, cnt, q, h('label', { class: 'row small muted' }, auto, 'Автообновление'), h('button', { class: 'btn', onclick: () => { load().then(() => { box.scrollTop = box.scrollHeight; }); } }, 'Обновить')),
+    pageHead('Логи', 'Свежие строки внизу. Страница обновляется сама каждые 3 секунды. Если что-то сломалось, ищите здесь «Ошибка» и пришлите эти строки.'),
+    h('div', { class: 'toolbar' }, src, cnt, lvl, q,
+      h('label', { class: 'row small muted' }, auto, 'Автообновление'),
+      h('button', { class: 'btn', onclick: () => { load().then(() => { box.scrollTop = box.scrollHeight; }); } }, 'Обновить'),
+      copyBtn, saveBtn, h('div', { class: 'spacer' }), count),
     box
   );
 }
@@ -1180,143 +1498,374 @@ async function pageLogs() {
 const TEXT_PLACEHOLDERS = ['{nick}', '{name}', '{mention}', '{server}', '{bot_name}', '{title}',
   '{time}', '{info}', '{static}', '{recruit_channel}', '{reason}', '{rank}', '{days}', '{hours}'];
 
+/* ---------- Эмодзи: общие кусочки ---------- */
+/* Каталог берётся с сервера один раз и хранится в памяти страницы: из него строятся и выбор эмодзи
+   в любом окне ввода, и предпросмотр (<:имя:id> превращается в настоящую картинку). */
+const EMO_RE = /<(a?):([A-Za-z0-9_]{2,32}):(\d{15,25})>|\{e:([A-Za-z0-9_]+)\}/g;
+
+function emoUrl(animated, id) {
+  return 'https://cdn.discordapp.com/emojis/' + id + '.' + (animated ? 'gif' : 'png') + '?size=48';
+}
+
+/* Текст с эмодзи → массив узлов. Весь вывод через createTextNode/img, поэтому HTML из текста не вставится. */
+function emojiNodes(str) {
+  const out = [];
+  let last = 0, m;
+  EMO_RE.lastIndex = 0;
+  while ((m = EMO_RE.exec(str))) {
+    if (m.index > last) out.push(document.createTextNode(str.slice(last, m.index)));
+    const name = m[2] || m[4];
+    let url = null;
+    if (m[3]) url = emoUrl(m[1], m[3]);
+    else if (state.emojiIdx && state.emojiIdx[m[4].toLowerCase()]) url = state.emojiIdx[m[4].toLowerCase()].url;
+    out.push(url
+      ? h('img', { class: 'emo', src: url, alt: ':' + name + ':', title: ':' + name + ':', referrerpolicy: 'no-referrer' })
+      : document.createTextNode(m[0]));
+    last = m.index + m[0].length;
+  }
+  if (last < str.length) out.push(document.createTextNode(str.slice(last)));
+  return out;
+}
+
+/* **жирный** и эмодзи, как в Discord; остальное остаётся обычным текстом */
+function richNode(text) {
+  const str = String(text === null || text === undefined ? '' : text);
+  const out = [];
+  const BOLD = /\*\*([\s\S]+?)\*\*/g;
+  let last = 0, m;
+  while ((m = BOLD.exec(str))) {
+    if (m.index > last) out.push(...emojiNodes(str.slice(last, m.index)));
+    out.push(h('strong', null, emojiNodes(m[1])));
+    last = m.index + m[0].length;
+  }
+  if (last < str.length) out.push(...emojiNodes(str.slice(last)));
+  return out;
+}
+
+function getEmojis(force) {
+  if (!state.emojiP || force) {
+    state.emojiP = api('/api/emojis').then((d) => {
+      state.emojiIdx = {};
+      d.rows.forEach((r) => { state.emojiIdx[r.name.toLowerCase()] = r; });
+      return d;
+    });
+    state.emojiP.catch(() => { state.emojiP = null; });
+  }
+  return state.emojiP;
+}
+
+function insertAtCursor(area, text) {
+  const from = area.selectionStart === null || area.selectionStart === undefined ? area.value.length : area.selectionStart;
+  const to = area.selectionEnd === null || area.selectionEnd === undefined ? from : area.selectionEnd;
+  area.value = area.value.slice(0, from) + text + area.value.slice(to);
+  const pos = from + text.length;
+  area.focus();
+  area.setSelectionRange(pos, pos);
+  area.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+function uploadSummary(r) {
+  const bits = [];
+  if (r.uploaded && r.uploaded.length) bits.push('загружено: ' + r.uploaded.length);
+  if (r.failed && r.failed.length) bits.push('не вышло: ' + r.failed.length);
+  if (r.left) bits.push('осталось в очереди: ' + r.left + ' (нажмите ещё раз)');
+  return bits.join(' · ') || r.message || 'Нечего загружать';
+}
+
+async function uploadEmojis(names) {
+  const r = await api('/api/emojis/upload', { method: 'POST', body: { names } });
+  state.emojiP = null;
+  return r;
+}
+
+function emojiButton(area, label) {
+  return h('button', { class: 'btn tiny', type: 'button', title: 'Вставить эмодзи сервера',
+    onclick: () => openEmojiPicker((code) => insertAtCursor(area, code)) }, icon('smile'), label || 'Эмодзи');
+}
+
+async function openEmojiPicker(onPick) {
+  const old = document.getElementById('epick');
+  if (old) old.remove();
+  const dlg = h('dialog', { id: 'epick', class: 'pal epick' });
+  const q = h('input', { type: 'search', placeholder: 'Найти эмодзи…', 'aria-label': 'Поиск эмодзи' });
+  const grid = h('div', { class: 'egrid' }, spinner('Загружаю эмодзи…'));
+  const foot = h('div', { class: 'efoot' });
+  dlg.append(q, grid, foot);
+  dlg.addEventListener('close', () => dlg.remove());
+  dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+  document.body.append(dlg);
+  dlg.showModal();
+  q.focus();
+  let data;
+  try { data = await getEmojis(); }
+  catch (e) { grid.replaceChildren(h('p', { class: 'err' }, e.message)); return; }
+
+  async function choose(r) {
+    dlg.close();
+    if (r.uploaded) { onPick(r.code); return; }
+    if (!data.info.can_manage) { toast('У бота нет права «Управлять эмодзи и стикерами», загрузить нельзя', 'err'); return; }
+    if (!(await confirmBox('Загрузить «' + r.name + '» на сервер?', 'Этой картинки ещё нет среди эмодзи сервера. Бот загрузит её из папки emojis, после этого эмодзи можно вставлять в тексты.', 'Загрузить', false))) return;
+    try {
+      const res = await uploadEmojis([r.name]);
+      const fresh = await getEmojis(true);
+      const row = fresh.rows.find((x) => x.name.toLowerCase() === r.name.toLowerCase());
+      if (row && row.uploaded) { toast('Загружено и вставлено', 'ok'); onPick(row.code); }
+      else toast((res.failed && res.failed[0] && res.failed[0].error) || 'Не загрузилось', 'err');
+    } catch (e) { toast(e.message, 'err'); }
+  }
+
+  function draw() {
+    const needle = q.value.trim().toLowerCase();
+    const rows = data.rows.filter((r) => !needle || r.name.toLowerCase().includes(needle));
+    grid.replaceChildren(...(rows.length ? rows.slice(0, 400).map((r) =>
+      h('button', { class: 'ebtn' + (r.uploaded ? '' : ' off'), type: 'button', title: r.name + (r.uploaded ? '' : ' — ещё не на сервере'),
+        onclick: () => choose(r) },
+        h('img', { src: r.url, alt: r.name, loading: 'lazy', referrerpolicy: 'no-referrer' }),
+        h('span', null, r.name)))
+      : [h('div', { class: 'none' }, 'Ничего не найдено')]));
+    foot.textContent = 'Нажмите на эмодзи, чтобы вставить. Бледные пока лежат только в папке: бот предложит загрузить их на сервер.';
+  }
+  q.addEventListener('input', draw);
+  draw();
+}
+
+/* ---------- Страница «Эмодзи» ---------- */
+async function pageEmojis() {
+  let data = await getEmojis(true);
+  const q = h('input', { type: 'search', placeholder: 'Найти эмодзи…', 'aria-label': 'Поиск эмодзи' });
+  const filter = h('select', { 'aria-label': 'Показать' }, [['all', 'Все'], ['on', 'Уже на сервере'], ['off', 'Ещё не загружены'], ['anim', 'Анимированные']]
+    .map(([v, l]) => h('option', { value: v }, l)));
+  const stats = h('div', { class: 'stats' });
+  const warn = h('div');
+  const grid = h('div', { class: 'egallery' });
+  const upBtn = h('button', { class: 'btn primary' }, 'Загрузить недостающие');
+  let busy = false;
+
+  async function copy(r) {
+    try { await navigator.clipboard.writeText(r.code); toast('Код скопирован: ' + r.name, 'ok'); }
+    catch (e) { toast('Браузер не дал доступ к буферу. Код: ' + r.code, 'err'); }
+  }
+
+  async function doUpload(names, title) {
+    if (busy) return;
+    if (!data.info.can_manage) { toast('У бота нет права «Управлять эмодзи и стикерами». Выдайте его роли бота.', 'err'); return; }
+    if (!(await confirmBox(title, 'Бот загрузит картинки из папки emojis на сервер. За один раз не больше 20 штук, остальные можно догрузить повторным нажатием. Если на сервере кончатся места, бот остановится и скажет об этом.', 'Загрузить', false))) return;
+    busy = true; upBtn.disabled = true;
+    try {
+      const r = await uploadEmojis(names);
+      toast(uploadSummary(r), r.failed && r.failed.length ? 'err' : 'ok');
+      if (r.failed && r.failed.length) {
+        warn.replaceChildren(h('div', { class: 'card errcard' }, h('h3', null, 'Не всё загрузилось'),
+          lines(r.failed.map((f) => f.name + ': ' + f.error), 'steps')));
+      } else warn.replaceChildren();
+    } catch (e) { toast(e.message, 'err'); }
+    busy = false;
+    try { data = await getEmojis(true); } catch (e) { /* оставим как есть */ }
+    render();
+  }
+
+  function render() {
+    const i = data.info || {};
+    const missStatic = data.rows.filter((r) => !r.uploaded && !r.animated).length;
+    const missAnim = data.rows.filter((r) => !r.uploaded && r.animated).length;
+    stats.replaceChildren(
+      ...[['В папке и на сервере', data.total, ''], ['Уже на сервере', data.total - data.missing, 'ok'],
+        ['Ещё не загружены', data.missing, data.missing ? 'warn' : ''],
+        ['Места: обычные', i.limit ? (i.static + ' / ' + i.limit) : '—', ''],
+        ['Места: анимированные', i.limit ? (i.animated + ' / ' + i.limit) : '—', '']]
+        .map(([l, v, k]) => h('div', { class: 'card stat ' + k }, h('small', null, l), h('b', null, String(v)))));
+    const notes = [];
+    if (i.limit && missStatic > i.limit - i.static) notes.push('Обычных эмодзи не загружено ' + missStatic + ', а свободных мест ' + Math.max(0, i.limit - i.static) + '. Остальные не влезут, пока вы не освободите места или не поднимете уровень сервера.');
+    if (i.limit && missAnim > i.limit - i.animated) notes.push('Анимированных не загружено ' + missAnim + ', свободных мест ' + Math.max(0, i.limit - i.animated) + '.');
+    if (i.guild && !i.can_manage) notes.push('У бота нет права «Управлять эмодзи и стикерами», поэтому загрузить новые он не сможет.');
+    if (!i.guild) notes.push('Бот сейчас не на сервере, поэтому показан только список файлов из папки.');
+    upBtn.disabled = busy || !data.missing || !i.can_manage;
+    upBtn.textContent = data.missing ? 'Загрузить недостающие (' + data.missing + ')' : 'Всё уже загружено';
+    upBtn.onclick = () => doUpload(null, 'Загрузить недостающие эмодзи?');
+    const need = q.value.trim().toLowerCase(), f = filter.value;
+    const rows = data.rows.filter((r) => (!need || r.name.toLowerCase().includes(need))
+      && (f === 'all' || (f === 'on' && r.uploaded) || (f === 'off' && !r.uploaded) || (f === 'anim' && r.animated)));
+    grid.replaceChildren(...(rows.length ? rows.map((r) =>
+      h('div', { class: 'card ecard' + (r.uploaded ? '' : ' off') },
+        h('button', { class: 'eimg', type: 'button', title: r.uploaded ? 'Скопировать код' : 'Ещё не на сервере', onclick: () => { if (r.uploaded) copy(r); else doUpload([r.name], 'Загрузить «' + r.name + '»?'); } },
+          h('img', { src: r.url, alt: r.name, loading: 'lazy', referrerpolicy: 'no-referrer' })),
+        h('b', { title: r.name }, r.name),
+        h('div', { class: 'row small' },
+          r.uploaded ? chip('на сервере', 'ok') : chip('в папке', 'off'),
+          r.animated ? chip('анимация', 'off') : null),
+        r.uploaded
+          ? h('button', { class: 'btn tiny', onclick: () => copy(r) }, 'Копировать код')
+          : h('button', { class: 'btn tiny', disabled: !i.can_manage, onclick: () => doUpload([r.name], 'Загрузить «' + r.name + '»?') }, 'Загрузить'),
+        r.only_server ? h('small', { class: 'muted' }, 'файла в папке нет') : null))
+      : [h('p', { class: 'muted' }, 'Ничего не найдено.')]));
+    warn.prepend(...notes.map((t) => h('p', { class: 'warnline' }, t)));
+  }
+
+  q.addEventListener('input', render);
+  filter.addEventListener('change', render);
+  render();
+  return h('div', null,
+    pageHead('Эмодзи сервера', 'Картинки из папки emojis и то, что уже загружено на сервер. Нажмите на эмодзи, чтобы скопировать его код. Во всех окнах ввода есть кнопка «Эмодзи», она вставляет их прямо в текст.',
+      h('button', { class: 'btn', onclick: () => go('emojis') }, 'Обновить'), upBtn),
+    stats, warn,
+    h('div', { class: 'toolbar' }, h('label', null, 'Найти', q), h('label', null, 'Показать', filter)),
+    grid);
+}
+
+/* ---------- Тексты бота ---------- */
 async function pageTexts() {
   const d = await api('/api/texts').catch((e) => ({ error: e.message }));
   if (d.error) return h('div', null, pageHead('Тексты', null), h('p', { class: 'err' }, d.error));
+  getEmojis().catch(() => { /* без каталога эмодзи просто остаются кодом */ });
 
   const items = d.items;
-  const search = h('input', { type: 'search', placeholder: 'Название, ключ или слово из текста…' });
-  const list = h('div', { class: 'rows' });
-  const edBox = h('div', { class: 'card form' }, spinner('Выбери надпись слева.'));
-  let current = null;
+  const search = h('input', { type: 'search', placeholder: 'Название, ключ или слово из текста…', 'aria-label': 'Поиск надписи' });
+  const list = h('div', { class: 'tlist' });
+  const filters = h('div', { class: 'pager' });
+  const edBox = h('div', { class: 'card ted' }, h('p', { class: 'muted' }, 'Выберите надпись слева.'));
+  let current = null, onlyChanged = false, groupFilter = '';
 
   const titleOf = (it) => it.label || it.key.replace(/_/g, ' ');
+  const KIND_LABEL = { title: 'заголовок', text: 'текст', button: 'кнопка', field: 'поле анкеты' };
+
+  function pill(label, on, fn) {
+    return h('button', { class: on ? 'active' : '', onclick: () => { fn(); drawFilters(); renderList(); } }, label);
+  }
+  function drawFilters() {
+    filters.replaceChildren(
+      pill('Все', !onlyChanged && !groupFilter, () => { onlyChanged = false; groupFilter = ''; }),
+      pill('Изменённые · ' + d.items.filter((x) => x.changed).length, onlyChanged, () => { onlyChanged = true; groupFilter = ''; }),
+      ...d.groups.map((g) => pill(g.title, groupFilter === g.title, () => { onlyChanged = false; groupFilter = g.title; })));
+  }
 
   function renderList() {
     const needle = search.value.trim().toLowerCase();
     const cards = [];
     d.groups.forEach((g) => {
-      const rows = g.items.filter((it) => !needle
-        || (it.key + ' ' + titleOf(it) + ' ' + (it.value || '') + ' ' + g.title).toLowerCase().includes(needle));
+      if (groupFilter && g.title !== groupFilter) return;
+      const rows = g.items.filter((it) => (!onlyChanged || it.changed) && (!needle
+        || (it.key + ' ' + titleOf(it) + ' ' + (it.value || '') + ' ' + g.title).toLowerCase().includes(needle)));
       if (!rows.length) return;
       cards.push(h('div', { class: 'section-title' }, g.title + ' · ' + rows.length),
-        ...rows.map((it) => h('button', {
-          class: 'r' + (current && current.id === it.id ? ' sel' : ''),
-          onclick: () => open(it)
-        },
-          h('div', { class: 'grow' }, h('b', null, titleOf(it)), h('small', { class: 'mono' }, it.key)),
-          it.changed ? chip('свой текст', 'ok') : chip('как в коде', 'off'))));
+        ...rows.map((it) => h('button', { class: 'r' + (current && current.id === it.id ? ' sel' : ''), onclick: () => open(it) },
+          h('div', { class: 'grow' }, h('b', null, titleOf(it)), h('small', null, (it.value || '').replace(/\s+/g, ' ').slice(0, 70) || it.key)),
+          it.changed ? chip('свой', 'ok') : null)));
     });
     list.replaceChildren(...(cards.length ? cards : [h('p', { class: 'muted' }, 'Ничего не нашлось.')]));
   }
-
-  const KIND_LABEL = { title: 'заголовок эмбеда', text: 'текст эмбеда', button: 'кнопка', field: 'поле анкеты' };
 
   function previewNode(p) {
     const box = h('div', { class: 'previewbox' });
     if (p.overflow) box.append(h('p', { class: 'err small' }, 'Не влезает: ' + p.len + ' из ' + p.limit + ' знаков'));
     if (p.unknown && p.unknown.length) box.append(h('p', { class: 'warnline small' }, 'Такой подстановки нет: ' + p.unknown.join(', ')));
-    if (p.kind === 'button') {
-      box.append(h('div', { class: 'section-title' }, 'Как будет выглядеть кнопка'),
-        h('div', { class: 'btns' }, h('span', { class: 'btn' }, p.text || '(пусто)')));
-      return box;
-    }
-    if (p.kind === 'field') {
-      box.append(h('div', { class: 'section-title' }, 'Как будет выглядеть поле'),
-        h('div', { class: 'form' }, h('label', null, p.text || '(пусто)',
-          h('input', { type: 'text', disabled: true, placeholder: 'так видит кандидат' }))));
-      return box;
-    }
-    box.append(h('div', { class: 'section-title' }, 'Предпросмотр'),
-      embedNode({ title: p.title || '', text: p.text, color: '#990000' }));
+    let body;
+    if (p.kind === 'button') body = h('div', { class: 'btns' }, h('span', { class: 'dcbtn' }, richNode(p.text || '(пусто)')));
+    else if (p.kind === 'field') body = h('div', { class: 'dcfield' }, h('label', null, richNode(p.text || '(пусто)')), h('div', { class: 'dcinput' }, 'так видит кандидат'));
+    else body = embedNode({ title: p.title || '', text: p.text, color: '#ffffff' });
+    box.append(h('div', { class: 'section-title' }, 'Как это увидят в Discord'),
+      h('div', { class: 'dcprev' },
+        h('div', { class: 'dcava' }, (state.botName || 'B').slice(0, 1).toUpperCase()),
+        h('div', { class: 'dcbody' },
+          h('div', { class: 'dchead' }, h('b', null, state.botName), h('span', { class: 'dctag' }, 'БОТ')),
+          body)));
     return box;
   }
 
-  async function showPreview(previewBox, area, counter, it) {
+  async function showPreview(previewBox, area, counter, meter, it) {
     try {
       const p = await api('/api/texts/preview', { method: 'POST', body: { id: it.id, value: area.value } });
-      counter.textContent = p.len + ' / ' + p.limit + ' знаков';
-      counter.className = 'small ' + (p.overflow ? 'err' : 'muted');
+      counter.textContent = p.len + ' / ' + p.limit;
+      counter.className = 'small ' + (p.overflow ? 'err-text' : 'muted');
+      meter.firstChild.style.width = Math.min(100, Math.round(p.len / p.limit * 100)) + '%';
+      meter.className = 'meter' + (p.overflow ? ' bad' : p.len / p.limit > .85 ? ' warn' : '');
       previewBox.replaceChildren(previewNode(p));
-    } catch (e) { /* превью не главное — ошибку держим молча */ }
+    } catch (e) { /* превью не главное: ошибку держим молча */ }
   }
 
-  function open(it) {
+  async function open(it) {
+    if (current && current.id === it.id) return;
+    if (state.isDirty() && !(await confirmBox('Несохранённые правки', 'Если открыть другую надпись, правки в этой пропадут.', 'Открыть', true))) return;
     current = it;
     renderList();
-    const area = h('textarea', { class: 'msg tall', spellcheck: 'false' });
+    const area = h('textarea', { class: 'msg tall', spellcheck: 'false', 'aria-label': 'Текст надписи' });
     area.value = it.value || '';
     const counter = h('small', { class: 'muted' });
+    const meter = h('div', { class: 'meter' }, h('i'));
     const previewBox = h('div');
-    const dirty = () => !!current && area.value !== (current.value || '');
+    const status = h('span', { class: 'small muted' });
+    const dirty = () => area.value !== (it.value || '');
+    const sync = () => {
+      state.isDirty = dirty;
+      status.textContent = dirty() ? '● Не сохранено' : 'Всё сохранено';
+      status.className = 'small ' + (dirty() ? 'warnline' : 'muted');
+    };
     state.isDirty = dirty;
     area.addEventListener('input', () => {
-      state.isDirty = dirty;
+      sync();
       clearTimeout(area._t);
-      area._t = setTimeout(() => showPreview(previewBox, area, counter, it), 380);
+      area._t = setTimeout(() => showPreview(previewBox, area, counter, meter, it), 300);
     });
 
-    const tips = h('div', { class: 'btns' }, TEXT_PLACEHOLDERS.map((ph) => h('button', {
-      class: 'btn tiny', title: 'Вставить в текст', onclick: () => {
-        const from = area.selectionStart || area.value.length;
-        const to = area.selectionEnd || from;
-        area.value = area.value.slice(0, from) + ph + area.value.slice(to);
-        area.focus();
-        showPreview(previewBox, area, counter, it);
-      }
-    }, ph)));
+    const phSelect = h('select', { 'aria-label': 'Вставить подстановку' },
+      h('option', { value: '' }, 'Подстановка…'),
+      TEXT_PLACEHOLDERS.map((ph) => h('option', { value: ph }, ph)));
+    phSelect.addEventListener('change', () => { if (phSelect.value) insertAtCursor(area, phSelect.value); phSelect.value = ''; });
 
-    const saveBtn = h('button', {
-      class: 'btn primary', onclick: async () => {
-        saveBtn.disabled = true;
-        try {
-          const r = await api('/api/texts/save', { method: 'POST', body: { id: it.id, value: area.value } });
-          it.value = area.value;
-          it.changed = area.value !== (it.default || '');
-          state.isDirty = () => false;
-          renderList();
-          toast('Сохранено: ' + (r.saved || it.key), 'ok');
-        } catch (e) { toast(e.message, 'err'); }
-        saveBtn.disabled = false;
-      }
-    }, 'Сохранить');
+    const saveBtn = h('button', { class: 'btn primary' }, 'Сохранить');
+    async function save() {
+      saveBtn.disabled = true;
+      try {
+        const r = await api('/api/texts/save', { method: 'POST', body: { id: it.id, value: area.value } });
+        it.value = area.value;
+        it.changed = area.value !== (it.default || '');
+        sync(); renderList(); drawFilters();
+        toast('Сохранено: ' + (r.saved || it.key), 'ok');
+      } catch (e) { toast(e.message, 'err'); }
+      saveBtn.disabled = false;
+    }
+    saveBtn.onclick = save;
+    area.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+    });
 
-    const resetBtn = h('button', {
-      class: 'btn', onclick: async () => {
-        if (!(await confirmBox('Вернуть текст из кода?', 'Твоё редактирование этой надписи сотрётся.', 'Вернуть', true))) return;
-        try {
-          const r = await api('/api/texts/reset', { method: 'POST', body: { id: it.id } });
-          it.value = r.value || ''; it.changed = false; area.value = it.value;
-          state.isDirty = () => false;
-          renderList(); showPreview(previewBox, area, counter, it);
-          toast('Как в коде', 'ok');
-        } catch (e) { toast(e.message, 'err'); }
-      }
-    }, 'Вернуть как в коде');
+    const resetBtn = h('button', { class: 'btn', onclick: async () => {
+      if (!(await confirmBox('Вернуть текст из кода?', 'Ваша правка этой надписи сотрётся.', 'Вернуть', true))) return;
+      try {
+        const r = await api('/api/texts/reset', { method: 'POST', body: { id: it.id } });
+        it.value = r.value || ''; it.changed = false; area.value = it.value;
+        sync(); renderList(); drawFilters();
+        showPreview(previewBox, area, counter, meter, it);
+        toast('Как в коде', 'ok');
+      } catch (e) { toast(e.message, 'err'); }
+    } }, 'Как в коде');
+    const undoBtn = h('button', { class: 'btn', onclick: () => { area.value = it.value || ''; area.dispatchEvent(new Event('input')); } }, 'Отменить');
 
     edBox.replaceChildren(
-      h('h2', null, titleOf(it)),
-      h('div', { class: 'row wrap' }, chip(KIND_LABEL[it.kind] || it.kind), chip('до ' + it.limit + ' знаков', 'off'),
-        chip(it.src, 'off'), it.changed ? chip('изменено', 'ok') : chip('как в коде', 'off'), counter),
-      h('label', null, 'Текст', area),
+      h('div', { class: 'thead' },
+        h('div', null, h('h2', null, titleOf(it)), h('small', { class: 'muted mono' }, it.key)),
+        h('div', { class: 'row' }, chip(KIND_LABEL[it.kind] || it.kind), chip('до ' + it.limit + ' знаков', 'off'),
+          it.changed ? chip('свой текст', 'ok') : chip('как в коде', 'off'))),
+      h('div', { class: 'ttools' }, emojiButton(area), phSelect, h('div', { class: 'spacer' }), counter),
+      meter,
+      area,
       previewBox,
-      h('div', { class: 'section-title' }, 'Что подставляется само'), tips,
-      h('div', { class: 'row' }, saveBtn, resetBtn));
-    showPreview(previewBox, area, counter, it);
+      h('div', { class: 'actbar' }, status, h('div', { class: 'spacer' }), undoBtn, resetBtn, saveBtn));
+    sync();
+    showPreview(previewBox, area, counter, meter, it);
   }
 
   search.addEventListener('input', renderList);
+  drawFilters();
   renderList();
   const first = items.find((it) => it.changed) || items[0];
-  if (first) open(first);
+  if (first) await open(first);
 
   return h('div', null,
-    pageHead('Тексты бота', 'Все надписи, которые бот показывает людям: заголовки панелей, тексты заявок, кнопки, ЛС после принятия и отказа, приветствия. Правь — сразу видно, как это будет выглядеть.',
+    pageHead('Тексты бота', 'Все надписи, которые бот показывает людям: заголовки панелей, тексты заявок, кнопки, сообщения после принятия и отказа. Правьте и сразу смотрите, как это будет выглядеть в Discord. Ctrl+S сохраняет.',
       h('button', { class: 'btn', onclick: () => go('texts') }, 'Обновить')),
-    h('div', { class: 'toolbar' }, h('label', null, 'Найти', search),
-      chip('всего ' + d.total, 'off'), chip('со своим текстом: ' + d.changed, d.changed ? 'ok' : 'off')),
-    h('div', { class: 'split', style: 'grid-template-columns:minmax(280px,38%) 1fr' },
-      h('div', { class: 'stick' }, list), edBox));
+    h('div', { class: 'split tsplit' },
+      h('div', { class: 'tside' }, h('div', { class: 'tsearch' }, search), filters, h('div', { class: 'tscroll' }, list)),
+      edBox));
 }
 
 /* ---------- Стикеры ---------- */
@@ -1414,7 +1963,7 @@ function tile(icon, title, help, kind, ...buttons) {
 }
 
 async function pageControl() {
-  const p = await api('/api/presence');
+  const [p, ov] = await Promise.all([api('/api/presence'), api('/api/overview').catch(() => null)]);
   const status = h('select', null, [['online', 'В сети'], ['idle', 'Не активен'], ['dnd', 'Не беспокоить'], ['invisible', 'Невидимка']].map(([v, l]) => h('option', { value: v }, l)));
   const kind = h('select', null, [['watching', 'Смотрит'], ['playing', 'Играет в'], ['listening', 'Слушает'], ['competing', 'Участвует в']].map(([v, l]) => h('option', { value: v }, l)));
   const text = h('input', { type: 'text', maxlength: '128', placeholder: 'Например: за порядком' });
@@ -1478,10 +2027,13 @@ async function pageControl() {
       } catch (e) { tShow.out.fail(e); }
     } }, 'Вернуть'));
 
+  const sleepMin = h('input', { type: 'number', min: '1', max: '720', placeholder: 'мин', 'aria-label': 'Своё число минут', style: 'width:5.5rem' });
   const tSleep = tile('💤', 'Сон по таймеру',
     'Ночью бот только расходует трафик хостинга. Поставь таймер — он выключится сам; поднимать обратно придётся кнопкой на хостинге.', 'warn-tile',
     h('button', { class: 'btn', onclick: () => setSleep(15) }, '15 мин'),
     h('button', { class: 'btn', onclick: () => setSleep(60) }, '1 час'),
+    sleepMin,
+    h('button', { class: 'btn', onclick: () => { const m = parseInt(sleepMin.value, 10); if (m >= 1 && m <= 720) setSleep(m); else toast('Введите число минут от 1 до 720', 'err'); } }, 'Свой срок'),
     h('button', { class: 'btn', onclick: () => setSleep(0) }, 'Отменить'));
 
   const tPerms = tile('🛡', 'Что бот не может',
@@ -1523,26 +2075,33 @@ async function pageControl() {
   };
   api('/api/bot/sleep').then((s) => saySleep(s.until)).catch(() => saySleep(null));
 
+  const strip = ov ? h('div', { class: 'stats' }, [
+    ['Статус', ov.ready ? 'В сети' : 'Запускается', ov.ready ? 'ok' : 'warn'],
+    ['Пинг', ov.latency_ms == null ? '—' : ov.latency_ms + ' мс', ''],
+    ['Работает', fmtUptime(ov.uptime_s), ''],
+    ['Память', ov.memory_mb == null ? '—' : ov.memory_mb + ' МБ', ''],
+  ].map(([l, v, k]) => h('div', { class: 'card stat ' + k }, h('small', null, l), h('b', null, v)))) : null;
+
   return h('div', null,
-    pageHead('Управление', 'Статус в Discord, питание бота и дела, которые раньше требовали консоли.',
+    pageHead('Управление', 'Четыре блока: состояние, быстрые действия, питание и статус бота в Discord.',
       h('button', { class: 'btn', onclick: () => go('control') }, 'Обновить')),
-    h('div', { class: 'tiles' }, tReload, tHide, tShow, tSleep, tPerms),
-    h('div', { class: 'section-title' }, 'Статус и питание'),
+    strip,
+    h('div', { class: 'section-title' }, 'Быстрые действия'),
+    h('div', { class: 'tiles' }, tReload, tHide, tShow, tPerms),
+    h('div', { class: 'section-title' }, 'Питание'),
     h('div', { class: 'cols' },
-      h('div', { class: 'card form' },
-        h('h2', null, 'Статус бота'),
-        h('label', null, 'Состояние', status),
-        h('label', null, 'Активность', kind),
-        h('label', null, 'Текст (пусто, чтобы убрать)', text),
-        h('div', { class: 'row' }, apply),
-        h('p', { class: 'muted small' }, 'Статус сохраняется и применяется после каждого запуска бота.')
-      ),
+      tSleep,
       h('div', { class: 'card form danger-zone' },
-        h('h2', null, 'Питание'),
-        h('p', { class: 'muted small' }, 'Перезапуск помогает, если бот завис или ты изменил настройки, которые читаются только при старте. Применить код модулей можно кнопкой выше — без рестарта.'),
-        h('div', { class: 'row' }, restart, stop)
-      )
-    )
+        h('h2', null, 'Перезапуск и выключение'),
+        h('p', { class: 'muted small' }, 'Перезапуск помогает, если бот завис или вы изменили настройки, которые читаются только при старте. Код модулей можно применить и без рестарта, кнопкой выше.'),
+        h('div', { class: 'row' }, restart, stop))),
+    h('div', { class: 'section-title' }, 'Статус в Discord'),
+    h('div', { class: 'card form', style: 'max-width:560px' },
+      h('label', null, 'Состояние', status),
+      h('label', null, 'Активность', kind),
+      h('label', null, 'Текст (пусто, чтобы убрать)', text),
+      h('div', { class: 'row' }, apply),
+      h('p', { class: 'muted small' }, 'Статус сохраняется и применяется после каждого запуска бота.'))
   );
 }
 
@@ -1711,7 +2270,7 @@ function msgForm(needPing) {
   const color = h('input', { type: 'text', maxlength: '9', placeholder: 'Цвет, например 990000', value: '990000' });
   const text = h('textarea', { class: 'msg', placeholder: 'Текст сообщения…' });
   const ping = h('input', { type: 'checkbox' });
-  const box = h('div', { class: 'form' }, title, color, text);
+  const box = h('div', { class: 'form' }, title, color, h('div', { class: 'row' }, emojiButton(text)), text);
   if (needPing) box.append(h('label', { class: 'row small' }, ping, 'Отметить @everyone'));
   return { box, title, color, text, ping };
 }
@@ -1854,8 +2413,8 @@ async function pageSend() {
 function embedNode(e) {
   const box = h('div', { class: 'embed', style: 'border-left-color:' + (e.color || '#990000') });
   if (e.author) box.append(h('small', { class: 'muted' }, e.author));
-  if (e.title) box.append(h('b', null, e.title));
-  if (e.text) box.append(h('div', null, e.text));
+  if (e.title) box.append(h('b', null, richNode(e.title)));
+  if (e.text) box.append(h('div', null, richNode(e.text)));
   if (e.fields && e.fields.length) box.append(h('div', { class: 'fields' },
     e.fields.map((f) => h('div', null, h('i', null, f.name), f.value))));
   if (e.image) box.append(h('img', { src: e.image, alt: '', referrerpolicy: 'no-referrer' }));
@@ -2227,6 +2786,7 @@ async function boot() {
   state.botName = s.bot_name || 'Бот';
   document.title = state.botName + ' · Панель';
   renderShell();
+  bindHotkeys();
   go(location.hash.slice(1) || 'overview');
 }
 

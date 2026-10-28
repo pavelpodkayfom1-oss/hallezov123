@@ -468,9 +468,39 @@ def _hex_color(value: Any, default: int = 0x990000) -> int:
         return default
 
 
+_PERM_RU = {
+    "view_channel": "Просматривать канал",
+    "send_messages": "Отправлять сообщения",
+    "send_messages_in_threads": "Писать в ветках",
+    "embed_links": "Встраивать ссылки",
+    "attach_files": "Прикреплять файлы",
+    "mention_everyone": "Упоминать @everyone",
+    "read_message_history": "Читать историю сообщений",
+}
+
+
+def _missing_perms(bot, ch, need) -> List[str]:
+    """Каких прав боту не хватает в канале (по-русски). Пусто — всё есть или проверить нельзя."""
+    guild = guild_of(bot)
+    me = getattr(guild, "me", None) if guild else None
+    if me is None:
+        return []
+    try:
+        perms = ch.permissions_for(me)
+    except Exception:
+        return []
+    return [_PERM_RU.get(n, n) for n in need if not getattr(perms, n, True)]
+
+
+def _no_perms_text(ch, missing: List[str]) -> str:
+    return (f"В канале «{getattr(ch, 'name', '?')}» боту не хватает прав: {', '.join(missing)}. "
+            "Откройте настройки канала → Права доступа → роль бота и разрешите это.")
+
+
 def _discord_error(e: Exception) -> str:
     if isinstance(e, disnake.Forbidden):
-        return "Discord не пускает: не хватает прав (или у человека закрыты ЛС)"
+        return ("Discord не пускает (403): боту не хватает прав в этом канале или выше роли "
+                "человека, либо у человека закрыты ЛС. Проверьте права роли бота.")
     if isinstance(e, disnake.NotFound):
         return "Discord говорит, что этого больше нет — канал удалён или сообщение стёрто"
     if isinstance(e, disnake.HTTPException):
@@ -599,7 +629,15 @@ async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "
     if title:
         emb = disnake.Embed(title=str(title)[:256], description=text[:4000],
                             color=disnake.Color(_hex_color(color)))
-    content = "@everyone" if ping else None
+    need = ["view_channel", "send_messages"] + (["embed_links"] if emb else []) \
+        + (["mention_everyone"] if ping else [])
+    miss = _missing_perms(bot, ch, need)
+    if miss:
+        return {"error": _no_perms_text(ch, miss)}
+    # без заголовка текст идёт обычным сообщением: раньше он терялся, а Discord отвечал ошибкой
+    content = (text if emb is None else None)
+    if ping:
+        content = "@everyone" + ("\n" + content if content else "")
     mentions = disnake.AllowedMentions(everyone=bool(ping), users=False, roles=False,
                                        replied_user=False)
     try:
@@ -2041,6 +2079,10 @@ async def post_sticker(bot, cid: Any, name: Any, text: str = "", title: str = ""
         emb = disnake.Embed(title=str(title)[:MAX_EMBED_TITLE] if title else None,
                             description=text or None, color=disnake.Color(_hex_color(color)))
         emb.set_image(url=f"attachment://{filename}")
+    miss = _missing_perms(bot, ch, ["view_channel", "send_messages", "attach_files"]
+                          + (["embed_links"] if emb else []))
+    if miss:
+        return {"error": _no_perms_text(ch, miss)}
     try:
         msg = await ch.send(embed=emb, file=disnake.File(path, filename=filename))
     except Exception as e:
@@ -2052,4 +2094,170 @@ async def post_sticker(bot, cid: Any, name: Any, text: str = "", title: str = ""
     return out
 
 
+# ───────────────────────── Эмодзи из папки emojis/ ─────────────────────────
+EMOJI_DIR = ROOT / "emojis"
+EMOJI_MAP = ROOT / "emoji_map.json"
+EMOJI_EXT = {".png": "image/png", ".gif": "image/gif", ".webp": "image/webp",
+             ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+EMOJI_UPLOAD_MAX = 20     # за один раз: Discord режет создание эмодзи по скорости
 
+
+def _emoji_name(filename: str) -> str:
+    """Имя эмодзи на сервере из имени файла (то же правило, что у /emoji_folder)."""
+    base = re.sub(r"\.[^.]+$", "", filename)
+    base = re.sub(r"^\d+-", "", base)
+    base = re.sub(r"[^A-Za-z0-9_]", "_", base)
+    return (base if len(base) >= 2 else "e_" + base)[:32]
+
+
+def _emoji_files() -> List[Path]:
+    try:
+        return sorted((p for p in EMOJI_DIR.iterdir()
+                       if p.is_file() and p.suffix.lower() in EMOJI_EXT), key=lambda p: p.name.lower())
+    except FileNotFoundError:
+        return []
+
+
+def emoji_catalog(bot) -> Dict[str, Any]:
+    """Все эмодзи: файлы из папки и то, что уже живёт на сервере. Код вставляется в текст как есть."""
+    guild = guild_of(bot)
+    live: Dict[str, Any] = {}
+    if guild is not None:
+        live = {e.name.lower(): e for e in guild.emojis if e.name}
+    saved: Dict[str, str] = {}
+    if not live:
+        try:
+            saved = {k.lower(): v for k, v in json.loads(EMOJI_MAP.read_text(encoding="utf-8")).items()}
+        except Exception:
+            saved = {}
+
+    rows: List[Dict[str, Any]] = []
+    seen = set()
+    for path in _emoji_files():
+        name = _emoji_name(path.name)
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        animated = path.suffix.lower() == ".gif"
+        row: Dict[str, Any] = {"name": name, "file": path.name, "animated": animated,
+                               "size": round(path.stat().st_size / 1024), "uploaded": False,
+                               "code": "", "url": "/api/emojis/image?file=" + quote(path.name)}
+        e = live.get(key)
+        if e is not None:
+            row.update(uploaded=True, animated=bool(e.animated),
+                       code=f"<{'a' if e.animated else ''}:{e.name}:{e.id}>",
+                       url=f"https://cdn.discordapp.com/emojis/{e.id}.{'gif' if e.animated else 'png'}?size=64")
+        elif key in saved:
+            code = saved[key]
+            m = re.fullmatch(r"<(a?):([A-Za-z0-9_]+):(\d+)>", code)
+            if m:
+                row.update(uploaded=True, animated=bool(m.group(1)), code=code,
+                           url=f"https://cdn.discordapp.com/emojis/{m.group(3)}.{'gif' if m.group(1) else 'png'}?size=64")
+        rows.append(row)
+
+    for key, e in live.items():          # на сервере есть, а в папке файла нет
+        if key in seen:
+            continue
+        rows.append({"name": e.name, "file": "", "animated": bool(e.animated), "size": 0, "uploaded": True,
+                     "code": f"<{'a' if e.animated else ''}:{e.name}:{e.id}>", "only_server": True,
+                     "url": f"https://cdn.discordapp.com/emojis/{e.id}.{'gif' if e.animated else 'png'}?size=64"})
+
+    info: Dict[str, Any] = {"guild": guild.name if guild else None}
+    if guild is not None:
+        static = sum(1 for e in guild.emojis if not e.animated)
+        anim = len(guild.emojis) - static
+        limit = int(getattr(guild, "emoji_limit", 50) or 50)
+        me = guild.me
+        info.update(static=static, animated=anim, limit=limit,
+                    can_manage=bool(me and me.guild_permissions.manage_emojis_and_stickers))
+    return {"rows": rows, "info": info,
+            "missing": sum(1 for r in rows if not r["uploaded"]),
+            "total": len(rows)}
+
+
+def emoji_image(file: Any):
+    name = str(file or "")
+    if not name or "/" in name or "\\" in name or name.startswith("."):
+        return None, None
+    path = EMOJI_DIR / name
+    if not path.is_file() or path.suffix.lower() not in EMOJI_EXT:
+        return None, None
+    return path.read_bytes(), EMOJI_EXT[path.suffix.lower()]
+
+
+def _fit_emoji(data: bytes, ext: str) -> Optional[bytes]:
+    """Discord принимает эмодзи до 256 КБ. Крупные сжимаем, если есть Pillow и emoji_manager."""
+    if len(data) <= 256 * 1024:
+        return data
+    mod = sys.modules.get("emoji_manager") or sys.modules.get("cogs.emoji_manager")
+    fit = getattr(mod, "fit_image", None)
+    if fit is None:
+        try:
+            import emoji_manager as mod  # type: ignore
+            fit = getattr(mod, "fit_image", None)
+        except Exception:
+            fit = None
+    return fit(data, ext) if fit else None
+
+
+def _save_emoji_map(guild) -> None:
+    emap = {e.name: f"<{'a' if e.animated else ''}:{e.name}:{e.id}>" for e in guild.emojis}
+    EMOJI_MAP.write_text(json.dumps(emap, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+async def emoji_upload(bot, names: Any) -> Dict[str, Any]:
+    """Загружает на сервер эмодзи из папки, которых там ещё нет. names — список имён или пусто (все)."""
+    guild = guild_of(bot)
+    if guild is None:
+        return {"error": "Бот ни на одном сервере"}
+    me = guild.me
+    if me is None or not me.guild_permissions.manage_emojis_and_stickers:
+        return {"error": "У бота нет права «Управлять эмодзи и стикерами». Выдайте его роли бота на сервере."}
+    want = {str(n).lower() for n in names} if isinstance(names, list) and names else None
+    live = {e.name.lower() for e in guild.emojis if e.name}
+    todo = []
+    for path in _emoji_files():
+        name = _emoji_name(path.name)
+        if name.lower() in live or (want is not None and name.lower() not in want):
+            continue
+        if name.lower() in {n for n, _ in todo}:
+            continue
+        todo.append((name.lower(), path))
+    if not todo:
+        return {"uploaded": [], "failed": [], "left": 0, "message": "Все выбранные эмодзи уже на сервере"}
+    batch, rest = todo[:EMOJI_UPLOAD_MAX], max(0, len(todo) - EMOJI_UPLOAD_MAX)
+
+    static = sum(1 for e in guild.emojis if not e.animated)
+    anim = len(guild.emojis) - static
+    limit = int(getattr(guild, "emoji_limit", 50) or 50)
+    done: List[str] = []
+    failed: List[Dict[str, str]] = []
+    for key, path in batch:
+        is_gif = path.suffix.lower() == ".gif"
+        if (anim if is_gif else static) >= limit:
+            failed.append({"name": _emoji_name(path.name),
+                           "error": f"На сервере кончились места под {'анимированные' if is_gif else 'обычные'} эмодзи ({limit})"})
+            continue
+        try:
+            data = _fit_emoji(path.read_bytes(), path.suffix.lower())
+            if data is None:
+                failed.append({"name": _emoji_name(path.name), "error": "Больше 256 КБ и сжать не вышло"})
+                continue
+            await guild.create_custom_emoji(name=_emoji_name(path.name), image=data,
+                                            reason="Веб-панель: эмодзи из папки emojis")
+            done.append(_emoji_name(path.name))
+            if is_gif:
+                anim += 1
+            else:
+                static += 1
+            await asyncio.sleep(0.7)
+        except Exception as e:
+            failed.append({"name": _emoji_name(path.name), "error": _discord_error(e)})
+            if isinstance(e, disnake.HTTPException) and getattr(e, "status", 0) == 429:
+                break
+    try:
+        _save_emoji_map(guild)
+    except Exception:
+        pass
+    return {"uploaded": done, "failed": failed, "left": rest}
