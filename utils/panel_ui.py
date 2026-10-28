@@ -748,10 +748,8 @@ img.emo{width:1.3em;height:1.3em;vertical-align:-.3em;object-fit:contain;display
 .thead h2{margin:0 0 .15rem}
 .ttools{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .ttools select{padding-top:.3em;padding-bottom:.3em;font-size:.82rem}
-.rfbar{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:flex-end;
-  padding:.55rem .7rem;margin-bottom:1rem;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}
-.rfbar select{flex:1 1 16rem;min-width:0;padding-top:.3em;padding-bottom:.3em;font-size:.82rem}
-.rfbar .small{flex:1 1 auto}
+.head .rfctl{flex:none;flex-wrap:nowrap}
+.rfctl select{max-width:15rem;min-width:0;padding-top:.3em;padding-bottom:.3em;font-size:.82rem}
 .meter{height:4px;border-radius:4px;background:var(--panel3);overflow:hidden;margin-top:-.4rem}
 .meter i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 .meter.warn i{background:var(--warn)} .meter.bad i{background:var(--err)}
@@ -1222,8 +1220,51 @@ function errorCard(e, retry) {
       h('button', { class: 'btn', onclick: () => go('logs') }, 'Открыть логи')));
 }
 
+/* «Обновить в Discord» — в шапке каждого экрана. Сохранённая с сайта надпись сразу попадает в
+   новые сообщения, но карточки, которые бот уже выложил в каналы, Discord хранит у себя и сам
+   их не переклеивает. Кнопка просит нужный раздел переложить свою витрину текущими текстами.
+   Список того, что умеет, объявляют сами коги, поэтому в поле нет мёртвых пунктов. */
+let RF_TARGETS = null;
+
+async function rfLoad() {
+  if (!RF_TARGETS) {
+    const r = await api('/api/refresh').catch(() => ({ targets: [] }));
+    RF_TARGETS = r.targets || [];
+  }
+  return RF_TARGETS;
+}
+
+function refreshCtl() {
+  const sel = h('select', { 'aria-label': 'Что переложить в Discord' });
+  const btn = h('button', { class: 'btn', onclick: run }, '🔄 Обновить в Discord');
+  const box = h('div', { class: 'row rfctl' }, sel, btn);
+  const sync = () => {
+    const opt = sel.selectedOptions[0];
+    btn.disabled = !sel.value || !!(opt && opt.disabled);
+  };
+  function fill(targets) {
+    sel.replaceChildren(...targets.map((t) => h('option', {
+      value: t.off ? '' : t.ref, disabled: t.off }, t.title + ' — ' + t.where)));
+    box.style = targets.some((t) => !t.off) ? '' : 'display:none';
+    sync();
+  }
+  async function run() {
+    if (!sel.value) return;
+    btn.disabled = true;
+    const r = await api('/api/refresh', { method: 'POST', body: { ref: sel.value } })
+      .catch((e) => ({ error: e.message }));
+    if (r.error) toast(r.error, 'err');
+    else toast(r.did || 'Готово', 'ok');
+    RF_TARGETS = null;
+    fill(await rfLoad());
+  }
+  sel.addEventListener('change', sync);
+  rfLoad().then(fill);
+  return box;
+}
+
 function pageHead(title, sub, ...actions) {
-  return h('div', { class: 'head' }, h('div', null, h('h1', null, title), sub ? h('p', { class: 'muted' }, sub) : null), h('div', { class: 'row' }, actions));
+  return h('div', { class: 'head' }, h('div', null, h('h1', null, title), sub ? h('p', { class: 'muted' }, sub) : null), h('div', { class: 'row' }, refreshCtl(), actions));
 }
 
 /* ---------- Обзор ---------- */
@@ -1909,34 +1950,6 @@ async function pageTexts() {
 
   search.addEventListener('input', renderList);
   kindSel.addEventListener('change', () => { kindFilter = kindSel.value; renderList(); });
-  /* «Обновить в Discord»: карточки, которые бот уже выложил в канал, Discord хранит у себя
-     и сам не переклеивает. Этот проход просит бота переложить их текущими текстами. */
-  const rfSel = h('select', { 'aria-label': 'Что переложить в Discord' });
-  const rfBtn = h('button', { class: 'btn', onclick: refreshDs }, '🔄 Обновить в Discord');
-  const rfNote = h('span', { class: 'small muted' });
-  const rfBox = h('div', { class: 'row rfbar' }, rfSel, rfBtn, rfNote);
-  async function refreshDs() {
-    if (!rfSel.value) return;
-    rfBtn.disabled = true;
-    rfNote.textContent = 'Перекладываю…';
-    rfNote.className = 'small muted';
-    const r = await api('/api/refresh', { method: 'POST', body: { ref: rfSel.value } })
-      .catch((e) => ({ error: e.message }));
-    rfBtn.disabled = false;
-    rfNote.textContent = r.error || r.did || 'Готово';
-    rfNote.className = 'small ' + (r.error ? 'err-text' : 'ok-text');
-  }
-  const rf = await api('/api/refresh').catch(() => ({ targets: [] }));
-  (rf.targets || []).forEach((t) => rfSel.append(
-    h('option', { value: t.ref, disabled: t.off }, t.title + ' — ' + t.where)));
-  const syncRf = () => {
-    const sel = rfSel.selectedOptions[0];
-    rfBtn.disabled = !rfSel.value || !!(sel && sel.disabled);
-  };
-  rfSel.addEventListener('change', syncRf);
-  syncRf();
-  if (!(rf.targets || []).some((t) => !t.off)) rfBox.style = 'display:none';
-  else rfNote.textContent = 'Правки без этой кнопки видны новым сообщениям, старые перекладываются тут.';
 
   drawFilters();
   renderList();
@@ -1944,9 +1957,8 @@ async function pageTexts() {
   if (first) await open(first);
 
   return h('div', null,
-    pageHead('Тексты бота', 'Все надписи, которые бот показывает людям: тексты каналов казны, заголовки панелей, заявки, повышения, сборы, кнопки и поля форм. Правьте и сразу смотрите, как это будет выглядеть в Discord. Ctrl+S сохраняет.',
+    pageHead('Тексты бота', 'Все надписи, которые бот показывает людям: тексты каналов казны, заголовки панелей, заявки, повышения, сборы, кнопки и поля форм. Правьте и сразу смотрите, как это будет выглядеть в Discord. Ctrl+S сохраняет. Правка без кнопки в шапке видна новым сообщениям, старые перекладываются «🔄 Обновить в Discord».',
       h('button', { class: 'btn ghost', title: 'Перечитать список надписей с бота', onclick: () => go('texts') }, 'Свежий список')),
-    rfBox,
     h('div', { class: 'split tsplit' },
       h('div', { class: 'tside' },
         h('div', { class: 'tsearch' }, search, h('div', { class: 'row small muted' }, 'Ищи словом, которое видишь в Discord — найдётся по всему тексту.', kindSel)),
