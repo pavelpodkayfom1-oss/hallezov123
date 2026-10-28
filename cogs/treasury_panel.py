@@ -529,15 +529,42 @@ class RejectModal(disnake.ui.Modal):
 
 
 # ─────────────────────────── панели на кнопках ───────────────────────────
+# Декоратор кнопки читает свою надпись один раз — при импорте кога, поэтому правка из
+# «Текстов» попадала в кнопки только после рестарта. Этот проход перечитывает надпись
+# каждый раз, когда вьюх собирается, — и новые посты, и экран `/казна` выходят уже свежими.
+BTN_TEXTS = {
+    "hzkaz:balance": ("kazna_btn_balance", "💰 Баланс казны"),
+    "hzkaz:book": ("kazna_btn_book", "📜 Книга казны"),
+    "hzkaz:topup": ("kazna_btn_topup", "➕ Пополнить"),
+    "hzkaz:new": ("kazna_btn_new", "🧾 Подать отчёт"),
+    "hzkaz:mine": ("kazna_btn_mine", "📋 Мои отчёты"),
+    "hzkazp:setup": ("kazna_btn_setup", "🏗 Создать ветку казны"),
+    "hzkazp:banners": ("kazna_btn_banners", "🖼 Перезалить баннеры"),
+    "hzkazp:set": ("kazna_btn_setbal", "⚖️ Задать остаток"),
+}
+
+
+def relabel(view: disnake.ui.View) -> disnake.ui.View:
+    """Свежие надписи кнопок казны: Discord держит лимит 80 знаков и не любит пустоту."""
+    for child in view.children:
+        key = BTN_TEXTS.get(getattr(child, "custom_id", None) or "")
+        if key and hasattr(child, "label"):
+            child.label = (get_text(key[0], key[1]) or key[1])[:80]
+    return view
+
+
 class BankView(disnake.ui.View):
     """Постоянная: висит под баннером банка и после рестарта работает по custom_id.
 
-    Надписи кнопок берутся из текстов панели, когда ког загружается: правка из веб-панели
-    видна новым постам и сообщениям после рестарта — Discord сам держит старые кнопки.
+    Надписи кнопок перечитываются при каждом сборе вьюхи (relabel), поэтому правка из
+    веб-панели видна новым постам сразу. Старое сообщение в канале не переписывается:
+    Discord сам держит те кнопки, что были положены, — обновить их можно «🖼 Перезалить
+    баннеры».
     """
 
     def __init__(self):
         super().__init__(timeout=None)
+        relabel(self)
 
     @disnake.ui.button(label=get_text("kazna_btn_balance", "💰 Баланс казны"),
                        style=disnake.ButtonStyle.success, custom_id="hzkaz:balance", row=0)
@@ -558,6 +585,7 @@ class BankView(disnake.ui.View):
 class ReportsView(disnake.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
+        relabel(self)
 
     @disnake.ui.button(label=get_text("kazna_btn_new", "🧾 Подать отчёт"), emoji="✍️",
                        style=disnake.ButtonStyle.primary, custom_id="hzkaz:new", row=0)
@@ -590,6 +618,7 @@ class PanelView(disnake.ui.View):
 
     def __init__(self, st: dict):
         super().__init__(timeout=900)
+        relabel(self)
         self.st = st
         for key, ph_key, ph_default in (
                 ("manage", "kazna_select_manage_ph", "👑 Выбери роль управления казной (до 3)"),
