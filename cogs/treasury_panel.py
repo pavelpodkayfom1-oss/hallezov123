@@ -7,7 +7,6 @@
 Остаток живёт в treasury.json и меняется только из принятого отчёта — поэтому «молча
 потратить» нельзя: каждая сумма оставляет запись в книге казны.
 """
-import asyncio
 import io
 import json
 import os
@@ -100,52 +99,6 @@ def _deny(bot=None, guild=None) -> disnake.Embed:
 def _warn(bot=None, guild=None, head: str = "ТАК НЕ ВЫЙДЕТ", text: str = "") -> disnake.Embed:
     warn = _e(bot, "hz_warn", "⚠️")
     return note_embed(text, "error", title=f"{warn}  {head}", guild=guild)
-
-
-# id slash-команды «отчёт»: чип в сообщении клиент рисует кликабельным, и это единственный
-# способ попасть из кнопки в форму с полем для файла
-_CHIP_ID: dict = {}
-
-
-def _chip_text(guild) -> str:
-    """Тот же чип, но без ожидания: кнопка обязана ответить за ~3 секунды.
-
-    Сетевой запрос под лимитом ждёт десятки секунд, и если сделать его внутри колбэка,
-    Discord выдаёт «Приложение не ответило вовремя». Поэтому id команды прогревают фоном
-    (см. on_ready), а тут берут из кэша; без него текст всё равно читаемый.
-    """
-    key = int(guild.id) if guild is not None else 0
-    cid = _CHIP_ID.get(key)
-    return f"</отчёт:{cid}>" if cid else "`/отчёт`"
-
-
-async def _warm_chip(bot, guild) -> str:
-    """Запросить id slash-команды «отчёт» и положить в кэш. Возвращает строку в консоль.
-
-    Локальные `get_*_command_named` в disnake 2.12 читают кэш и не знают про команды, которые
-    синк зарегистрировал сам, поэтому id берём одним HTTP-запросом — на сервере, а если команды
-    глобальные, то там. Без строки в консоли провал выглядит как «серый текст, и непонятно почему».
-    """
-    key = int(guild.id) if guild is not None else 0
-    if not key or _CHIP_ID.get(key):
-        return ""
-    hit, names = None, []
-    try:
-        app = bot.application_id
-        cmds = await bot.http.get_guild_commands(app, key)
-        names = [str(c.get("name")) for c in cmds]
-        hit = next((c for c in cmds if str(c.get("name")).lower() == "отчёт"), None)
-        if hit is None:
-            cmds = await bot.http.get_global_commands(app)
-            names = [str(c.get("name")) for c in cmds]
-            hit = next((c for c in cmds if str(c.get("name")).lower() == "отчёт"), None)
-    except Exception as e:
-        return f"💰 kazna: id команды /отчёт не получен ({guild.name}): {e}"
-    if not hit:
-        return (f"💰 kazna: команды /отчёт нет среди {len(names)} зарегистрированных "
-                f"({guild.name}): {', '.join(names[:12])}")
-    _CHIP_ID[key] = int(hit["id"])
-    return f"💰 kazna: чип /отчёт → id {_CHIP_ID[key]} ({guild.name})"
 
 
 def _need_manage(bot=None, guild=None) -> disnake.Embed:
@@ -248,7 +201,7 @@ def _bank_text(bot) -> str:
     )
 
 
-def _reports_text(bot, chip: str = "`/отчёт`") -> str:
+def _reports_text(bot) -> str:
     pencil = _e(bot, "hz_pencil", "✍️")
     cart = _e(bot, "hz_shoppingcart", "🛒")
     meg = _e(bot, "hz_megaphone", "📢")
@@ -259,17 +212,16 @@ def _reports_text(bot, chip: str = "`/отчёт`") -> str:
     return (
         f"*{pencil}  Потратил — отчитался  {pencil}*\n\n"
         f"### {cart}  КАК СДАТЬ ОТЧЁТ\n"
-        f"{n[0]}  Нажми **«🧾 Подать отчёт»** — бот покажет команду {chip} **синим**: нажми в неё\n"
-        f"{n[1]}  **Сумма** и **На что** — сколько ушло и на какую статью: мероприятие, форма,\n"
-        f"_transport, откат после рейда_\n"
+        f"{n[0]}  Нажми **«🧾 Подать отчёт»** — откроется форма\n"
+        f"{n[1]}  **Сумма** и **На что** — сколько ушло и на какую статью: мероприятие,\n"
+        f"_форму на сбор, транспорт, откат после рейда_\n"
         f"{n[2]}  **Кому** и **Детали** — на кого потратили и всё, что стоит знать проверяющему\n"
-        f"{n[3]}  Перетащи чек или скрин перевода прямо в команду — и отправляй\n\n"
+        f"{n[3]}  Перетащи чеки в поле **«Скрины»** и жми **Отправить**\n\n"
         f"### 📎  СКРИНЫ\n"
-        f"{warn}  Поле с картинкой Discord разрешает только **внутри команды**, в кнопку-форму\n"
-        f"его вставить нельзя — там бывает только текст. Поэтому скрины несут в {chip}: туда\n"
-        f"влезает до {MAX_PHOTOS} штук, перетаскиваются как обычное сообщение в канал.\n"
-        f"Если подал **быстрой формой без скринов** — прикрепи их ответом в этом канале в\n"
-        f"течение 2 минут, бот сам подтянет их к отчёту.\n\n"
+        f"Перетаскиваются прямо в форму отчёта, до {MAX_PHOTOS} файлов: чек, скрин перевода,\n"
+        f"фото купленного. Они уходят в приёмку вместе с суммой — проверяющий видит их сразу.\n"
+        f"Если чека под рукой нет — прикрепи скрины ответом в этот канал в течение 2 минут\n"
+        f"после отправки, бот подтянет их к отчёту сам.\n\n"
         f"### {meg}  ЧТО ДАЛЬШЕ\n"
         f"✅  Приняли → сумма снялась с баланса, запись ушла в **📜 логи казны**\n"
         f"❌  Отклонили → баланс **не тронут**, тебе вернётся причина\n\n"
@@ -405,6 +357,9 @@ def _mine_embed(bot, st: dict, uid: int, guild=None) -> disnake.Embed:
 
 # ─────────────────────────── модалки ───────────────────────────
 class ReportModal(disnake.ui.Modal):
+    """Форма отчёта: Discord даёт поле с файлом и в модалке (ui.FileUpload, тип 19),
+    поэтому скрины перетаскиваются туда же, где сумма, а не отдельной командой."""
+
     def __init__(self):
         super().__init__(
             title="🧾 Отчёт о трате",
@@ -420,6 +375,12 @@ class ReportModal(disnake.ui.Modal):
                                      style=disnake.TextInputStyle.paragraph,
                                      placeholder="Где брали, кто платил, почему столько",
                                      max_length=800),
+                disnake.ui.Label(
+                    f"Скрины (до {MAX_PHOTOS})",
+                    disnake.ui.FileUpload(custom_id="photos", min_values=0,
+                                          max_values=MAX_PHOTOS, required=False),
+                    description="Перетащи чек или скрин перевода — уйдут в приёмку "
+                                "вместе с отчётом"),
             ],
         )
 
@@ -431,9 +392,30 @@ class ReportModal(disnake.ui.Modal):
                             f"{_e(inter.bot, 'hz_botv2', '🤖')}  Модуль казны не загружен — "
                             "нужен рестарт бота."),
                 ephemeral=inter.guild is not None)
+        shots = [a for a in (inter.resolved_values.get("photos") or [])
+                 if a is not None][:MAX_PHOTOS]
+        for att in shots:
+            if not (att.content_type or "").startswith("image/"):
+                return await inter.response.send_message(
+                    embed=_warn(inter.bot, inter.guild, "СКРИН — НЕ КАРТИНКА",
+                                f"📎  `{att.filename}` не изображение. Прикрепляй png или jpg."),
+                    ephemeral=True)
+            if att.size > MAX_PHOTO_MB * 1024 * 1024:
+                return await inter.response.send_message(
+                    embed=_warn(inter.bot, inter.guild, "СКРИН СЛИШКОМ ТЯЖЁЛЫЙ",
+                                f"📎  `{att.filename}` больше {MAX_PHOTO_MB} МБ — сожми его."),
+                    ephemeral=True)
+        # картинку тянут с CDN, и это не успевает случиться за 3 секунды ответа
+        await inter.response.defer(with_message=True, ephemeral=True)
+        files = []
+        for att in shots:
+            try:
+                files.append(await att.to_file())
+            except disnake.DiscordException:
+                pass
         await cog.submit(inter, str(inter.text_values["amount"]),
                          str(inter.text_values["purpose"]), str(inter.text_values["people"]),
-                         str(inter.text_values.get("detail") or ""))
+                         str(inter.text_values.get("detail") or ""), files)
 
 
 class TopUpModal(disnake.ui.Modal):
@@ -539,19 +521,6 @@ class ReportsView(disnake.ui.View):
         pass
 
 
-class ReportHowTo(disnake.ui.View):
-    """Экран после «Подать отчёт»: Discord даёт поле с файлом только в команде,
-    поэтому тут кликабельный чип `/отчёт`, а кнопкой — быстрая форма без скринов."""
-
-    def __init__(self):
-        super().__init__(timeout=600)
-
-    @disnake.ui.button(label="Форма без скринов", emoji="✍️", style=disnake.ButtonStyle.secondary,
-                       custom_id="hzkaz:new:form", row=0)
-    async def form(self, button, inter: disnake.MessageInteraction):
-        pass
-
-
 class ReviewView(disnake.ui.View):
     def __init__(self, rid: str):
         super().__init__(timeout=None)
@@ -618,7 +587,6 @@ class Treasury(commands.Cog):
         self.bot = bot
         # ожидание скринов к отчёту: user_id → (rid, msg_id, channel_id, deadline)
         self._pending_photos: dict = {}
-        self._chip_task = None
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -626,29 +594,6 @@ class Treasury(commands.Cog):
             self.bot.add_view(BankView())
             self.bot.add_view(ReportsView())
             self.bot._treasury_view_added = True
-        # чип «/отчёт» просят из колбэка кнопки, а там 3 секунды на ответ — id команды
-        # собираем фоном сразу после старта и не ждём его в момент нажатия
-        if not getattr(self.bot, "_treasury_chip_warm", False):
-            self.bot._treasury_chip_warm = True
-            # ссылку держим в коге: без неё событие цикла может собрать задачу
-            # посреди запроса, и прогрев исчезнет молча
-            self._chip_task = self.bot.loop.create_task(self._warm_chips())
-
-    async def _warm_chips(self):
-        # запрос за id команды может не пройти с первого раза (лимит, приложение ещё не
-        # готово), а без id чип до самой перезагрузки бота остался бы серым текстом —
-        # поэтому три попытки с паузой, в фоне и никогда в момент нажатия
-        for attempt in range(3):
-            pending = [g for g in self.bot.guilds if not _CHIP_ID.get(int(g.id))]
-            if not pending:
-                return
-            for guild in pending:
-                line = await _warm_chip(self.bot, guild)
-                if line:
-                    print(line, flush=True)
-            if not pending or attempt == 2:
-                return
-            await asyncio.sleep(30)
 
     # ── команда ──
     @commands.slash_command(name="казна", description="Казна семьи: банк, отчёты, приёмка",
@@ -689,49 +634,6 @@ class Treasury(commands.Cog):
                    f"{rep_i}  Дальше — выбрать роли и задать остаток, кнопки ниже."))
         await inter.response.send_message(embed=emb, view=PanelView(st), ephemeral=True,
                                           file=_put_banner(emb, BANK_BANNER))
-
-    # ── отчёт командой: только так Discord даёт поле с вложением ──
-    @commands.slash_command(name="отчёт",
-                            description="Отчёт о трате казны: сумма, статья, кому и до 3 скринов",
-                            contexts=disnake.InteractionContextTypes(guild=True))
-    async def report_cmd(
-            self, inter: disnake.ApplicationCommandInteraction,
-            сумма: str = commands.Param(description="Сколько ушло: 15 000 или 15к"),
-            на_что: str = commands.Param(description="Статья: форма, транспорт, откат после рейда"),
-            кому: str = commands.Param(description="На кого и на сколько человек"),
-            детали: str = commands.Param("", description="Где брали, кто платил, почему столько"),
-            скриншот: disnake.Attachment = commands.Param(
-                None, description="Прикрепи 1–3 скрина: чек или скрин перевода"),
-            скриншот_2: disnake.Attachment = commands.Param(None, description="Второй скрин"),
-            скриншот_3: disnake.Attachment = commands.Param(None, description="Третий скрин"),
-    ) -> None:
-        if inter.guild is not None and inter.application_command is not None:
-            # вызов команды — самый надёжный источник её id: после первого /отчёт чип
-            # на экране «подать отчёт» становится кликабельным без единого запроса
-            _CHIP_ID[int(inter.guild.id)] = int(inter.application_command.id)
-        if not _allowed(inter, _load(), "manage"):
-            return await inter.response.send_message(embed=_need_manage(self.bot, inter.guild),
-                                                     ephemeral=True)
-        shots = [a for a in (скриншот, скриншот_2, скриншот_3) if a is not None][:MAX_PHOTOS]
-        for att in shots:
-            if not (att.content_type or "").startswith("image/"):
-                return await inter.response.send_message(
-                    embed=_warn(self.bot, inter.guild, "СКРИН — НЕ КАРТИНКА",
-                                f"📎  `{att.filename}` не изображение. Прикрепляй png или jpg."),
-                    ephemeral=True)
-            if att.size > MAX_PHOTO_MB * 1024 * 1024:
-                return await inter.response.send_message(
-                    embed=_warn(self.bot, inter.guild, "СКРИН СЛИШКОМ ТЯЖЁЛЫЙ",
-                                f"📎  `{att.filename}` больше {MAX_PHOTO_MB} МБ — сожми его."),
-                    ephemeral=True)
-        await inter.response.defer(ephemeral=True)
-        files = []
-        for att in shots:
-            try:
-                files.append(await att.to_file())
-            except disnake.DiscordException:
-                pass
-        await self.submit(inter, сумма, на_что, кому, детали, files)
 
     # ── создание ветки ──
     async def build_branch(self, inter) -> None:
@@ -967,7 +869,7 @@ class Treasury(commands.Cog):
                           files: Optional[List[disnake.File]] = None) -> dict:
         """Записать отчёт и положить карточку в приёмку.
 
-        Общий вход для Discord (кнопка, модалка, `/отчёт`) и для веб-панели: права проверяются
+        Общий вход для Discord (кнопка и модалка) и для веб-панели: права проверяются
         до вызова, здесь остаются только сумма, хроника и карточка.
         """
         st = _load()
@@ -1061,7 +963,7 @@ class Treasury(commands.Cog):
         photo = "📎"
         if res["photos"]:
             photos = f"{photo}  **Скринов приложено:** {res['photos']}\n"
-            tail = f"> {pencil}  Следующая трата — `/отчёт` или кнопкой в канале отчётов."
+            tail = f"> {pencil}  Следующая трата — той же кнопкой."
         else:
             PHOTO_SECONDS = 120
             self._pending_photos[int(inter.author.id)] = (
@@ -1242,31 +1144,7 @@ class Treasury(commands.Cog):
             if not _allowed(inter, st, "manage"):
                 return await inter.response.send_message(embed=_deny(self.bot, inter.guild), ephemeral=True)
             return await inter.response.send_modal(TopUpModal())
-        if action == "new" and cid.endswith(":form"):
-            action = "new_form"
-
         if action == "new":
-            if not _allowed(inter, st, "manage"):
-                return await inter.response.send_message(
-                    embed=_need_manage(self.bot, inter.guild),
-                    ephemeral=True)
-            pencil = _e(self.bot, "hz_pencil", "✍️")
-            bits_i = _e(self.bot, "hz_bitsicon", "💎")
-            chip = _chip_text(inter.guild)
-            # чип команды клиент рисует только в тексте сообщения, в эмбеде он мог бы
-            # остаться сырым </отчёт:123...>
-            return await inter.response.send_message(
-                content=f"📎  Отчёт со скринами открывается так: {chip}",
-                embed=note_embed(
-                    f"{bits_i}  Нажми на **{chip}** синим — команда откроется сама, в ней есть "
-                    f"поле «Скриншот»: чек или скрин перевода перетаскивается прямо туда "
-                    f"(до {MAX_PHOTOS} штук) и уходит в приёмку вместе с отчётом.\n"
-                    f"{pencil}  **Быстрая форма** кнопкой ниже — она без картинок: Discord "
-                    f"не даёт поле с файлом в форме по кнопке, там только текст. Скрины к ней "
-                    f"можно прикрепить ответом в этот канал в течение 2 минут.",
-                    title=f"{pencil}  КАК СДАТЬ ОТЧЁТ", guild=inter.guild),
-                view=ReportHowTo(), ephemeral=True)
-        if action == "new_form":
             if not _allowed(inter, st, "manage"):
                 return await inter.response.send_message(
                     embed=_need_manage(self.bot, inter.guild),
