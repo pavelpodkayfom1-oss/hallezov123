@@ -103,6 +103,40 @@ async def _announce(guild, embed) -> bool:
         return False
 
 
+async def _eject(member, note: str, tries: int):
+    """Выгнать и вернуть (получилось, почему). Без этого человек, который уже сидит на
+    сервере, висел бы в ЧС вечно: события «зашёл» для него не будет."""
+    guild = member.guild
+    if member.id == guild.owner_id:
+        return False, "это владелец сервера — его не трогаем"
+    if getattr(member, "bot", False):
+        return False, "это бот"
+    if not guild.me.guild_permissions.kick_members:
+        return False, get_text("chs_no_perm", "у меня нет права «Управлять участниками»")
+    try:
+        await member.kick(reason=f"ЧС семьи: {note or 'внесён руководством'}"
+                                 + (f" · заход №{tries}" if tries else ""))
+        return True, get_text("chs_kicked", "выдворен")
+    except disnake.Forbidden:
+        return False, "Discord не дал: у него роль старлее моей"
+    except Exception as exc:
+        return False, f"не вышло ({exc.__class__.__name__})"
+
+
+async def _report(member, note: str, tries: int, kicked: bool, outcome: str) -> None:
+    text = _kick_text(member, note)
+    if kicked:
+        embed = card(get_text("chs_kick_title", "⛔ Чёрный список"), text, guild=member.guild)
+        embed.set_footer(text=f"ID {member.id} · "
+                              + (f"зашёл {tries} раз · " if tries else "внесён только что · ")
+                              + f"{datetime.now(MSK).strftime('%d.%m.%Y %H:%M')}")
+    else:
+        embed = note_embed(f"{text}\n\n⚠️ Кик не прошёл: {outcome}.")
+    sent = await _announce(member.guild, embed)
+    print(f"⛔ ЧС: {member} ({tries}) → {outcome}"
+          + ("" if sent else " · писать некуда"), flush=True)
+
+
 class ChsAddModal(disnake.ui.Modal):
     def __init__(self):
         super().__init__(
@@ -296,14 +330,27 @@ class Chs(commands.Cog):
                                           "❌ Не увидел ни одного ID. Вставь упоминание "
                                           "или цифры профиля.")),
                 ephemeral=True)
+
+        async def find(user_id: int):
+            """get_member молча вернёт None для тех, кого нет в кэше, — тогда спрашиваем Discord."""
+            member = inter.guild.get_member(user_id) if inter.guild else None
+            if member is None and inter.guild is not None:
+                try:
+                    member = await inter.guild.fetch_member(user_id)
+                except Exception:
+                    member = None
+            return member
+
         data = _load()
-        added, skipped = [], []
+        added, skipped, present = [], [], []
         for user_id in ids:
             key = str(user_id)
+            member = await find(user_id)
+            if member is not None:
+                present.append(member)
             if key in data["list"]:
                 skipped.append(key)
                 continue
-            member = inter.guild.get_member(user_id) if inter.guild else None
             data["list"][key] = {
                 "name": member.display_name if member else "",
                 "note": (note or "")[:200],
@@ -321,6 +368,15 @@ class Chs(commands.Cog):
         lines = [f"⛔ В ЧС: {', '.join('`' + k + '`' for k in added)}" if added else "⛔ Никого не добавил."]
         if skipped:
             lines.append(f"Уже был(и) в списке: {', '.join('`' + k + '`' for k in skipped)}")
+        # Человек уже на сервере: события «зашёл» для него не будет, поэтому гоним сразу.
+        for member in present:
+            entry = data["list"].get(str(member.id)) or {}
+            why = entry.get("note") or (note or "")
+            tries = int(entry.get("tries") or 0)
+            kicked, outcome = await _eject(member, why, tries)
+            await _report(member, why, tries, kicked, outcome)
+            lines.append(("👌 Выгнал его прямо сейчас." if kicked
+                          else f"⚠️ Он на сервере, но выгнать не вышло: {outcome}."))
         if not data.get("channel"):
             lines.append(get_text("chs_no_channel",
                                   "Канал для таких записей не привязан — напишу в канал логов "
@@ -361,32 +417,8 @@ class Chs(commands.Cog):
 
         tries = entry["tries"]
         note = entry.get("note") or ""
-        kicked = False
-        if member.id == guild.owner_id:
-            outcome = "это владелец сервера — его не трогаем"
-        elif not guild.me.guild_permissions.kick_members:
-            outcome = get_text("chs_no_perm", "у меня нет права «Управлять участниками»")
-        else:
-            try:
-                await member.kick(reason=f"ЧС семьи: {note or 'внесён руководством'} "
-                                         f"(заход №{tries})")
-                kicked = True
-                outcome = get_text("chs_kicked", "выдворен")
-            except disnake.Forbidden:
-                outcome = "Discord не дал: у него роль старлее моей"
-            except Exception as exc:
-                outcome = f"не вышло ({exc.__class__.__name__})"
-
-        text = _kick_text(member, note)
-        if kicked:
-            embed = card(get_text("chs_kick_title", "⛔ Чёрный список"), text, guild=guild)
-            embed.set_footer(text=f"ID {member.id} · заход №{tries} · "
-                                  f"{datetime.now(MSK).strftime('%d.%m.%Y %H:%M')}")
-        else:
-            embed = note_embed(f"{text}\n\n⚠️ Кик не прошёл: {outcome}.")
-        sent = await _announce(guild, embed)
-        print(f"⛔ ЧС: {member} зашёл ({tries}) → {outcome}"
-              + ("" if sent else " · писать некуда"), flush=True)
+        kicked, outcome = await _eject(member, note, tries)
+        await _report(member, note, tries, kicked, outcome)
 
 
 def setup(bot: commands.Bot):
