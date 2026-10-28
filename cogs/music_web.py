@@ -1,9 +1,13 @@
 """Сайт музыки: отдельная страница, отдельный сервер, отдельный порт.
 
 Панель семьи спрятана за паролем, а музыку хотят включать все, кто сидит в голосе.
-Поэтому это не раздел панели, а самостоятельный сайт: своё приложение aiohttp, свой
-порт (`MUSIC_PORT`, по умолчанию 8081) и ни одного общего маршрута с панелью —
-`cogs/web_panel.py` этот файл не трогает и не переживает его перезапуск.
+Поэтому это не раздел панели, а самостоятельный сайт: своё приложение aiohttp, свои
+маршруты и ни одного общего обработчика с панелью — `cogs/web_panel.py` этот файл не
+трогает.
+
+Хостинг даёт один веб-адрес на один порт, так что если `PANEL_PORT` задан и отличается
+от `MUSIC_PORT`, сайт музыки встаёт на публичный порт, а всё остальное (панель со её
+маршрутами) проксируется на внутренний порт панели. Файлы панели при этом не правятся.
 
 Открыт без входа, но с ограничением по адресам: заказы считаются с одного IP, а
 очередь и кулдаун плеера не да забить канал одним человеком.
@@ -17,15 +21,27 @@ import time
 from collections import defaultdict, deque
 from typing import Any, Deque, Dict
 
+import aiohttp
 from aiohttp import web
 from disnake.ext import commands
 
 from utils.checks import load_config
 
 DEFAULT_PORT = 8081
+PREFIX = "/music"
 WRITE_LIMIT = 20             # записей на один адрес в минуту
 WRITE_WINDOW = 60
 NICK_MAX = 32
+# Защита от чужих POST'ов и выключатель заказов действуют только на маршруты сайта.
+WRITE_PATHS = frozenset(f"{pre}/api/{name}"
+                        for pre in ("", PREFIX) for name in ("order", "action"))
+
+
+def _panel_port() -> int:
+    try:
+        return int(os.getenv("PANEL_PORT") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _conf() -> dict:
@@ -81,7 +97,7 @@ def _guild(bot):
 
 @web.middleware
 async def _guard(request: web.Request, handler):
-    if request.method != "GET":
+    if request.path in WRITE_PATHS:
         if request.headers.get("X-Requested-With") != "hz-music":
             return web.json_response({"error": "Только со страницы сайта"}, status=403)
         if not _open_for_writes():
@@ -94,21 +110,34 @@ class MusicWeb(commands.Cog):
         self.bot = bot
         self.hits = _Hits()
         self.runner: web.AppRunner | None = None
+        self.session: aiohttp.ClientSession | None = None
         self.port = int(os.getenv("MUSIC_PORT") or _conf().get("music_port") or DEFAULT_PORT)
 
         app = web.Application(middlewares=[_guard])
-        app.router.add_get("/", self.h_page)
-        app.router.add_get("/api/state", self.h_state)
-        app.router.add_post("/api/order", self.h_order)
-        app.router.add_post("/api/action", self.h_action)
+        self.panel_port = _panel_port()
+        # адрес на хостинге один: в этом режиме корень остаётся панели, а музыка
+        # живёт на /music и ничьих маршрутов не перехватывает
+        self.share_front = bool(self.panel_port and self.panel_port != self.port)
+        for pre in ((PREFIX,) if self.share_front else ("", PREFIX)):
+            app.router.add_get(pre + "/api/state", self.h_state)
+            app.router.add_post(pre + "/api/order", self.h_order)
+            app.router.add_post(pre + "/api/action", self.h_action)
+        app.router.add_get(PREFIX, self.h_page_moved)
+        app.router.add_get(PREFIX + "/", self.h_page)
+        if self.share_front:
+            app.router.add_route("*", "/{tail:.*}", self.h_proxy)
+        else:
+            app.router.add_get("/", self.h_page)
         self.app = app
 
     async def cog_load(self) -> None:
+        self.session = aiohttp.ClientSession(auto_decompress=False)
         try:
             self.runner = web.AppRunner(self.app, access_log=None)
             await self.runner.setup()
             await web.TCPSite(self.runner, "0.0.0.0", self.port).start()
-            print(f"🎵 Сайт музыки запущен: порт {self.port}", flush=True)
+            front = f" + панель с порта {self.panel_port}" if self.share_front else ""
+            print(f"🎵 Сайт музыки запущен: порт {self.port}{front}", flush=True)
         except OSError as e:
             self.runner = None
             print(f"⚠️ Сайт музыки не поднялся на порту {self.port} ({e.__class__.__name__}). "
@@ -118,6 +147,9 @@ class MusicWeb(commands.Cog):
         if self.runner is not None:
             await self.runner.cleanup()
             self.runner = None
+        if self.session is not None:
+            await self.session.close()
+            self.session = None
 
     # ---- общее ----
     def _player(self):
@@ -143,6 +175,28 @@ class MusicWeb(commands.Cog):
             content_type="text/html",
             headers={"Content-Security-Policy": csp, "Cache-Control": "no-store"},
         )
+
+    async def h_page_moved(self, request: web.Request) -> web.Response:
+        raise web.HTTPFound(PREFIX + "/")
+
+    async def h_proxy(self, request: web.Request) -> web.StreamResponse:
+        """Хостинг наружу отдаёт один порт, поэтому панель сидит за этим сайтом:
+        всё, что не /music, уходит на её внутренний порт как есть."""
+        url = f"http://127.0.0.1:{self.panel_port}{request.path_qs}"
+        skip = {"host", "connection", "content-length", "accept-encoding"}
+        headers = {k: v for k, v in request.headers.items() if k.lower() not in skip}
+        try:
+            async with self.session.request(
+                    request.method, url, data=await request.read(), headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=120)) as resp:
+                payload = await resp.read()
+        except Exception:
+            return web.Response(status=502, content_type="text/plain",
+                                text="Панель семьи сейчас не отвечает — перезапусти бота.")
+        out = {k: v for k, v in resp.headers.items()
+               if k.lower() not in {"transfer-encoding", "content-length", "connection",
+                                    "content-encoding", "date", "server"}}
+        return web.Response(status=resp.status, body=payload, headers=out)
 
     async def h_state(self, request: web.Request) -> web.Response:
         cog, guild = self._player()
@@ -367,7 +421,7 @@ function paint(s) {
 }
 
 async function refresh() {
-  try { paint(await api('/api/state')); }
+  try { paint(await api('api/state')); }
   catch (e) { note(e.message, 'err'); }
 }
 
@@ -377,7 +431,7 @@ $('go').addEventListener('click', () => {
   const nick = $('nick').value.trim();
   localStorage.setItem('hz-music-nick', nick);
   const btn = $('go'); btn.disabled = true; note('Ищу трек…', '');
-  api('/api/order', { query: q, nick: nick })
+  api('api/order', { query: q, nick: nick })
     .then((r) => { note(r.did || 'Готово', 'ok'); $('q').value = ''; })
     .catch((e) => note(e.message, 'err'))
     .then(() => { btn.disabled = false; refresh(); });
@@ -386,14 +440,14 @@ $('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('go').click
 
 document.querySelectorAll('[data-act]').forEach((b) => b.addEventListener('click', async () => {
   b.disabled = true;
-  try { const r = await api('/api/action', { action: b.dataset.act }); note(r.did || 'Готово', 'ok'); }
+  try { const r = await api('api/action', { action: b.dataset.act }); note(r.did || 'Готово', 'ok'); }
   catch (e) { note(e.message, 'err'); }
   b.disabled = false; refresh();
 }));
 
 $('vol').addEventListener('change', async () => {
   $('volx').textContent = $('vol').value + '%';
-  try { await api('/api/action', { action: 'volume', value: Number($('vol').value) }); }
+  try { await api('api/action', { action: 'volume', value: Number($('vol').value) }); }
   catch (e) { note(e.message, 'err'); }
   refresh();
 });
