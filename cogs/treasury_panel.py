@@ -7,6 +7,7 @@
 Остаток живёт в treasury.json и меняется только из принятого отчёта — поэтому «молча
 потратить» нельзя: каждая сумма оставляет запись в книге казны.
 """
+import asyncio
 import json
 import os
 import time
@@ -624,8 +625,17 @@ class Treasury(commands.Cog):
             self.bot.loop.create_task(self._warm_chips())
 
     async def _warm_chips(self):
-        for guild in self.bot.guilds:
-            await _warm_chip(self.bot, guild)
+        # запрос за id команды может не пройти с первого раза (лимит, приложение ещё не
+        # готово), а без id чип до самой перезагрузки бота остался бы серым текстом —
+        # поэтому три попытки с паузой, в фоне и никогда в момент нажатия
+        for attempt in range(3):
+            pending = [g for g in self.bot.guilds if not _CHIP_ID.get(int(g.id))]
+            if not pending:
+                return
+            for guild in pending:
+                await _warm_chip(self.bot, guild)
+            if attempt < 2:
+                await asyncio.sleep(30)
 
     # ── команда ──
     @commands.slash_command(name="казна", description="Казна семьи: банк, отчёты, приёмка",
