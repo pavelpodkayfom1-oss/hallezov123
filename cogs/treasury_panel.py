@@ -36,6 +36,9 @@ CHANNELS = {
 MAX_MOVES = 400
 MAX_REPORTS = 200
 MAX_AMOUNT = 10 ** 12
+# Скринов к отчёту максимум три, и только картинками: приёмка читает их прямо с карточки.
+MAX_PHOTOS = 3
+MAX_PHOTO_MB = 8
 
 
 # ─────────────────────────── состояние ───────────────────────────
@@ -214,8 +217,10 @@ def _reports_text(bot) -> str:
         f"{n[3]}  **Кому** — на кого потратили и на сколько человек\n"
         f"{n[4]}  **Детали** — всё, что стоит знать проверяющему\n\n"
         f"### 📎  СКРИНЫ\n"
-        f"После отправки формы бот ждёт **до 3 фото** в этом канале — чеки, скрины перевода, "
-        f"подтверждения. Прикрепи ответом в течение 2 минут.\n\n"
+        f"Со скринами отчёт подаётся командой **`/отчёт`** — там поле «Скриншот», "
+        f"куда можно перетащить чек или скрин перевода (до {MAX_PHOTOS} штук).\n"
+        f"Кнопка **«🧾 Подать отчёт»** — это быстрая форма без файлов: после неё можно "
+        f"прикрепить скрины ответом в этом канале в течение 2 минут.\n\n"
         f"### {meg}  ЧТО ДАЛЬШЕ\n"
         f"✅  Приняли → сумма снялась с баланса, запись ушла в **📜 логи казны**\n"
         f"❌  Отклонили → баланс **не тронут**, тебе вернётся причина\n\n"
@@ -320,6 +325,8 @@ def _report_embed(bot, guild, rep: dict) -> disnake.Embed:
         f"{like}  **Кому** — {clip(rep['people'], 200)}\n\n"
         f"{icon}  **{word}**"
     )
+    if rep.get("photos"):
+        emb.description += f"\n📎  **Скринов** — {int(rep['photos'])}"
     if rep.get("detail"):
         emb.add_field(name=f"{meg}  ДЕТАЛИ", value=clip(rep["detail"], 900), inline=False)
     foot = f"{pencil}  Подал <@{rep['by']}> · {_when(rep['ts'])}"
@@ -547,7 +554,7 @@ class PanelView(disnake.ui.View):
 class Treasury(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # ожидание скринов к отчёту: user_id → (channel_id, deadline, rid, review_msg_id)
+        # ожидание скринов к отчёту: user_id → (rid, msg_id, channel_id, deadline)
         self._pending_photos: dict = {}
 
     @commands.Cog.listener()
@@ -596,6 +603,44 @@ class Treasury(commands.Cog):
                    f"{rep_i}  Дальше — выбрать роли и задать остаток, кнопки ниже."))
         await inter.response.send_message(embed=emb, view=PanelView(st), ephemeral=True,
                                           file=_put_banner(emb, BANK_BANNER))
+
+    # ── отчёт командой: только так Discord даёт поле с вложением ──
+    @commands.slash_command(name="отчёт",
+                            description="Отчёт о трате казны: сумма, статья, кому и до 3 скринов",
+                            contexts=disnake.InteractionContextTypes(guild=True))
+    async def report_cmd(
+            self, inter: disnake.ApplicationCommandInteraction,
+            сумма: str = commands.Param(description="Сколько ушло: 15 000 или 15к"),
+            на_что: str = commands.Param(description="Статья: форма, транспорт, откат после рейда"),
+            кому: str = commands.Param(description="На кого и на сколько человек"),
+            детали: str = commands.Param("", description="Где брали, кто платил, почему столько"),
+            скриншот: disnake.Attachment = commands.Param(None, description="Чек или скрин перевода"),
+            скриншот_2: disnake.Attachment = commands.Param(None, description="Второй скрин"),
+            скриншот_3: disnake.Attachment = commands.Param(None, description="Третий скрин"),
+    ) -> None:
+        if not _allowed(inter, _load(), "manage"):
+            return await inter.response.send_message(embed=_need_manage(self.bot, inter.guild),
+                                                     ephemeral=True)
+        shots = [a for a in (скриншот, скриншот_2, скриншот_3) if a is not None][:MAX_PHOTOS]
+        for att in shots:
+            if not (att.content_type or "").startswith("image/"):
+                return await inter.response.send_message(
+                    embed=_warn(self.bot, inter.guild, "СКРИН — НЕ КАРТИНКА",
+                                f"📎  `{att.filename}` не изображение. Прикрепляй png или jpg."),
+                    ephemeral=True)
+            if att.size > MAX_PHOTO_MB * 1024 * 1024:
+                return await inter.response.send_message(
+                    embed=_warn(self.bot, inter.guild, "СКРИН СЛИШКОМ ТЯЖЁЛЫЙ",
+                                f"📎  `{att.filename}` больше {MAX_PHOTO_MB} МБ — сожми его."),
+                    ephemeral=True)
+        await inter.response.defer(ephemeral=True)
+        files = []
+        for att in shots:
+            try:
+                files.append(await att.to_file())
+            except disnake.DiscordException:
+                pass
+        await self.submit(inter, сумма, на_что, кому, детали, files)
 
     # ── создание ветки ──
     async def build_branch(self, inter) -> None:
@@ -819,32 +864,38 @@ class Treasury(commands.Cog):
                         inter.author.id, note or "взнос в казну")
 
     # ── отчёты ──
-    async def submit(self, inter, raw_amount: str, purpose: str, people: str, detail: str) -> None:
+    async def _answer(self, inter, emb: disnake.Embed) -> None:
+        """Ответ туда, где его ещё можно отправить: defer'нутый слэш уходит followup'ом."""
+        if inter.response.is_done():
+            await inter.followup.send(embed=emb, ephemeral=True)
+        else:
+            await inter.response.send_message(embed=emb, ephemeral=True)
+
+    async def submit(self, inter, raw_amount: str, purpose: str, people: str, detail: str,
+                     files: Optional[List[disnake.File]] = None) -> None:
         st = _load()
         if not _allowed(inter, st, "manage"):
-            return await inter.response.send_message(
-                embed=_need_manage(self.bot, inter.guild),
-                ephemeral=True)
+            return await self._answer(inter, _need_manage(self.bot, inter.guild))
         value = _amount(raw_amount)
         if value is None:
-            return await inter.response.send_message(
-                embed=_warn(self.bot, inter.guild, "НЕ ПОНЯЛ СУММУ",
-                            f"{_e(self.bot, 'hz_shoppingcart', '🛒')}  Сумму траты пишут цифрами: "
-                            "`15000` или `15к`."), ephemeral=True)
+            return await self._answer(
+                inter, _warn(self.bot, inter.guild, "НЕ ПОНЯЛ СУММУ",
+                             f"{_e(self.bot, 'hz_shoppingcart', '🛒')}  Сумму траты пишут цифрами: "
+                             "`15000` или `15к`."))
         review = inter.guild.get_channel(int((st["channels"] or {}).get("review") or 0)) \
             if inter.guild else None
         if review is None:
-            return await inter.response.send_message(
-                embed=_warn(self.bot, inter.guild, "НЕТ КАНАЛА ПРИЁМКИ",
-                            f"{_e(self.bot, 'hz_moderator', '🛡')}  Приёмки ещё нет — на экране "
-                            "`/казна` нажми «🏗 Создать ветку казны», потом подавай отчёт."),
-                ephemeral=True)
+            return await self._answer(
+                inter, _warn(self.bot, inter.guild, "НЕТ КАНАЛА ПРИЁМКИ",
+                             f"{_e(self.bot, 'hz_moderator', '🛡')}  Приёмки ещё нет — на экране "
+                             "`/казна` нажми «🏗 Создать ветку казны», потом подавай отчёт."))
         st["seq"] = int(st.get("seq") or 0) + 1
         rid = str(st["seq"])
         rep = {"id": rid, "by": int(inter.author.id), "amount": value,
                "purpose": (purpose or "без статьи")[:200],
                "people": (people or "не указано")[:200], "detail": detail[:900],
-               "ts": int(time.time()), "status": "wait"}
+               "ts": int(time.time()), "status": "wait",
+               "photos": len(files) if files else 0}
         st["reports"][rid] = rep
         if len(st["reports"]) > MAX_REPORTS:
             # Выкидываем только закрытые отчёты: живой отчёт без карточки остался бы без приёмки.
@@ -854,26 +905,31 @@ class Treasury(commands.Cog):
                 st["reports"].pop(str(old["id"]), None)
         _save(st)
         review_msg = await review.send(embed=_report_embed(self.bot, inter.guild, rep),
-                                       view=ReviewView(rid))
-        PHOTO_SECONDS = 120
-        self._pending_photos[int(inter.author.id)] = (
-            int(inter.channel.id), time.time() + PHOTO_SECONDS, rid, review_msg.id)
+                                       view=ReviewView(rid), files=files or [])
         meg = _e(self.bot, "hz_megaphone", "📢")
         pencil = _e(self.bot, "hz_pencil", "✍️")
         bits = _e(self.bot, "hz_bitsicon", "💎")
         mod = _e(self.bot, "hz_moderator", "🛡")
         photo = "📎"
-        await inter.response.send_message(
-            embed=note_embed(
+        if files:
+            photos = f"{photo}  **Скринов приложено:** {len(files)}\n"
+            tail = f"> {pencil}  Следующая трата — `/отчёт` или кнопкой в канале отчётов."
+        else:
+            PHOTO_SECONDS = 120
+            self._pending_photos[int(inter.author.id)] = (
+                rid, review_msg.id, int(inter.channel.id), time.time() + PHOTO_SECONDS)
+            photos = (f"{photo}  **Прикрепи скрины** ответом в этот канал — до 3 штук, "
+                      f"жду {PHOTO_SECONDS} сек.\n")
+            tail = f"> {pencil}  Следующая трата — той же кнопкой."
+        await self._answer(
+            inter, note_embed(
                 f"### {meg}  Отчёт #{rid} ушёл в {review.mention}\n\n"
                 f"{bits}  **{_n(value)}** спишутся только после приёмки\n"
                 f"{mod}  Решение за ролью приёмки — о нём придёт ЛС\n\n"
-                f"{photo}  **Прикрепи скрины** ответом в этот канал — до 3 штук, "
-                f"жду {PHOTO_SECONDS} сек.\n"
-                f"> {pencil}  Следующая трата — той же кнопкой.",
+                f"{photos}"
+                f"{tail}",
                 "success", title=f"{pencil}  ОТЧЁТ ОТПРАВЛЕН",
-                guild=inter.guild),
-            ephemeral=True)
+                guild=inter.guild))
 
     async def decide(self, inter, rid: str, accept: bool, reason: str = "") -> None:
         st = _load()
@@ -958,7 +1014,7 @@ class Treasury(commands.Cog):
         except disnake.DiscordException:
             pass
 
-    # ── скрины к отчёту ──
+    # ── скрины к отчёту: после модальной формы их прикладывают следующим сообщением ──
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message):
         if message.author.bot:
@@ -966,17 +1022,14 @@ class Treasury(commands.Cog):
         pending = self._pending_photos.get(int(message.author.id))
         if not pending:
             return
-        channel_id, deadline, rid, msg_id = pending
+        rid, msg_id, channel_id, deadline = pending
         if int(message.channel.id) != channel_id:
             return
         if time.time() > deadline:
             self._pending_photos.pop(int(message.author.id), None)
             return
-        if not message.attachments:
-            return
         images = [a for a in message.attachments
-                  if (a.content_type or "").startswith("image/") or
-                  str(a.filename or "").lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))]
+                  if (a.content_type or "").startswith("image/")]
         if not images:
             return
         self._pending_photos.pop(int(message.author.id), None)
@@ -989,10 +1042,10 @@ class Treasury(commands.Cog):
         except disnake.DiscordException:
             return
         files = []
-        for att in images[:3]:
+        for att in images[:MAX_PHOTOS - len(review_msg.attachments)]:
             try:
                 files.append(await att.to_file())
-            except Exception:
+            except disnake.DiscordException:
                 pass
         if not files:
             return
@@ -1000,6 +1053,11 @@ class Treasury(commands.Cog):
             await review_msg.edit(files=files)
         except disnake.DiscordException:
             return
+        st = _load()
+        rep = (st["reports"] or {}).get(rid)
+        if rep:
+            rep["photos"] = len(review_msg.attachments) + len(files)
+            _save(st)
         try:
             await message.delete()
         except disnake.DiscordException:

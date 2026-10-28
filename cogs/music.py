@@ -397,9 +397,8 @@ class TalkView(disnake.ui.View):
 
     def __init__(self, bot=None):
         super().__init__(timeout=300)
-        brand.paint(bot, self, {"music:say": ("hz_megaphone", "🎵")})
 
-    @disnake.ui.button(label="Заказать", emoji="🎵", style=disnake.ButtonStyle.success,
+    @disnake.ui.button(label="Заказать", style=disnake.ButtonStyle.primary,
                        custom_id="music:say")
     async def pick(self, button: disnake.ui.Button, inter: disnake.MessageInteraction):
         await inter.response.send_modal(MusicModal())
@@ -457,27 +456,17 @@ def _panel_banner(embed: disnake.Embed):
 
 
 class MusicPanelView(disnake.ui.View):
-    """Постоянная панель в канале музыки: custom_id держат кнопки живыми после рестарта."""
+    """Постоянная панель в канале музыки: custom_id держат кнопки живыми после рестарта.
 
-    BRAND = {
-        "music:play": ("hz_megaphone", "🎵"),
-        "music:join": ("hz_moderatorpurple", "🎙"),
-        "music:queue": ("hz_trainicon", "📜"),
-        "music:vote": ("hz_likeicon", "🗳"),
-        "music:dj": ("pinkghost", "🔁"),
-        "music:cfg": ("hz_botv2", "⚙️"),
-        "music:add": ("hz_gifticon", "📥"),
-        "music:library": ("hz_pcicon", "🎧"),
-        "music:pl": ("hz_book", "🎼"),
-        "music:pl_save": ("hz_merchicon", "📌"),
-    }
+    Кнопки без эмодзи и почти все одним стилем: ряд = одна тема, цвет только у того,
+    что реально выделяется (заказ и выход).
+    """
 
     def __init__(self, bot=None):
         super().__init__(timeout=None)
-        brand.paint(bot, self, self.BRAND)
 
     # ---------- ряд 1: заказ ----------
-    @disnake.ui.button(label="Заказать", emoji="🎵", style=disnake.ButtonStyle.success,
+    @disnake.ui.button(label="Заказать", style=disnake.ButtonStyle.primary,
                        custom_id="music:play", row=0)
     async def play(self, button, inter: disnake.MessageInteraction):
         if not inter.author.voice or not inter.author.voice.channel:
@@ -490,7 +479,7 @@ class MusicPanelView(disnake.ui.View):
                 ephemeral=True)
         await inter.response.send_modal(MusicModal())
 
-    @disnake.ui.button(label="В войс", emoji="🎙", style=disnake.ButtonStyle.primary,
+    @disnake.ui.button(label="В войс", style=disnake.ButtonStyle.secondary,
                        custom_id="music:join", row=0)
     async def join(self, button, inter: disnake.MessageInteraction):
         cog: "Music" = inter.bot.get_cog("Music")
@@ -507,7 +496,7 @@ class MusicPanelView(disnake.ui.View):
                       f"{meg}  Жму «Заказать» — или напиши имя трека в канале"),
             view=TalkView(inter.bot))
 
-    @disnake.ui.button(label="Выйти", emoji="🚪", style=disnake.ButtonStyle.danger,
+    @disnake.ui.button(label="Выйти", style=disnake.ButtonStyle.danger,
                        custom_id="music:leave", row=0)
     async def leave(self, button, inter: disnake.MessageInteraction):
         cog: "Music" = inter.bot.get_cog("Music")
@@ -521,7 +510,7 @@ class MusicPanelView(disnake.ui.View):
             ephemeral=True)
 
     # ---------- ряд 2: что играет ----------
-    @disnake.ui.button(label="Пауза", emoji="⏯", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Пауза", style=disnake.ButtonStyle.secondary,
                        custom_id="music:pause", row=1)
     async def pause(self, button, inter: disnake.MessageInteraction):
         cog: "Music" = inter.bot.get_cog("Music")
@@ -544,7 +533,7 @@ class MusicPanelView(disnake.ui.View):
                        "закажи трек кнопкой «Заказать».")
         await inter.response.send_message(embed=emb, ephemeral=True)
 
-    @disnake.ui.button(label="Скип", emoji="⏭", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Скип", style=disnake.ButtonStyle.secondary,
                        custom_id="music:skip", row=1)
     async def skip(self, button, inter: disnake.MessageInteraction):
         cog: "Music" = inter.bot.get_cog("Music")
@@ -564,7 +553,7 @@ class MusicPanelView(disnake.ui.View):
             emb = _err(inter.bot, "НЕЧЕГО ПРОПУСКАТЬ", "⏭  Сейчас ничего не играет.")
         await inter.response.send_message(embed=emb, ephemeral=True)
 
-    @disnake.ui.button(label="Стоп", emoji="⏹", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Стоп", style=disnake.ButtonStyle.secondary,
                        custom_id="music:stop", row=1)
     async def stop(self, button, inter: disnake.MessageInteraction):
         cog: "Music" = inter.bot.get_cog("Music")
@@ -584,54 +573,54 @@ class MusicPanelView(disnake.ui.View):
                       "иначе он бы сразу подставил случайный трек."),
             ephemeral=True)
 
-    @disnake.ui.button(label="Очередь", emoji="📜", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Очередь", style=disnake.ButtonStyle.secondary,
                        custom_id="music:queue", row=1)
     async def queue(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").show_queue(inter)
 
-    @disnake.ui.button(label="Скип голосом", emoji="🗳", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Скип голосом", style=disnake.ButtonStyle.secondary,
                        custom_id="music:vote", row=1)
     async def vote(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").vote_skip(inter)
 
     # ---------- ряд 3: громкость, диджей, настройки ----------
-    @disnake.ui.button(label="Тише", emoji="🔉", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Тише", style=disnake.ButtonStyle.secondary,
                        custom_id="music:vol_down", row=2)
     async def vol_down(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").change_volume(inter, -0.1)
 
-    @disnake.ui.button(label="Громче", emoji="🔊", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Громче", style=disnake.ButtonStyle.secondary,
                        custom_id="music:vol_up", row=2)
     async def vol_up(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").change_volume(inter, +0.1)
 
-    @disnake.ui.button(label="Диджей", emoji="🔁", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Диджей", style=disnake.ButtonStyle.secondary,
                        custom_id="music:dj", row=2)
     async def dj(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").toggle_dj(inter)
 
-    @disnake.ui.button(label="Настройки", emoji="⚙️", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Настройки", style=disnake.ButtonStyle.secondary,
                        custom_id="music:cfg", row=2)
     async def cfg(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").show_settings(inter)
 
     # ---------- ряд 4: библиотека и плейлисты ----------
-    @disnake.ui.button(label="Закинуть", emoji="📥", style=disnake.ButtonStyle.primary,
+    @disnake.ui.button(label="Закинуть", style=disnake.ButtonStyle.secondary,
                        custom_id="music:add", row=3)
     async def add(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").ask_file(inter)
 
-    @disnake.ui.button(label="Треки", emoji="🎧", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Треки", style=disnake.ButtonStyle.secondary,
                        custom_id="music:library", row=3)
     async def library(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").show_library(inter)
 
-    @disnake.ui.button(label="Плейлисты", emoji="🎼", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Плейлисты", style=disnake.ButtonStyle.secondary,
                        custom_id="music:pl", row=3)
     async def playlists(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").show_playlists(inter)
 
-    @disnake.ui.button(label="В плейлист", emoji="📌", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="В плейлист", style=disnake.ButtonStyle.secondary,
                        custom_id="music:pl_save", row=3)
     async def pl_save(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").start_playlist_save(inter)
@@ -693,32 +682,32 @@ class MusicSettingsView(disnake.ui.View):
                 p.dj = cfg["dj"]
         await inter.response.edit_message(embed=self.embed(inter.bot, inter.guild), view=self)
 
-    @disnake.ui.button(label="Тише", emoji="🔉", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Тише", style=disnake.ButtonStyle.secondary,
                        custom_id="music:cfg:vol_down", row=0)
     async def v_down(self, button, inter: disnake.MessageInteraction):
         await self._apply(inter, {"volume": max(5, _cfg(self.guild_id)["volume"] - 5)})
 
-    @disnake.ui.button(label="Громче", emoji="🔊", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Громче", style=disnake.ButtonStyle.secondary,
                        custom_id="music:cfg:vol_up", row=0)
     async def v_up(self, button, inter: disnake.MessageInteraction):
         await self._apply(inter, {"volume": min(100, _cfg(self.guild_id)["volume"] + 5)})
 
-    @disnake.ui.button(label="Очередь", emoji="📜", style=disnake.ButtonStyle.primary,
+    @disnake.ui.button(label="Очередь", style=disnake.ButtonStyle.secondary,
                        custom_id="music:cfg:queue", row=0)
     async def q(self, button, inter: disnake.MessageInteraction):
         await self._apply(inter, {"queue": _cycle(QUEUES, _cfg(self.guild_id)["queue"])})
 
-    @disnake.ui.button(label="Кулдаун", emoji="⏳", style=disnake.ButtonStyle.primary,
+    @disnake.ui.button(label="Кулдаун", style=disnake.ButtonStyle.secondary,
                        custom_id="music:cfg:cd", row=1)
     async def cd(self, button, inter: disnake.MessageInteraction):
         await self._apply(inter, {"cooldown": _cycle(COOLDOWNS, _cfg(self.guild_id)["cooldown"])})
 
-    @disnake.ui.button(label="Диджей", emoji="🔁", style=disnake.ButtonStyle.primary,
+    @disnake.ui.button(label="Диджей", style=disnake.ButtonStyle.secondary,
                        custom_id="music:cfg:dj", row=1)
     async def dj_def(self, button, inter: disnake.MessageInteraction):
         await self._apply(inter, {"dj": not _cfg(self.guild_id)["dj"]})
 
-    @disnake.ui.button(label="Авто-выход", emoji="🚪", style=disnake.ButtonStyle.danger,
+    @disnake.ui.button(label="Авто-выход", style=disnake.ButtonStyle.secondary,
                        custom_id="music:cfg:leave", row=1)
     async def leave_def(self, button, inter: disnake.MessageInteraction):
         await self._apply(inter, {"leave": not _cfg(self.guild_id)["leave"]})
