@@ -423,6 +423,7 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
 </div>
 
 <script nonce="__NONCE__">
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $ = id => document.getElementById(id);
 let refreshTimer = null;
 
@@ -493,7 +494,7 @@ const pct = cur.duration ? (cur.elapsed/cur.duration*100):0;
 $('progressFill').style.width = pct+'%';
 
 if(cur.thumb){
-$('artwork').innerHTML = '<img src="'+cur.thumb+'" alt="">';
+$('artwork').innerHTML = '<img src="'+esc(cur.thumb)+'" alt="">';
 }else{
 $('artwork').innerHTML = '<div class="artwork-placeholder">♪</div>';
 }
@@ -523,8 +524,8 @@ queue.slice(0,20).forEach((t,i)=>{
 const item = document.createElement('div');
 item.className = 'queue-item';
 item.innerHTML = '<span class="queue-number">'+(i+1)+'</span>'+
-'<div class="queue-title">'+t.title+'</div>'+
-'<div class="queue-author">'+t.who+'</div>';
+'<div class="queue-title">'+esc(t.title)+'</div>'+
+'<div class="queue-author">'+esc(t.who)+'</div>';
 qlist.appendChild(item);
 });
 if(queue.length>20){
@@ -625,11 +626,6 @@ refreshTimer = setInterval(refresh,3000);
 });
 </script>
 </body></html>
-"""
-:root{--bg:#000;--panel:#0f0f0f;--panel2:#1a1a1a;--accent:#00ff00;--accent2:#00cc00;--text:#fff;--muted:#666;--border:#333}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font:14px/1.5 "Courier New",monospace;min-height:100vh;
- background-image:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,0,.02) 2px,rgba(0,255,0,.02) 4px)}
 """
 
 
