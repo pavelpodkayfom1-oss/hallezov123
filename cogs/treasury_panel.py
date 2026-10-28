@@ -118,28 +118,33 @@ def _chip_text(guild) -> str:
     return f"</отчёт:{cid}>" if cid else "`/отчёт`"
 
 
-async def _warm_chip(bot, guild) -> None:
-    """Запросить id slash-команды «отчёт» и положить в кэш.
+async def _warm_chip(bot, guild) -> str:
+    """Запросить id slash-команды «отчёт» и положить в кэш. Возвращает строку в консоль.
 
     Локальные `get_*_command_named` в disnake 2.12 читают кэш и не знают про команды, которые
     синк зарегистрировал сам, поэтому id берём одним HTTP-запросом — на сервере, а если команды
-    глобальные, то там.
+    глобальные, то там. Без строки в консоли провал выглядит как «серый текст, и непонятно почему».
     """
     key = int(guild.id) if guild is not None else 0
     if not key or _CHIP_ID.get(key):
-        return
-    hit = None
+        return ""
+    hit, names = None, []
     try:
         app = bot.application_id
         cmds = await bot.http.get_guild_commands(app, key)
-        hit = next((c for c in cmds if c.get("name") == "отчёт"), None)
+        names = [str(c.get("name")) for c in cmds]
+        hit = next((c for c in cmds if str(c.get("name")).lower() == "отчёт"), None)
         if hit is None:
             cmds = await bot.http.get_global_commands(app)
-            hit = next((c for c in cmds if c.get("name") == "отчёт"), None)
-    except Exception:
-        return
-    if hit:
-        _CHIP_ID[key] = int(hit["id"])
+            names = [str(c.get("name")) for c in cmds]
+            hit = next((c for c in cmds if str(c.get("name")).lower() == "отчёт"), None)
+    except Exception as e:
+        return f"💰 kazna: id команды /отчёт не получен ({guild.name}): {e}"
+    if not hit:
+        return (f"💰 kazna: команды /отчёт нет среди {len(names)} зарегистрированных "
+                f"({guild.name}): {', '.join(names[:12])}")
+    _CHIP_ID[key] = int(hit["id"])
+    return f"💰 kazna: чип /отчёт → id {_CHIP_ID[key]} ({guild.name})"
 
 
 def _need_manage(bot=None, guild=None) -> disnake.Embed:
@@ -611,6 +616,7 @@ class Treasury(commands.Cog):
         self.bot = bot
         # ожидание скринов к отчёту: user_id → (rid, msg_id, channel_id, deadline)
         self._pending_photos: dict = {}
+        self._chip_task = None
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -622,7 +628,9 @@ class Treasury(commands.Cog):
         # собираем фоном сразу после старта и не ждём его в момент нажатия
         if not getattr(self.bot, "_treasury_chip_warm", False):
             self.bot._treasury_chip_warm = True
-            self.bot.loop.create_task(self._warm_chips())
+            # ссылку держим в коге: без неё событие цикла может собрать задачу
+            # посреди запроса, и прогрев исчезнет молча
+            self._chip_task = self.bot.loop.create_task(self._warm_chips())
 
     async def _warm_chips(self):
         # запрос за id команды может не пройти с первого раза (лимит, приложение ещё не
@@ -633,9 +641,12 @@ class Treasury(commands.Cog):
             if not pending:
                 return
             for guild in pending:
-                await _warm_chip(self.bot, guild)
-            if attempt < 2:
-                await asyncio.sleep(30)
+                line = await _warm_chip(self.bot, guild)
+                if line:
+                    print(line, flush=True)
+            if not pending or attempt == 2:
+                return
+            await asyncio.sleep(30)
 
     # ── команда ──
     @commands.slash_command(name="казна", description="Казна семьи: банк, отчёты, приёмка",
@@ -692,6 +703,10 @@ class Treasury(commands.Cog):
             скриншот_2: disnake.Attachment = commands.Param(None, description="Второй скрин"),
             скриншот_3: disnake.Attachment = commands.Param(None, description="Третий скрин"),
     ) -> None:
+        if inter.guild is not None and inter.application_command is not None:
+            # вызов команды — самый надёжный источник её id: после первого /отчёт чип
+            # на экране «подать отчёт» становится кликабельным без единого запроса
+            _CHIP_ID[int(inter.guild.id)] = int(inter.application_command.id)
         if not _allowed(inter, _load(), "manage"):
             return await inter.response.send_message(embed=_need_manage(self.bot, inter.guild),
                                                      ephemeral=True)
