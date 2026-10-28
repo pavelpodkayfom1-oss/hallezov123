@@ -125,6 +125,9 @@ class Memory(commands.Cog):
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        # без start() документированный раз в 10 минут отчёт и чистка памяти не происходили
+        if not self.report.is_running():
+            self.report.start()
 
     def cog_unload(self):
         self.report.cancel()
