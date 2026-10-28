@@ -118,9 +118,12 @@ async def _report_chip(bot, guild) -> str:
         hit = None
         try:
             app = bot.application_id
-            cmds = (await bot.http.get_guild_commands(app, key) if key
-                    else await bot.http.get_global_commands(app))
+            # команды бота лежат либо на сервере (когда задан GUILD_ID), либо глобально
+            cmds = await bot.http.get_guild_commands(app, key) if key else []
             hit = next((c for c in cmds if c.get("name") == "отчёт"), None)
+            if hit is None:
+                cmds = await bot.http.get_global_commands(app)
+                hit = next((c for c in cmds if c.get("name") == "отчёт"), None)
         except Exception:
             hit = None
         if not hit:
