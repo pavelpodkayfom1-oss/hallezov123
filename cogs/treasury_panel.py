@@ -17,7 +17,7 @@ import disnake
 from disnake.ext import commands
 
 from utils import brand, cdn_assets
-from utils.checks import is_admin, load_config
+from utils.checks import get_text, is_admin, load_config
 from utils.embeds import card, clip, list_embed, note_embed, panel_embed
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -40,6 +40,121 @@ MAX_AMOUNT = 10 ** 12
 # Скринов к отчёту максимум три, и только картинками: приёмка читает их прямо с карточки.
 MAX_PHOTOS = 3
 MAX_PHOTO_MB = 8
+
+# ─────────────────────────── тексты казны ───────────────────────────
+# Каждый текст вынесен константой, чтобы редактор «Тексты» в веб-панели видел настоящий
+# дефолт: «Как в коде» возвращает именно эту строку, а не пустоту. `:имя:` внутри — токены
+# эмодзи пака, brand.E подставляет живые эмодзи сервера. {скобки} — подстановки: их бот
+# заполняет цифрами и упоминаниями, править их можно, удалять не стоит — строка тогда
+# теряет число.
+
+
+def _T(bot, key: str, default: str, **subs) -> str:
+    """Текст казны: правка из панели → эмодзи пака → подстановки {имя} без риска падения."""
+    text = brand.E(bot, get_text(key, default))
+    for name, value in subs.items():
+        text = text.replace("{" + name + "}", str(value))
+    return text
+
+
+T_PANEL_TITLE = ":red_crown:  КАЗНА СЕМЬИ"
+T_PANEL_INTRO = (
+    "*:red_crown:  Казна не пустеет молча  :red_crown:*\n"
+    ":hz_house:  Одно нажатие поднимает ветку: банк, отчёты, приёмка и логи.\n"
+    ":hz_pencil:  Дальше — выбрать роли и задать остаток, кнопки ниже."
+)
+
+T_BANK_TEXT = (
+    "*:red_crown:  Казна не пустеет молча  :red_crown:*\n\n"
+    "### :hz_bitsicon:  ЧТО ЗДЕСЬ\n"
+    ":number1:  Общие деньги семьи: сборы, награбленное с мероприятий, подарки от друзей\n"
+    ":number2:  Каждая трата проходит через **отчёт** и **приёмку**\n"
+    ":number3:  Остаток видят только **свои** — управление казной и приёмка\n\n"
+    "### :hz_pcicon:  КНОПКИ\n"
+    ":hz_bitsicon:  **💰 Баланс казны** — сколько лежит сейчас\n"
+    ":hz_book:  **📜 Книга казны** — кто, сколько и за что\n"
+    ":hz_gifticon:  **➕ Пополнить** — записать взнос, он тоже остаётся в книге\n\n"
+    "> :hz_house:  Отчёт подаётся в канале ниже. Деньги списываются **только после приёмки**."
+)
+
+T_REPORTS_TEXT = (
+    "*:hz_pencil:  Потратил — отчитался  :hz_pencil:*\n\n"
+    "### :hz_shoppingcart:  КАК СДАТЬ ОТЧЁТ\n"
+    ":number1:  Нажми **«🧾 Подать отчёт»** — откроется форма\n"
+    ":number2:  **Сумма** и **На что** — сколько ушло и на какую статью: мероприятие,\n"
+    "_форму на сбор, транспорт, откат после рейда_\n"
+    ":number3:  **Кому** и **Детали** — на кого потратили и всё, что стоит знать проверяющему\n"
+    ":number4:  Перетащи чеки в поле **«Скрины»** и жми **Отправить**\n\n"
+    "### 📎  СКРИНЫ\n"
+    "Перетаскиваются прямо в форму отчёта, до 3 файлов: чек, скрин перевода,\n"
+    "фото купленного. Они уходят в приёмку вместе с суммой — проверяющий видит их сразу.\n"
+    "Если чека под рукой нет — прикрепи скрины ответом в этот канал в течение 2 минут\n"
+    "после отправки, бот подтянет их к отчёту сам.\n\n"
+    "### :hz_megaphone:  ЧТО ДАЛЬШЕ\n"
+    "✅  Приняли → сумма снялась с баланса, запись ушла в **📜 логи казны**\n"
+    "❌  Отклонили → баланс **не тронут**, тебе вернётся причина\n\n"
+    "> :hz_warn:  Пиши как есть: :hz_book: казна сходится до последней монеты, и это\n"
+    "> спокойнее, чем объясняться потом. :red_crown:"
+)
+
+T_REVIEW_TEXT = (
+    "*:red_crown:  Приёмка отчётов  :red_crown:*\n\n"
+    "### :hz_moderator:  КТО РЕШАЕТ\n"
+    ":hz_moderatorpurple:  Роль, которой выдана приёмка, жмёт **«Принять»** или **«Отклонить»**\n"
+    ":hz_book:  Без нужной роли кнопки молчат — это не баг, это казна\n\n"
+    "### :hz_bitsicon:  ИСХОД ОТЧЁТА\n"
+    "✅  **Принято** → деньги снимаются с баланса, отчёт уходит в **📜 логи казны**\n"
+    "❌  **Отклонено** → баланс не трогается, автор получает причину\n\n"
+    "> :hz_warn:  Отчёт принимается один раз: повторная кнопка уже ничего не снимет."
+)
+
+T_LOGS_TEXT = (
+    "*:hz_book:  История денег семьи  :hz_book:*\n\n"
+    "### :hz_trainicon:  ЧТО СЮДА ПАДАЕТ\n"
+    ":hz_gifticon:  Каждое **пополнение** казны\n"
+    ":hz_shoppingcart:  Каждая **принятая трата** — сумма, статья и кому\n"
+    ":hz_bitsicon:  Остаток после записи\n\n"
+    "### :hz_megaphone:  ПОРЯДОК В КАНАЛЕ\n"
+    ":red_crown:  Тут только записи бота: обсуждение — в отчётах, вопросы — руководству\n\n"
+    "> :hz_book:  Логи не чистят и не правят руками — по ним семью и проверяют."
+)
+
+T_BANK_TOPIC = ":red_crown:  Банк семьи — остаток казны и книга трат"
+T_REPORTS_TOPIC = ":hz_shoppingcart:  Отчёты о тратах — сколько, на что и кому"
+T_REVIEW_TOPIC = ":hz_moderator:  Приёмка отчётов — решает роль приёмки"
+T_LOGS_TOPIC = ":hz_book:  Логи казны — принятые траты и пополнения"
+T_DEFAULT_TOPIC = ":red_crown:  Казна семьи"
+
+T_BALANCE_TITLE = ":red_crown:  БАЛАНС КАЗНЫ"
+T_BALANCE_TEXT = (
+    "### :hz_bitsicon:  {balance}\n\n"
+    ":hz_gifticon:  Пополнено **{raised}**\n"
+    ":hz_shoppingcart:  Потрачено **{spent}**\n"
+    ":hz_book:  Записей в книге **{moves}**\n"
+    ":hz_botv2:  Отчётов подано **{reports}**\n\n"
+    "> :red_crown:  Деньги списываются только из принятого отчёта."
+)
+T_BOOK_TITLE = ":hz_book:  КНИГА КАЗНЫ"
+T_BOOK_EMPTY = ":hz_book:  Книга чистая — трат ещё не было."
+T_BOOK_NOTE = ":hz_bitsicon:  Остаток **{balance}** · последние 12 записей"
+T_MINE_TITLE = ":hz_pencil:  МОИ ОТЧЁТЫ"
+T_MINE_EMPTY = (
+    ":hz_pencil:  Ты ещё не подавал отчётов.\n"
+    ":hz_bitsicon:  Форма — кнопка «🧾 Подать отчёт» в канале отчётов."
+)
+T_MINE_NOTE = "⏳ ждёт приёмку · ✅ принято — деньги списаны · ❌ отклонён"
+T_REPORT_TITLE = ":hz_shoppingcart:  ОТЧЁТ #{id}"
+T_STATUS_OK = "Принято — сумма списана"
+T_STATUS_NO = "Отклонено — баланс не тронут"
+T_STATUS_WAIT = "Ждёт приёмки"
+T_DONE_TEXT = (
+    "### :red_crown:  Ветка казны готова\n\n"
+    ":hz_house:  {made}\n\n"
+    ":hz_pencil:  Осталось два шага — прямо в этом сообщении:\n"
+    ":number1:  выбрать **роль управления** и **роль приёмки**\n"
+    ":number2:  :hz_bitsicon:  задать остаток кнопкой **«⚖️ Задать остаток»**\n\n"
+    "> :hz_house:  Баннеры, объяснения и кнопки уже лежат в каналах."
+)
 
 
 # ─────────────────────────── состояние ───────────────────────────
@@ -180,112 +295,27 @@ def _e(bot, name: str, fallback: str) -> str:
 
 
 def _bank_text(bot) -> str:
-    crown = _e(bot, "red_crown", "👑")
-    house = _e(bot, "hz_house", "🏠")
-    bits = _e(bot, "hz_bitsicon", "💎")
-    book = _e(bot, "hz_book", "📖")
-    gift = _e(bot, "hz_gifticon", "🎁")
-    pc = _e(bot, "hz_pcicon", "🖥")
-    n = [_e(bot, f"number{i}", f"{i}⃣") for i in range(1, 4)]
-    return (
-        f"*{crown}  Казна не пустеет молча  {crown}*\n\n"
-        f"### {bits}  ЧТО ЗДЕСЬ\n"
-        f"{n[0]}  Общие деньги семьи: сборы, награбленное с мероприятий, подарки от друзей\n"
-        f"{n[1]}  Каждая трата проходит через **отчёт** и **приёмку**\n"
-        f"{n[2]}  Остаток видят только **свои** — управление казной и приёмка\n\n"
-        f"### {pc}  КНОПКИ\n"
-        f"{bits}  **💰 Баланс казны** — сколько лежит сейчас\n"
-        f"{book}  **📜 Книга казны** — кто, сколько и за что\n"
-        f"{gift}  **➕ Пополнить** — записать взнос, он тоже остаётся в книге\n\n"
-        f"> {house}  Отчёт подаётся в канале ниже. Деньги списываются **только после приёмки**."
-    )
+    return _T(bot, "kazna_bank_text", T_BANK_TEXT)
 
 
 def _reports_text(bot) -> str:
-    pencil = _e(bot, "hz_pencil", "✍️")
-    cart = _e(bot, "hz_shoppingcart", "🛒")
-    meg = _e(bot, "hz_megaphone", "📢")
-    book = _e(bot, "hz_book", "📖")
-    warn = _e(bot, "hz_warn", "⚠️")
-    crown = _e(bot, "red_crown", "👑")
-    n = [_e(bot, f"number{i}", f"{i}⃣") for i in range(1, 5)]
-    return (
-        f"*{pencil}  Потратил — отчитался  {pencil}*\n\n"
-        f"### {cart}  КАК СДАТЬ ОТЧЁТ\n"
-        f"{n[0]}  Нажми **«🧾 Подать отчёт»** — откроется форма\n"
-        f"{n[1]}  **Сумма** и **На что** — сколько ушло и на какую статью: мероприятие,\n"
-        f"_форму на сбор, транспорт, откат после рейда_\n"
-        f"{n[2]}  **Кому** и **Детали** — на кого потратили и всё, что стоит знать проверяющему\n"
-        f"{n[3]}  Перетащи чеки в поле **«Скрины»** и жми **Отправить**\n\n"
-        f"### 📎  СКРИНЫ\n"
-        f"Перетаскиваются прямо в форму отчёта, до {MAX_PHOTOS} файлов: чек, скрин перевода,\n"
-        f"фото купленного. Они уходят в приёмку вместе с суммой — проверяющий видит их сразу.\n"
-        f"Если чека под рукой нет — прикрепи скрины ответом в этот канал в течение 2 минут\n"
-        f"после отправки, бот подтянет их к отчёту сам.\n\n"
-        f"### {meg}  ЧТО ДАЛЬШЕ\n"
-        f"✅  Приняли → сумма снялась с баланса, запись ушла в **📜 логи казны**\n"
-        f"❌  Отклонили → баланс **не тронут**, тебе вернётся причина\n\n"
-        f"> {warn}  Пиши как есть: {book} казна сходится до последней монеты, и это\n"
-        f"> спокойнее, чем объясняться потом. {crown}"
-    )
+    return _T(bot, "kazna_reports_text", T_REPORTS_TEXT)
 
 
 def _review_text(bot) -> str:
-    mod = _e(bot, "hz_moderator", "🛡")
-    purp = _e(bot, "hz_moderatorpurple", "👥")
-    book = _e(bot, "hz_book", "📖")
-    warn = _e(bot, "hz_warn", "⚠️")
-    crown = _e(bot, "red_crown", "👑")
-    bits = _e(bot, "hz_bitsicon", "💎")
-    return (
-        f"*{crown}  Приёмка отчётов  {crown}*\n\n"
-        f"### {mod}  КТО РЕШАЕТ\n"
-        f"{purp}  Роль, которой выдана приёмка, жмёт **«Принять»** или **«Отклонить»**\n"
-        f"{book}  Без нужной роли кнопки молчат — это не баг, это казна\n\n"
-        f"### {bits}  ИСХОД ОТЧЁТА\n"
-        f"✅  **Принято** → деньги снимаются с баланса, отчёт уходит в **📜 логи казны**\n"
-        f"❌  **Отклонено** → баланс не трогается, автор получает причину\n\n"
-        f"> {warn}  Отчёт принимается один раз: повторная кнопка уже ничего не снимет."
-    )
+    return _T(bot, "kazna_review_text", T_REVIEW_TEXT)
 
 
 def _logs_text(bot) -> str:
-    book = _e(bot, "hz_book", "📖")
-    train = _e(bot, "hz_trainicon", "🚂")
-    crown = _e(bot, "red_crown", "👑")
-    gift = _e(bot, "hz_gifticon", "🎁")
-    cart = _e(bot, "hz_shoppingcart", "🛒")
-    bits = _e(bot, "hz_bitsicon", "💎")
-    meg = _e(bot, "hz_megaphone", "📢")
-    return (
-        f"*{book}  История денег семьи  {book}*\n\n"
-        f"### {train}  ЧТО СЮДА ПАДАЕТ\n"
-        f"{gift}  Каждое **пополнение** казны\n"
-        f"{cart}  Каждая **принятая трата** — сумма, статья и кому\n"
-        f"{bits}  Остаток после записи\n\n"
-        f"### {meg}  ПОРЯДОК В КАНАЛЕ\n"
-        f"{crown}  Тут только записи бота: обсуждение — в отчётах, вопросы — руководству\n\n"
-        f"> {book}  Логи не чистят и не правят руками — по ним семью и проверяют."
-    )
+    return _T(bot, "kazna_logs_text", T_LOGS_TEXT)
 
 
 # ─────────────────────────── карточки ───────────────────────────
 def _balance_embed(bot, guild, st: dict) -> disnake.Embed:
-    crown = _e(bot, "red_crown", "👑")
-    bits = _e(bot, "hz_bitsicon", "💎")
-    gift = _e(bot, "hz_gifticon", "🎁")
-    cart = _e(bot, "hz_shoppingcart", "🛒")
-    book = _e(bot, "hz_book", "📖")
-    botv2 = _e(bot, "hz_botv2", "🤖")
-    emb = card(f"{crown}  БАЛАНС КАЗНЫ", guild=guild)
-    emb.description = (
-        f"### {bits}  {_n(st['balance'])}\n\n"
-        f"{gift}  Пополнено **{_n(st['raised'])}**\n"
-        f"{cart}  Потрачено **{_n(st['spent'])}**\n"
-        f"{book}  Записей в книге **{len(st['moves'])}**\n"
-        f"{botv2}  Отчётов подано **{st['seq']}**\n\n"
-        f"> {crown}  Деньги списываются только из принятого отчёта."
-    )
+    emb = card(_T(bot, "kazna_balance_title", T_BALANCE_TITLE), guild=guild)
+    emb.description = _T(bot, "kazna_balance_text", T_BALANCE_TEXT,
+                         balance=_n(st["balance"]), raised=_n(st["raised"]),
+                         spent=_n(st["spent"]), moves=len(st["moves"]), reports=st["seq"])
     return emb
 
 
@@ -293,7 +323,6 @@ def _book_embed(bot, guild, st: dict) -> disnake.Embed:
     gift = _e(bot, "hz_gifticon", "➕")
     cart = _e(bot, "hz_shoppingcart", "🧾")
     bits = _e(bot, "hz_bitsicon", "⚖️")
-    book = _e(bot, "hz_book", "📖")
     rows = []
     for m in list(reversed(st["moves"]))[:12]:
         icon = gift if m["kind"] == "topup" else (cart if m["kind"] == "spend" else bits)
@@ -301,33 +330,34 @@ def _book_embed(bot, guild, st: dict) -> disnake.Embed:
         rows.append([f"{icon}  {sign}{_n(m['amount'])}",
                      f"{clip(m['note'], 90)}\n<@{m['by']}> · {_when(m['ts'])} · "
                      f"остаток **{_n(m['bal'])}**"])
-    return list_embed(f"{book}  КНИГА КАЗНЫ", rows, guild=guild, inline=False,
-                      empty=f"{book}  Книга чистая — трат ещё не было.",
-                      note=f"{_e(bot, 'hz_bitsicon', '💎')}  Остаток **{_n(st['balance'])}** · "
-                           f"последние 12 записей")
+    return list_embed(_T(bot, "kazna_book_title", T_BOOK_TITLE), rows, guild=guild, inline=False,
+                      empty=_T(bot, "kazna_book_empty", T_BOOK_EMPTY),
+                      note=_T(bot, "kazna_book_note", T_BOOK_NOTE, balance=_n(st["balance"])))
 
 
 def _report_embed(bot, guild, rep: dict) -> disnake.Embed:
     status = rep.get("status") or "wait"
-    icon, word = {"ok": ("✅", "Принято — сумма списана"),
-                  "no": ("❌", "Отклонено — баланс не тронут"),
-                  "wait": ("⏳", "Ждёт приёмки")}.get(status, ("⏳", "Ждёт приёмки"))
-    cart = _e(bot, "hz_shoppingcart", "🧾")
+    icon = {"ok": "✅", "no": "❌", "wait": "⏳"}.get(status, "⏳")
+    words = {"ok": _T(bot, "kazna_status_ok", T_STATUS_OK),
+             "no": _T(bot, "kazna_status_no", T_STATUS_NO),
+             "wait": _T(bot, "kazna_status_wait", T_STATUS_WAIT)}
+    word = words.get(status, words["wait"])
     bits = _e(bot, "hz_bitsicon", "💎")
     pencil = _e(bot, "hz_pencil", "✍️")
     like = _e(bot, "hz_membericon", "👤")
     meg = _e(bot, "hz_megaphone", "📢")
     book = _e(bot, "hz_book", "📖")
-    emb = card(f"{cart}  ОТЧЁТ #{rep['id']}", guild=guild,
+    emb = card(_T(bot, "kazna_report_title", T_REPORT_TITLE, id=rep["id"]), guild=guild,
                color_key={"ok": "success_color", "no": "error_color"}.get(status, "embed_color"))
     emb.description = (
         f"### {bits}  {_n(rep['amount'])}\n\n"
-        f"{pencil}  **На что** — {clip(rep['purpose'], 200)}\n"
-        f"{like}  **Кому** — {clip(rep['people'], 200)}\n\n"
+        f"{pencil}  **{_T(bot, 'kazna_report_purpose', 'На что')}** — {clip(rep['purpose'], 200)}\n"
+        f"{like}  **{_T(bot, 'kazna_report_people', 'Кому')}** — {clip(rep['people'], 200)}\n\n"
         f"{icon}  **{word}**"
     )
     if rep.get("photos"):
-        emb.description += f"\n📎  **Скринов** — {int(rep['photos'])}"
+        emb.description += (f"\n📎  **{_T(bot, 'kazna_report_photos', 'Скринов')}** — "
+                            f"{int(rep['photos'])}")
     if rep.get("detail"):
         emb.add_field(name=f"{meg}  ДЕТАЛИ", value=clip(rep["detail"], 900), inline=False)
     foot = f"{pencil}  Подал <@{rep['by']}> · {_when(rep['ts'])}"
@@ -341,18 +371,15 @@ def _report_embed(bot, guild, rep: dict) -> disnake.Embed:
 
 
 def _mine_embed(bot, st: dict, uid: int, guild=None) -> disnake.Embed:
-    pencil = _e(bot, "hz_pencil", "✍️")
-    bits = _e(bot, "hz_bitsicon", "💎")
     mine = [r for r in (st["reports"] or {}).values() if int(r["by"]) == int(uid)]
     rows = []
     for rep in sorted(mine, key=lambda r: -int(r["id"]))[:12]:
         icon = {"wait": "⏳", "ok": "✅", "no": "❌"}.get(rep.get("status") or "wait", "⏳")
         rows.append([f"{icon}  #{rep['id']} · {_n(rep['amount'])}",
                      f"{clip(rep['purpose'], 60)}\n{_when(rep['ts'])}"])
-    return list_embed(f"{pencil}  МОИ ОТЧЁТЫ", rows, guild=guild, inline=False,
-                      empty=f"{pencil}  Ты ещё не подавал отчётов.\n"
-                            f"{bits}  Форма — кнопка «🧾 Подать отчёт» в канале отчётов.",
-                      note="⏳ ждёт приёмку · ✅ принято — деньги списаны · ❌ отклонён")
+    return list_embed(_T(bot, "kazna_mine_title", T_MINE_TITLE), rows, guild=guild, inline=False,
+                      empty=_T(bot, "kazna_mine_empty", T_MINE_EMPTY),
+                      note=_T(bot, "kazna_mine_note", T_MINE_NOTE))
 
 
 # ─────────────────────────── модалки ───────────────────────────
@@ -362,25 +389,35 @@ class ReportModal(disnake.ui.Modal):
 
     def __init__(self):
         super().__init__(
-            title="🧾 Отчёт о трате",
+            title=get_text("kazna_modal_report_title", "🧾 Отчёт о трате"),
             custom_id="hzkazm:report",
             components=[
-                disnake.ui.TextInput(label="Сумма", custom_id="amount",
-                                     placeholder="15 000", max_length=16),
-                disnake.ui.TextInput(label="На что ушли", custom_id="purpose",
-                                     placeholder="Форма на сбор семьи", max_length=120),
-                disnake.ui.TextInput(label="Кому и на сколько человек", custom_id="people",
-                                     placeholder="Всему отряду — 12 человек", max_length=160),
-                disnake.ui.TextInput(label="Детали", custom_id="detail", required=False,
-                                     style=disnake.TextInputStyle.paragraph,
-                                     placeholder="Где брали, кто платил, почему столько",
-                                     max_length=800),
+                disnake.ui.TextInput(
+                    label=get_text("kazna_modal_amount_label", "Сумма"), custom_id="amount",
+                    placeholder=get_text("kazna_modal_amount_ph", "15 000"), max_length=16),
+                disnake.ui.TextInput(
+                    label=get_text("kazna_modal_purpose_label", "На что ушли"), custom_id="purpose",
+                    placeholder=get_text("kazna_modal_purpose_ph", "Форма на сбор семьи"),
+                    max_length=120),
+                disnake.ui.TextInput(
+                    label=get_text("kazna_modal_people_label", "Кому и на сколько человек"),
+                    custom_id="people",
+                    placeholder=get_text("kazna_modal_people_ph", "Всему отряду — 12 человек"),
+                    max_length=160),
+                disnake.ui.TextInput(
+                    label=get_text("kazna_modal_detail_label", "Детали"), custom_id="detail",
+                    required=False, style=disnake.TextInputStyle.paragraph,
+                    placeholder=get_text("kazna_modal_detail_ph",
+                                         "Где брали, кто платил, почему столько"),
+                    max_length=800),
                 disnake.ui.Label(
-                    f"Скрины (до {MAX_PHOTOS})",
+                    # цифра в надписи = MAX_PHOTOS: если менять лимит, правь и здесь
+                    get_text("kazna_modal_screens_label", "Скрины (до 3)"),
                     disnake.ui.FileUpload(custom_id="photos", min_values=0,
                                           max_values=MAX_PHOTOS, required=False),
-                    description="Перетащи чек или скрин перевода — уйдут в приёмку "
-                                "вместе с отчётом"),
+                    description=get_text("kazna_modal_screens_hint",
+                                         "Перетащи чек или скрин перевода — уйдут в приёмку "
+                                         "вместе с отчётом")),
             ],
         )
 
@@ -421,13 +458,16 @@ class ReportModal(disnake.ui.Modal):
 class TopUpModal(disnake.ui.Modal):
     def __init__(self):
         super().__init__(
-            title="🎁 Пополнить казну",
+            title=get_text("kazna_modal_topup_title", "🎁 Пополнить казну"),
             custom_id="hzkazm:topup",
             components=[
-                disnake.ui.TextInput(label="Сумма", custom_id="amount",
-                                     placeholder="50 000", max_length=16),
-                disnake.ui.TextInput(label="Откуда", custom_id="note",
-                                     placeholder="Взнос семьи за неделю", max_length=200),
+                disnake.ui.TextInput(
+                    label=get_text("kazna_modal_amount_label", "Сумма"), custom_id="amount",
+                    placeholder=get_text("kazna_modal_topup_amount_ph", "50 000"), max_length=16),
+                disnake.ui.TextInput(
+                    label=get_text("kazna_modal_topup_note_label", "Откуда"), custom_id="note",
+                    placeholder=get_text("kazna_modal_topup_note_ph", "Взнос семьи за неделю"),
+                    max_length=200),
             ],
         )
 
@@ -443,14 +483,17 @@ class SetBalanceModal(disnake.ui.Modal):
     def __init__(self, current: int):
         self.current = current
         super().__init__(
-            title="💰 Остаток казны",
+            title=get_text("kazna_modal_setbal_title", "💰 Остаток казны"),
             custom_id="hzkazm:setbal",
             components=[
-                disnake.ui.TextInput(label="Новый остаток", custom_id="amount",
-                                     placeholder=_n(current), max_length=16),
-                disnake.ui.TextInput(label="Почему меняем", custom_id="note",
-                                     placeholder="Перенесли остаток из старого учёта",
-                                     max_length=200),
+                disnake.ui.TextInput(
+                    label=get_text("kazna_modal_setbal_label", "Новый остаток"), custom_id="amount",
+                    placeholder=_n(current), max_length=16),
+                disnake.ui.TextInput(
+                    label=get_text("kazna_modal_setbal_note_label", "Почему меняем"),
+                    custom_id="note",
+                    placeholder=get_text("kazna_modal_setbal_note_ph",
+                                         "Перенесли остаток из старого учёта"), max_length=200),
             ],
         )
 
@@ -466,13 +509,15 @@ class RejectModal(disnake.ui.Modal):
     def __init__(self, rid: str):
         self.rid = rid
         super().__init__(
-            title="🛡 Почему отклоняем",
+            title=get_text("kazna_modal_reject_title", "🛡 Почему отклоняем"),
             custom_id=f"hzkazm:reject:{rid}",
             components=[
-                disnake.ui.TextInput(label="Причина отказа", custom_id="reason",
-                                     style=disnake.TextInputStyle.paragraph,
-                                     placeholder="Нет чека / сумма не сходится с деталями",
-                                     max_length=300),
+                disnake.ui.TextInput(
+                    label=get_text("kazna_modal_reject_label", "Причина отказа"),
+                    custom_id="reason", style=disnake.TextInputStyle.paragraph,
+                    placeholder=get_text("kazna_modal_reject_ph",
+                                         "Нет чека / сумма не сходится с деталями"),
+                    max_length=300),
             ],
         )
 
@@ -485,23 +530,27 @@ class RejectModal(disnake.ui.Modal):
 
 # ─────────────────────────── панели на кнопках ───────────────────────────
 class BankView(disnake.ui.View):
-    """Постоянная: висит под баннером банка и после рестарта работает по custom_id."""
+    """Постоянная: висит под баннером банка и после рестарта работает по custom_id.
+
+    Надписи кнопок берутся из текстов панели, когда ког загружается: правка из веб-панели
+    видна новым постам и сообщениям после рестарта — Discord сам держит старые кнопки.
+    """
 
     def __init__(self):
         super().__init__(timeout=None)
 
-    @disnake.ui.button(label="💰 Баланс казны", style=disnake.ButtonStyle.success,
-                       custom_id="hzkaz:balance", row=0)
+    @disnake.ui.button(label=get_text("kazna_btn_balance", "💰 Баланс казны"),
+                       style=disnake.ButtonStyle.success, custom_id="hzkaz:balance", row=0)
     async def balance(self, button, inter: disnake.MessageInteraction):
         pass
 
-    @disnake.ui.button(label="📜 Книга казны", style=disnake.ButtonStyle.secondary,
-                       custom_id="hzkaz:book", row=0)
+    @disnake.ui.button(label=get_text("kazna_btn_book", "📜 Книга казны"),
+                       style=disnake.ButtonStyle.secondary, custom_id="hzkaz:book", row=0)
     async def book(self, button, inter: disnake.MessageInteraction):
         pass
 
-    @disnake.ui.button(label="➕ Пополнить", style=disnake.ButtonStyle.primary,
-                       custom_id="hzkaz:topup", row=0)
+    @disnake.ui.button(label=get_text("kazna_btn_topup", "➕ Пополнить"),
+                       style=disnake.ButtonStyle.primary, custom_id="hzkaz:topup", row=0)
     async def topup(self, button, inter: disnake.MessageInteraction):
         pass
 
@@ -510,13 +559,13 @@ class ReportsView(disnake.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @disnake.ui.button(label="🧾 Подать отчёт", emoji="✍️", style=disnake.ButtonStyle.primary,
-                       custom_id="hzkaz:new", row=0)
+    @disnake.ui.button(label=get_text("kazna_btn_new", "🧾 Подать отчёт"), emoji="✍️",
+                       style=disnake.ButtonStyle.primary, custom_id="hzkaz:new", row=0)
     async def new(self, button, inter: disnake.MessageInteraction):
         pass
 
-    @disnake.ui.button(label="📋 Мои отчёты", style=disnake.ButtonStyle.secondary,
-                       custom_id="hzkaz:mine", row=0)
+    @disnake.ui.button(label=get_text("kazna_btn_mine", "📋 Мои отчёты"),
+                       style=disnake.ButtonStyle.secondary, custom_id="hzkaz:mine", row=0)
     async def mine(self, button, inter: disnake.MessageInteraction):
         pass
 
@@ -524,12 +573,12 @@ class ReportsView(disnake.ui.View):
 class ReviewView(disnake.ui.View):
     def __init__(self, rid: str):
         super().__init__(timeout=None)
-        self.add_item(disnake.ui.Button(label="Принять", emoji="✅",
-                                        style=disnake.ButtonStyle.success,
-                                        custom_id=f"hzkaz:ok:{rid}", row=0))
-        self.add_item(disnake.ui.Button(label="Отклонить", emoji="❌",
-                                        style=disnake.ButtonStyle.danger,
-                                        custom_id=f"hzkaz:no:{rid}", row=0))
+        self.add_item(disnake.ui.Button(
+            label=get_text("kazna_btn_accept", "Принять"), emoji="✅",
+            style=disnake.ButtonStyle.success, custom_id=f"hzkaz:ok:{rid}", row=0))
+        self.add_item(disnake.ui.Button(
+            label=get_text("kazna_btn_reject", "Отклонить"), emoji="❌",
+            style=disnake.ButtonStyle.danger, custom_id=f"hzkaz:no:{rid}", row=0))
 
 
 class PanelView(disnake.ui.View):
@@ -542,10 +591,11 @@ class PanelView(disnake.ui.View):
     def __init__(self, st: dict):
         super().__init__(timeout=900)
         self.st = st
-        for key, placeholder in (("manage", "👑 Выбери роль управления казной (до 3)"),
-                                 ("approve", "🛡 Выбери роль приёмки отчётов (до 3)")):
+        for key, ph_key, ph_default in (
+                ("manage", "kazna_select_manage_ph", "👑 Выбери роль управления казной (до 3)"),
+                ("approve", "kazna_select_approve_ph", "🛡 Выбери роль приёмки отчётов (до 3)")):
             select = disnake.ui.RoleSelect(
-                custom_id=f"hzkazp:role:{key}", placeholder=placeholder,
+                custom_id=f"hzkazp:role:{key}", placeholder=get_text(ph_key, ph_default),
                 max_values=3, row=2 if key == "manage" else 3,
                 default_values=[disnake.Object(id=r) for r in _roles(st, key)])
             select.callback = self._role_handler(key, select)
@@ -559,24 +609,24 @@ class PanelView(disnake.ui.View):
                 await cog.save_roles(inter, key, select.values)
         return handler
 
-    @disnake.ui.button(label="🏗 Создать ветку казны", style=disnake.ButtonStyle.primary,
-                       custom_id="hzkazp:setup", row=0)
+    @disnake.ui.button(label=get_text("kazna_btn_setup", "🏗 Создать ветку казны"),
+                       style=disnake.ButtonStyle.primary, custom_id="hzkazp:setup", row=0)
     async def setup(self, button, inter: disnake.MessageInteraction):
         cog = _cog(inter)
         await inter.response.defer(ephemeral=True, with_message=True)
         if cog:
             await cog.build_branch(inter)
 
-    @disnake.ui.button(label="🖼 Перезалить баннеры", style=disnake.ButtonStyle.secondary,
-                       custom_id="hzkazp:banners", row=0)
+    @disnake.ui.button(label=get_text("kazna_btn_banners", "🖼 Перезалить баннеры"),
+                       style=disnake.ButtonStyle.secondary, custom_id="hzkazp:banners", row=0)
     async def banners(self, button, inter: disnake.MessageInteraction):
         cog = _cog(inter)
         await inter.response.defer(ephemeral=True, with_message=True)
         if cog:
             await cog.post_banners(inter)
 
-    @disnake.ui.button(label="⚖️ Задать остаток", emoji="💰", style=disnake.ButtonStyle.success,
-                       custom_id="hzkazp:set", row=1)
+    @disnake.ui.button(label=get_text("kazna_btn_setbal", "⚖️ Задать остаток"), emoji="💰",
+                       style=disnake.ButtonStyle.success, custom_id="hzkazp:set", row=1)
     async def set_balance(self, button, inter: disnake.MessageInteraction):
         await inter.response.send_modal(SetBalanceModal(int(self.st.get("balance") or 0)))
 
@@ -603,35 +653,34 @@ class Treasury(commands.Cog):
         if not is_admin(inter):
             return await inter.response.send_message(embed=_deny(self.bot, inter.guild), ephemeral=True)
         st = _load()
-        bank_i = _e(self.bot, "hz_bitsicon", "💎")
-        rep_i = _e(self.bot, "hz_pencil", "✍️")
-        rev_i = _e(self.bot, "hz_moderator", "🛡")
-        log_i = _e(self.bot, "hz_book", "📖")
-        crown_i = _e(self.bot, "red_crown", "👑")
-        purp_i = _e(self.bot, "hz_moderatorpurple", "👥")
-        house_i = _e(self.bot, "hz_house", "🏠")
+        sec_bank = _T(self.bot, "kazna_sec_bank_title", ":hz_bitsicon:  БАНК СЕМЬИ")
+        sec_reports = _T(self.bot, "kazna_sec_reports_title", ":hz_pencil:  ОТЧЁТЫ")
+        sec_review = _T(self.bot, "kazna_sec_review_title", ":hz_moderator:  ПРИЁМКА")
+        sec_logs = _T(self.bot, "kazna_sec_logs_title", ":hz_book:  ЛОГИ КАЗНЫ")
         sections = []
-        for key, title in (("bank", f"{bank_i}  БАНК СЕМЬИ"), ("reports", f"{rep_i}  ОТЧЁТЫ"),
-                           ("review", f"{rev_i}  ПРИЁМКА"), ("logs", f"{log_i}  ЛОГИ КАЗНЫ")):
+        for key, title in (("bank", sec_bank), ("reports", sec_reports),
+                           ("review", sec_review), ("logs", sec_logs)):
             cid = (st["channels"] or {}).get(key)
             ch = inter.guild.get_channel(int(cid)) if cid else None
-            sections.append((title, ch.mention if ch else
-                             f"_нет — нажми «🏗 Создать ветку казны» ниже_"))
+            sections.append((title, ch.mention if ch else _T(
+                self.bot, "kazna_channel_missing", "_нет — нажми «🏗 Создать ветку казны» ниже_")))
         manage = " ".join(f"<@&{r}>" for r in _roles(st, "manage")) or \
-            "_не выбрана — казной правят только админы семьи_"
+            _T(self.bot, "kazna_manage_none", "_не выбрана — казной правят только админы семьи_")
         approve = " ".join(f"<@&{r}>" for r in _roles(st, "approve")) or \
-            "_не выбрана — приёмка берёт роль управления_"
-        sections.append((f"{bank_i}  ОСТАТОК КАЗНЫ",
-                         f"**{_n(st['balance'])}**\n"
-                         f"{_e(self.bot, 'hz_gifticon', '🎁')}  собрано {_n(st['raised'])} · "
-                         f"{rep_i} отчётов {st['seq']} · {log_i} записей {len(st['moves'])}"))
-        sections.append((f"{purp_i}  УПРАВЛЕНИЕ КАЗНОЙ", manage))
-        sections.append((f"{rev_i}  ПРИЁМКА ОТЧЁТОВ", approve))
+            _T(self.bot, "kazna_approve_none", "_не выбрана — приёмка берёт роль управления_")
+        sections.append((_T(self.bot, "kazna_sec_balance_title", ":hz_bitsicon:  ОСТАТОК КАЗНЫ"),
+                         _T(self.bot, "kazna_sec_balance_text",
+                            "**{balance}**\n:hz_gifticon:  собрано {raised} · "
+                            ":hz_pencil:  отчётов {reports} · :hz_book:  записей {moves}",
+                            balance=_n(st["balance"]), raised=_n(st["raised"]),
+                            reports=st["seq"], moves=len(st["moves"]))))
+        sections.append((_T(self.bot, "kazna_sec_manage_title",
+                            ":hz_moderatorpurple:  УПРАВЛЕНИЕ КАЗНОЙ"), manage))
+        sections.append((_T(self.bot, "kazna_sec_approve_title",
+                            ":hz_moderator:  ПРИЁМКА ОТЧЁТОВ"), approve))
         emb = panel_embed(
-            f"{crown_i}  КАЗНА СЕМЬИ", sections, guild=inter.guild,
-            intro=(f"*{crown_i}  Казна не пустеет молча  {crown_i}*\n"
-                   f"{house_i}  Одно нажатие поднимает ветку: банк, отчёты, приёмка и логи.\n"
-                   f"{rep_i}  Дальше — выбрать роли и задать остаток, кнопки ниже."))
+            _T(self.bot, "kazna_panel_title", T_PANEL_TITLE), sections, guild=inter.guild,
+            intro=_T(self.bot, "kazna_panel_intro", T_PANEL_INTRO))
         await inter.response.send_message(embed=emb, view=PanelView(st), ephemeral=True,
                                           file=_put_banner(emb, BANK_BANNER))
 
@@ -684,20 +733,10 @@ class Treasury(commands.Cog):
         await self._sync_perms(guild, st)
         await self._post_banners(guild, st)
         note = ("Ветка собрана: " + ", ".join(made)) if made else "Ветка уже стояла целиком."
-        crown = _e(self.bot, "red_crown", "👑")
-        house = _e(self.bot, "hz_house", "🏠")
-        pencil = _e(self.bot, "hz_pencil", "✍️")
-        bits = _e(self.bot, "hz_bitsicon", "💎")
-        n1 = _e(self.bot, "number1", "1⃣")
-        n2 = _e(self.bot, "number2", "2⃣")
         await inter.followup.send(embed=note_embed(
-            f"### {crown}  Ветка казны готова\n\n"
-            f"{house}  {clip(note, 300)}\n\n"
-            f"{pencil}  Осталось два шага — прямо в этом сообщении:\n"
-            f"{n1}  выбрать **роль управления** и **роль приёмки**\n"
-            f"{n2}  {bits}  задать остаток кнопкой **«⚖️ Задать остаток»**\n\n"
-            f"> {house}  Баннеры, объяснения и кнопки уже лежат в каналах.",
-            "success", title=f"{crown}  КАЗНА СЕМЬИ", guild=guild), ephemeral=True)
+            _T(self.bot, "kazna_done_text", T_DONE_TEXT, made=clip(note, 300)),
+            "success", title=_T(self.bot, "kazna_panel_title", T_PANEL_TITLE), guild=guild),
+            ephemeral=True)
 
     async def _sync_perms(self, guild, st: dict) -> None:
         """Приёмка и логи — приватные: пускаем выбранные роли и админов семьи."""
@@ -1161,16 +1200,13 @@ class Treasury(commands.Cog):
 
 
 def _topic(bot, key: str) -> str:
-    crown = _e(bot, "red_crown", "👑")
-    cart = _e(bot, "hz_shoppingcart", "🧾")
-    mod = _e(bot, "hz_moderator", "🛡")
-    book = _e(bot, "hz_book", "📖")
-    return {
-        "bank": f"{crown}  Банк семьи — остаток казны и книга трат",
-        "reports": f"{cart}  Отчёты о тратах — сколько, на что и кому",
-        "review": f"{mod}  Приёмка отчётов — решает роль приёмки",
-        "logs": f"{book}  Логи казны — принятые траты и пополнения",
-    }.get(key, f"{crown}  Казна семьи")
+    topics = {
+        "bank": _T(bot, "kazna_bank_topic", T_BANK_TOPIC),
+        "reports": _T(bot, "kazna_reports_topic", T_REPORTS_TOPIC),
+        "review": _T(bot, "kazna_review_topic", T_REVIEW_TOPIC),
+        "logs": _T(bot, "kazna_logs_topic", T_LOGS_TOPIC),
+    }
+    return topics.get(key, _T(bot, "kazna_default_topic", T_DEFAULT_TOPIC))
 
 
 def setup(bot: commands.Bot):

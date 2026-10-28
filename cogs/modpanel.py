@@ -222,11 +222,13 @@ class ModPanel(commands.Cog):
     async def mod_panel(self, inter: disnake.ApplicationCommandInteraction):
         embed = card(get_text("mod_panel_title", "⚖️ Наказания семьи"),
                      guild=inter.guild)
+        # редактируемая часть — текстом из панели, служебная строка со сроками живёт тут:
+        # иначе дефолт в редакторе был бы пустым и «Как в коде» стирал описание
         embed.description = get_text(
             "mod_panel_desc",
             "Выбери бойца в списке — бот спросит срок и причину, поставит таймаут, "
-            "сам напишет нарушителю и запишет в журнал.\n\n"
-            f"Быстрые сроки: {', '.join(PRESETS)}. Максимум 28 дней (это лимит Discord).")
+            "сам напишет нарушителю и запишет в журнал.") + (
+            "\n\nБыстрые сроки: " + ", ".join(PRESETS) + ". Максимум 28 дней (это лимит Discord).")
         await inter.channel.send(embed=embed, view=ModPanelView())
         await inter.response.send_message(embed=note_embed("✅ Панель наказаний отправлена."),
                                           ephemeral=True)
@@ -278,11 +280,11 @@ class ModPanel(commands.Cog):
             ephemeral=True)
 
         dm = card(get_text("mod_dm_title", "🔇 Вам выдан таймаут"), guild=guild, color_key="error_color")
-        dm.description = get_text(
-            "mod_dm_text",
-            f"**Срок:** {_human(minutes)} · до {_when(minutes)}\n"
-            f"**Причина:** {reason_text}\n\n"
-            "Если не согласен — напиши руководству семьи в ЛС, а не в общий чат.")
+        dm.description = ("**Срок:** " + _human(minutes) + " · до " + _when(minutes) +
+                          "\n**Причина:** " + reason_text + "\n\n" + get_text(
+                              "mod_dm_text",
+                              "Если не согласен — напиши руководству семьи в ЛС, "
+                              "а не в общий чат."))
         try:
             await member.send(embed=dm)
         except disnake.HTTPException:

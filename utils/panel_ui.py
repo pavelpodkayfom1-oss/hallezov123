@@ -766,6 +766,8 @@ html[data-theme=light] .dcprev{background:#313338}
 .dcbtn{display:inline-block;background:#4e5058;color:#fff;border-radius:6px;padding:.45em 1em;font-size:.88rem;font-weight:500}
 .dcfield label{display:block;color:#b5bac1;font-size:.75rem;font-weight:700;text-transform:uppercase;margin-bottom:.35rem}
 .dcinput{background:#1e1f22;border-radius:6px;padding:.6em .8em;color:#949ba4;font-size:.9rem}
+.dctopic{border-left:2px solid #4e5058;padding-left:.6rem;color:#b5bac1;font-size:.86rem}
+.tlist .r small.src{opacity:.72;font-size:.72rem}
 @media (max-width:1000px){.tsplit{grid-template-columns:1fr!important}.tside{position:static;max-height:none}.tscroll{max-height:42vh}}
 
 /* ---------- поиск, карточка ошибки, проверка JSON ---------- */
@@ -1508,12 +1510,15 @@ async function pageLogs() {
    отстаёт: новый get_text в коге появляется здесь сам. Правим три хранилища:
    config.json["texts"], hall_settings.json и golos_guild.json. */
 const TEXT_PLACEHOLDERS = ['{nick}', '{name}', '{mention}', '{server}', '{bot_name}', '{title}',
-  '{time}', '{info}', '{static}', '{recruit_channel}', '{reason}', '{rank}', '{days}', '{hours}'];
+  '{time}', '{info}', '{static}', '{recruit_channel}', '{reason}', '{rank}', '{days}', '{hours}',
+  '{balance}', '{raised}', '{spent}', '{moves}', '{reports}', '{amount}', '{purpose}', '{people}', '{id}', '{made}'];
 
 /* ---------- Эмодзи: общие кусочки ---------- */
 /* Каталог берётся с сервера один раз и хранится в памяти страницы: из него строятся и выбор эмодзи
    в любом окне ввода, и предпросмотр (<:имя:id> превращается в настоящую картинку). */
-const EMO_RE = /<(a?):([A-Za-z0-9_]{2,32}):(\d{15,25})>|\{e:([A-Za-z0-9_]+)\}/g;
+/* Третья форма — токен `:имя:` из пака (его подставляет brand.E в боте): тут он рисуется
+   той же картинкой, что и готовый код, чтобы правка текста была видна живой. */
+const EMO_RE = /<(a?):([A-Za-z0-9_]{2,32}):(\d{15,25})>|\{e:([A-Za-z0-9_]+)\}|(^|[^<\w]):([A-Za-z0-9_]{2,32}):(?!\d)/g;
 
 function emoUrl(animated, id) {
   return 'https://cdn.discordapp.com/emojis/' + id + '.' + (animated ? 'gif' : 'png') + '?size=48';
@@ -1525,14 +1530,15 @@ function emojiNodes(str) {
   let last = 0, m;
   EMO_RE.lastIndex = 0;
   while ((m = EMO_RE.exec(str))) {
-    if (m.index > last) out.push(document.createTextNode(str.slice(last, m.index)));
-    const name = m[2] || m[4];
+    const lead = m[5] ? m[5].length : 0;          // служебный символ перед токеном
+    if (m.index + lead > last) out.push(document.createTextNode(str.slice(last, m.index + lead)));
+    const name = m[2] || m[4] || m[6];
     let url = null;
     if (m[3]) url = emoUrl(m[1], m[3]);
-    else if (state.emojiIdx && state.emojiIdx[m[4].toLowerCase()]) url = state.emojiIdx[m[4].toLowerCase()].url;
+    else if (state.emojiIdx && state.emojiIdx[name.toLowerCase()]) url = state.emojiIdx[name.toLowerCase()].url;
     out.push(url
       ? h('img', { class: 'emo', src: url, alt: ':' + name + ':', title: ':' + name + ':', referrerpolicy: 'no-referrer' })
-      : document.createTextNode(m[0]));
+      : document.createTextNode(m[0].slice(lead)));
     last = m.index + m[0].length;
   }
   if (last < str.length) out.push(document.createTextNode(str.slice(last)));
@@ -1731,39 +1737,67 @@ async function pageTexts() {
   getEmojis().catch(() => { /* без каталога эмодзи просто остаются кодом */ });
 
   const items = d.items;
-  const search = h('input', { type: 'search', placeholder: 'Название, ключ или слово из текста…', 'aria-label': 'Поиск надписи' });
+  const search = h('input', { type: 'search', placeholder: 'Найти по словам из текста, названию, ключу или разделу…', 'aria-label': 'Поиск надписи' });
+  const kindSel = h('select', { 'aria-label': 'Тип надписи' },
+    [['', 'Все типы'], ['text', 'Тексты'], ['title', 'Заголовки'], ['button', 'Кнопки'],
+     ['field', 'Поля форм'], ['hint', 'Подсказки полей'], ['topic', 'Описания каналов']]
+      .map(([v, l]) => h('option', { value: v }, l)));
+  const found = h('div', { class: 'stats' });
   const list = h('div', { class: 'tlist' });
   const filters = h('div', { class: 'pager' });
   const edBox = h('div', { class: 'card ted' }, h('p', { class: 'muted' }, 'Выберите надпись слева.'));
-  let current = null, onlyChanged = false, groupFilter = '';
+  let current = null, onlyChanged = false, groupFilter = '', kindFilter = '';
 
   const titleOf = (it) => it.label || it.key.replace(/_/g, ' ');
-  const KIND_LABEL = { title: 'заголовок', text: 'текст', button: 'кнопка', field: 'поле анкеты' };
+  const KIND_LABEL = { title: 'заголовок', text: 'текст', button: 'кнопка', field: 'поле формы',
+    hint: 'подсказка поля', topic: 'описание канала' };
 
   function pill(label, on, fn) {
     return h('button', { class: on ? 'active' : '', onclick: () => { fn(); drawFilters(); renderList(); } }, label);
   }
   function drawFilters() {
     filters.replaceChildren(
-      pill('Все', !onlyChanged && !groupFilter, () => { onlyChanged = false; groupFilter = ''; }),
-      pill('Изменённые · ' + d.items.filter((x) => x.changed).length, onlyChanged, () => { onlyChanged = true; groupFilter = ''; }),
-      ...d.groups.map((g) => pill(g.title, groupFilter === g.title, () => { onlyChanged = false; groupFilter = g.title; })));
+      pill('Все · ' + d.total, !onlyChanged && !groupFilter, () => { onlyChanged = false; groupFilter = ''; }),
+      pill('Мои правки · ' + d.items.filter((x) => x.changed).length, onlyChanged,
+        () => { onlyChanged = true; groupFilter = ''; }),
+      ...d.groups.map((g) => {
+        const ch = g.items.filter((x) => x.changed).length;
+        return pill(g.title + ' · ' + g.items.length + (ch ? ' (правлено ' + ch + ')' : ''),
+          groupFilter === g.title, () => { onlyChanged = false; groupFilter = g.title; });
+      }));
+  }
+
+  function matches(it, words, gTitle) {
+    if (onlyChanged && !it.changed) return false;
+    if (kindFilter && it.kind !== kindFilter) return false;
+    if (!words.length) return true;
+    // каждое слово само по себе: «баланс казны» и «казна баланс» ищут одинаково
+    const hay = (it.key + ' ' + titleOf(it) + ' ' + (it.value || '') + ' '
+      + gTitle + ' ' + it.src + ' ' + (KIND_LABEL[it.kind] || '')).toLowerCase();
+    return words.every((w) => hay.includes(w));
   }
 
   function renderList() {
-    const needle = search.value.trim().toLowerCase();
+    const words = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const cards = [];
+    let shown = 0;
     d.groups.forEach((g) => {
       if (groupFilter && g.title !== groupFilter) return;
-      const rows = g.items.filter((it) => (!onlyChanged || it.changed) && (!needle
-        || (it.key + ' ' + titleOf(it) + ' ' + (it.value || '') + ' ' + g.title).toLowerCase().includes(needle)));
+      const rows = g.items.filter((it) => matches(it, words, g.title));
       if (!rows.length) return;
+      shown += rows.length;
       cards.push(h('div', { class: 'section-title' }, g.title + ' · ' + rows.length),
         ...rows.map((it) => h('button', { class: 'r' + (current && current.id === it.id ? ' sel' : ''), onclick: () => open(it) },
-          h('div', { class: 'grow' }, h('b', null, titleOf(it)), h('small', null, (it.value || '').replace(/\s+/g, ' ').slice(0, 70) || it.key)),
+          h('div', { class: 'grow' }, h('b', null, titleOf(it)),
+            h('small', null, (it.value || '').replace(/\s+/g, ' ').slice(0, 70) || it.key),
+            h('small', { class: 'src' }, (KIND_LABEL[it.kind] || it.kind) + ' · ' + it.src)),
           it.changed ? chip('свой', 'ok') : null)));
     });
-    list.replaceChildren(...(cards.length ? cards : [h('p', { class: 'muted' }, 'Ничего не нашлось.')]));
+    found.replaceChildren(h('div', { class: 'card stat' }, h('small', null, 'Найдено надписей'),
+      h('b', null, String(shown))));
+    list.replaceChildren(...(cards.length ? cards : [h('p', { class: 'muted' },
+      words.length || kindFilter ? 'Ничего не нашлось — попробуй другое слово или сними фильтр типа.'
+        : 'Список пуст: бот не нашёл надписей в своём коде.')]));
   }
 
   function previewNode(p) {
@@ -1772,7 +1806,9 @@ async function pageTexts() {
     if (p.unknown && p.unknown.length) box.append(h('p', { class: 'warnline small' }, 'Такой подстановки нет: ' + p.unknown.join(', ')));
     let body;
     if (p.kind === 'button') body = h('div', { class: 'btns' }, h('span', { class: 'dcbtn' }, richNode(p.text || '(пусто)')));
-    else if (p.kind === 'field') body = h('div', { class: 'dcfield' }, h('label', null, richNode(p.text || '(пусто)')), h('div', { class: 'dcinput' }, 'так видит кандидат'));
+    else if (p.kind === 'field') body = h('div', { class: 'dcfield' }, h('label', null, richNode(p.text || '(пусто)')), h('div', { class: 'dcinput' }, 'так видит человек'));
+    else if (p.kind === 'hint') body = h('div', { class: 'dcfield' }, h('label', null, 'название поля'), h('div', { class: 'dcinput' }, richNode(p.text || '(пусто)')));
+    else if (p.kind === 'topic') body = h('div', { class: 'dctopic' }, richNode(p.text || '(пусто)'));
     else body = embedNode({ title: p.title || '', text: p.text, color: '#ffffff' });
     box.append(h('div', { class: 'section-title' }, 'Как это увидят в Discord'),
       h('div', { class: 'dcprev' },
@@ -1854,7 +1890,8 @@ async function pageTexts() {
 
     edBox.replaceChildren(
       h('div', { class: 'thead' },
-        h('div', null, h('h2', null, titleOf(it)), h('small', { class: 'muted mono' }, it.key)),
+        h('div', null, h('h2', null, titleOf(it)), h('small', { class: 'muted mono' }, it.key),
+          h('div', { class: 'row small muted' }, it.group, ' · ', h('span', { class: 'mono' }, it.src))),
         h('div', { class: 'row' }, chip(KIND_LABEL[it.kind] || it.kind), chip('до ' + it.limit + ' знаков', 'off'),
           it.changed ? chip('свой текст', 'ok') : chip('как в коде', 'off'))),
       h('div', { class: 'ttools' }, emojiButton(area), phSelect, h('div', { class: 'spacer' }), counter),
@@ -1867,16 +1904,19 @@ async function pageTexts() {
   }
 
   search.addEventListener('input', renderList);
+  kindSel.addEventListener('change', () => { kindFilter = kindSel.value; renderList(); });
   drawFilters();
   renderList();
   const first = items.find((it) => it.changed) || items[0];
   if (first) await open(first);
 
   return h('div', null,
-    pageHead('Тексты бота', 'Все надписи, которые бот показывает людям: заголовки панелей, тексты заявок, кнопки, сообщения после принятия и отказа. Правьте и сразу смотрите, как это будет выглядеть в Discord. Ctrl+S сохраняет.',
+    pageHead('Тексты бота', 'Все надписи, которые бот показывает людям: тексты каналов казны, заголовки панелей, заявки, повышения, сборы, кнопки и поля форм. Правьте и сразу смотрите, как это будет выглядеть в Discord. Ctrl+S сохраняет.',
       h('button', { class: 'btn', onclick: () => go('texts') }, 'Обновить')),
     h('div', { class: 'split tsplit' },
-      h('div', { class: 'tside' }, h('div', { class: 'tsearch' }, search), filters, h('div', { class: 'tscroll' }, list)),
+      h('div', { class: 'tside' },
+        h('div', { class: 'tsearch' }, search, h('div', { class: 'row small muted' }, 'Ищи словом, которое видишь в Discord — найдётся по всему тексту.', kindSel)),
+        found, filters, h('div', { class: 'tscroll' }, list)),
       edBox));
 }
 

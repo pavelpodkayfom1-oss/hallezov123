@@ -1668,16 +1668,21 @@ async def snapshot_restore(name: str, bot) -> Dict[str, Any]:
 
 
 # ═══════════════════════════════ Тексты бота ═══════════════════════════════
-# Надписи живут в трёх местах: config.json["texts"] (тексты набор/повышения/сборов),
+# Надписи живут в трёх местах: config.json["texts"] (тексты набор/повышения/сборов/казны),
 # hall_settings.json (приветствие в канал и текст панели АФК) и golos_guild.json
 # (приветствие голосом в войсе). Каталог ключей собирается из самих исходников — новый
-# get_text в коде появляется в редакторе сам, руками список вести нельзя, он отстаёт.
+# get_text (или обёртка над ним вроде _T в казне) в коде появляется в редакторе сам,
+# руками список вести нельзя, он отстаёт.
 
 TEXT_SRC_DIRS = ("cogs", "utils")
+# Обёртки над get_text: у `_T` первым аргументом идёт бот, поэтому сдвиг на 1.
+TEXT_GETTERS = {"get_text": 0, "_T": 1}
 MAX_EMBED_TEXT = 4000
 MAX_EMBED_TITLE = 256
 MAX_BUTTON_LABEL = 80
 MAX_FIELD_LABEL = 45
+MAX_PLACEHOLDER = 100
+MAX_TOPIC = 1024
 
 _HALL_FIELDS = (("rules_text", "Приветствие новичку в канале"),
                 ("afk_panel_text", "Текст панели АФК"))
@@ -1689,35 +1694,73 @@ def _text_kind(key: str) -> str:
     k = key.lower()
     if k.startswith("btn_") or "_btn_" in k:
         return "button"
+    if k.endswith("_topic"):
+        return "topic"
     if "title" in k:
         return "title"
-    if k.startswith("modal_"):
+    if k.endswith("_ph") or k.endswith("_hint"):
+        return "hint"
+    if "label" in k:
         return "field"
     return "text"
 
 
 def _text_limit(kind: str) -> int:
-    return {"button": MAX_BUTTON_LABEL, "title": MAX_EMBED_TITLE,
-            "field": MAX_FIELD_LABEL}.get(kind, MAX_EMBED_TEXT)
+    return {"button": MAX_BUTTON_LABEL, "title": MAX_EMBED_TITLE, "field": MAX_FIELD_LABEL,
+            "hint": MAX_PLACEHOLDER, "topic": MAX_TOPIC}.get(kind, MAX_EMBED_TEXT)
+
+
+# Раздел в редакторе = где надпись живёт, а не какого она вида: тип показан отдельным
+# фильтром. Так «Казна» собирается в одну папку вместе со своими кнопками и полями.
+_GROUP_BY_PREFIX = (
+    ("kazna_", "Казна"),
+    ("modal_recruit", "Набор и заявки"), ("btn_recruit", "Набор и заявки"),
+    ("modal_reject", "Набор и заявки"), ("select_voice", "Набор и заявки"),
+    ("recruit_", "Набор и заявки"),
+    ("modal_promo", "Повышения"), ("btn_promo", "Повышения"), ("select_promo", "Повышения"),
+    ("nickname_format", "Повышения"), ("promo_", "Повышения"),
+    ("btn_event", "Сборы"), ("event_", "Сборы"),
+    ("mod_", "Наказания"),
+    ("poll_", "Опросы"),
+    ("date_", "Календарь"),
+    ("stream_", "Стримы"),
+    ("remind_", "Напоминания"),
+)
+# Порядок разделов в списке: то, что чаще правят, выше.
+_GROUP_ORDER = ("Приветствия", "Казна", "Набор и заявки", "Повышения", "Сборы", "Наказания",
+               "Опросы", "Календарь", "Стримы", "Напоминания", "Прочее")
 
 
 def _text_group(key: str) -> str:
     k = key.lower()
-    if k.startswith("modal_"):
-        return "Анкеты: поля"
-    if k.startswith("btn_"):
-        return "Кнопки"
-    if k.startswith("promo_"):
-        return "Повышения"
-    if k.startswith("event_"):
-        return "Сборы"
-    if k.startswith("recruit_") or k.startswith("select_voice"):
-        return "Набор и заявки"
+    for prefix, title in _GROUP_BY_PREFIX:
+        if k.startswith(prefix):
+            return title
     return "Прочее"
 
 
+def _module_strings(tree: ast.Module) -> Dict[str, str]:
+    """Строковые константы верхнего уровня файла: на них ссылаются дефолты get_text."""
+    out: Dict[str, str] = {}
+    for node in tree.body:
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = [node.target] if isinstance(node, ast.AnnAssign) else list(node.targets)
+        value = node.value if isinstance(node.value, ast.Constant) else None
+        if value is None or not isinstance(value.value, str):
+            continue
+        for t in targets:
+            if isinstance(t, ast.Name):
+                out[t.id] = value.value
+    return out
+
+
 def _scan_get_text() -> "OrderedDict[str, Dict[str, str]]":
-    """Ключи get_text("ключ", "дефолт") из исходников — с файлом и строкой."""
+    """Ключи get_text("ключ", "дефолт") из исходников — с файлом и строкой.
+
+    Дефолт может быть назван константой модуля (так делают длинные тексты казны) — тогда
+    берём её значение: «Как в коде» обязано возвращать настоящую надпись, а не пустоту.
+    """
     found: "OrderedDict[str, Dict[str, str]]" = OrderedDict()
     for sub in TEXT_SRC_DIRS:
         folder = ROOT / sub
@@ -1728,22 +1771,32 @@ def _scan_get_text() -> "OrderedDict[str, Dict[str, str]]":
                 tree = ast.parse(f.read_text(encoding="utf-8"))
             except Exception:
                 continue
+            consts = _module_strings(tree)
             for node in ast.walk(tree):
                 if not isinstance(node, ast.Call):
                     continue
                 fn = node.func
-                if (getattr(fn, "id", None) or getattr(fn, "attr", None)) != "get_text":
+                name = getattr(fn, "id", None) or getattr(fn, "attr", None)
+                if name not in TEXT_GETTERS:
                     continue
-                first = node.args[0] if node.args else None
+                args = node.args[TEXT_GETTERS[name]:]
+                first = args[0] if args else None
                 if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
                     continue
                 key = first.value
-                if key in found:
-                    continue
                 default = ""
-                if len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
-                    default = str(node.args[1].value)
-                found[key] = {"default": default, "src": f"{sub}/{f.name}:{node.lineno}"}
+                if len(args) > 1:
+                    second = args[1]
+                    if isinstance(second, ast.Constant):
+                        default = str(second.value)
+                    elif isinstance(second, ast.Name):
+                        default = consts.get(second.id, "")
+                one = {"default": default, "src": f"{sub}/{f.name}:{node.lineno}"}
+                old = found.get(key)
+                # один ключ правят из нескольких мест: берём первый непустой дефолт,
+                # иначе «Как в коде» вернул бы пустую строку вместо настоящей надписи
+                if old is None or (not old["default"] and default):
+                    found[key] = one
     return found
 
 
@@ -1869,7 +1922,11 @@ def texts_catalog(bot, force: bool = False) -> Dict[str, Any]:
     groups: "OrderedDict[str, List[Dict[str, Any]]]" = OrderedDict()
     for it in items:
         groups.setdefault(it["group"], []).append(it)
-    return {"items": items, "groups": [{"title": g, "items": v} for g, v in groups.items()],
+    # разделы по-человечески: сначала то, что правят чаще, остальные по алфавиту
+    order = {title: i for i, title in enumerate(_GROUP_ORDER)}
+    titles = sorted(groups, key=lambda g: (order.get(g, len(order)), g))
+    return {"items": items,
+            "groups": [{"title": g, "items": groups[g]} for g in titles],
             "total": len(items),
             "changed": sum(1 for it in items if it["changed"]),
             "no_default": sum(1 for it in items if not (it["value"] or "").strip())}
@@ -1995,6 +2052,10 @@ def _sample_map(bot) -> Dict[str, str]:
         "recruit_channel": "#набор", "channel": "#общий", "reason": "не подошло по времени",
         "rank": "Боец", "id": "1234", "prev": "другая семья", "why": "хочу в семью",
         "days": "3", "hours": "3", "date": "31.10.2026", "role": "Семья",
+        # казна: числа и список собранных каналов
+        "balance": "128 400", "raised": "96 400", "spent": "34 000", "moves": "17",
+        "reports": "9", "amount": "12 000", "purpose": "Печать афиш", "people": "отряду — 8",
+        "id": "12", "made": "🗂 #💰-банк-семьи, 🧾-отчёты-казны",
     }
 
 
