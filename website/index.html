@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hallez Music Bot | Лучший музыкальный бот для Discord</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="stars"></div>
+    <div class="stars2"></div>
+
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <span class="logo-icon">🎵</span>
+                <span class="logo-text">Hallez Music</span>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#features">Функции</a></li>
+                <li><a href="#commands">Команды</a></li>
+                <li><a href="#setup">Установка</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <h1 class="hero-title">
+                    Музыка для вашего <br>
+                    <span class="gradient-text">Discord сервера</span>
+                </h1>
+                <p class="hero-subtitle">
+                    Приватный музыкальный бот для нашего Discord сервера.
+                    Слушайте музыку с YouTube и SoundCloud вместе с друзьями.
+                </p>
+                <div class="hero-buttons">
+                    <a href="#features" class="btn btn-primary btn-large">
+                        <span>Узнать больше</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </a>
+                    <a href="#commands" class="btn btn-secondary btn-large">Команды</a>
+                </div>
+            </div>
+            <div class="hero-image">
+                <div class="music-player-preview">
+                    <div class="player-header">
+                        <div class="player-dot"></div>
+                        <div class="player-dot"></div>
+                        <div class="player-dot"></div>
+                    </div>
+                    <div class="player-body">
+                        <div class="now-playing">
+                            <span class="pulse-indicator"></span>
+                            <span>Сейчас играет</span>
+                        </div>
+                        <div class="track-info">
+                            <div class="track-thumbnail"></div>
+                            <div class="track-details">
+                                <div class="track-title">Awesome Track Name</div>
+                                <div class="track-artist">Artist Name</div>
+                            </div>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill"></div>
+                        </div>
+                        <div class="player-controls">
+                            <button class="control-btn">⏮️</button>
+                            <button class="control-btn play-btn">▶️</button>
+                            <button class="control-btn">⏭️</button>
+                            <button class="control-btn">🔊</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="features" class="features">
+        <div class="container">
+            <h2 class="section-title">Возможности бота</h2>
+            <p class="section-subtitle">Всё что нужно для идеального музыкального опыта</p>
+
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎵</div>
+                    <h3>YouTube & SoundCloud</h3>
+                    <p>Воспроизводите музыку с YouTube и SoundCloud. Просто введите название трека или вставьте ссылку.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">📜</div>
+                    <h3>Система очередей</h3>
+                    <p>Добавляйте треки в очередь и слушайте их один за другим. Управляйте плейлистом легко и удобно.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🎛️</div>
+                    <h3>Панель управления</h3>
+                    <p>Интерактивная панель с кнопками для управления музыкой прямо в Discord. Никаких сложных команд!</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔊</div>
+                    <h3>Контроль громкости</h3>
+                    <p>Регулируйте громкость на лету. Сделайте тише или громче одним нажатием кнопки.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">⏯️</div>
+                    <h3>Полный контроль</h3>
+                    <p>Пауза, воспроизведение, пропуск треков, стоп и другие функции для полного контроля над музыкой.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>Быстрая работа</h3>
+                    <p>Моментальная загрузка треков и отклик на команды. Никаких задержек и зависаний.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="commands" class="commands">
+        <div class="container">
+            <h2 class="section-title">Команды и управление</h2>
+            <p class="section-subtitle">Используйте панель управления или команды</p>
+
+            <div class="commands-container">
+                <div class="command-category">
+                    <h3>🎮 Панель управления</h3>
+                    <div class="command-list">
+                        <div class="command-item">
+                            <span class="command-badge">🎵</span>
+                            <div class="command-info">
+                                <div class="command-name">Включить музыку</div>
+                                <div class="command-desc">Откроет форму для ввода названия трека или ссылки</div>
+                            </div>
+                        </div>
+                        <div class="command-item">
+                            <span class="command-badge">🎙</span>
+                            <div class="command-info">
+                                <div class="command-name">Позвать в войс</div>
+                                <div class="command-desc">Бот подключится к вашему голосовому каналу</div>
+                            </div>
+                        </div>
+                        <div class="command-item">
+                            <span class="command-badge">⏯️</span>
+                            <div class="command-info">
+                                <div class="command-name">Пауза / Продолжить</div>
+                                <div class="command-desc">Поставить на паузу или продолжить воспроизведение</div>
+                            </div>
+                        </div>
+                        <div class="command-item">
+                            <span class="command-badge">⏭️</span>
+                            <div class="command-info">
+                                <div class="command-name">Скип</div>
+                                <div class="command-desc">Пропустить текущий трек</div>
+                            </div>
+                        </div>
+                        <div class="command-item">
+                            <span class="command-badge">📜</span>
+                            <div class="command-info">
+                                <div class="command-name">Очередь</div>
+                                <div class="command-desc">Показать список треков в очереди</div>
+                            </div>
+                        </div>
+                        <div class="command-item">
+                            <span class="command-badge">🔊</span>
+                            <div class="command-info">
+                                <div class="command-name">Громкость</div>
+                                <div class="command-desc">Увеличить или уменьшить громкость</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="command-category">
+                    <h3>⌨️ Slash команды</h3>
+                    <div class="command-list">
+                        <div class="command-item">
+                            <span class="command-code">/play</span>
+                            <div class="command-info">
+                                <div class="command-name">/play [запрос]</div>
+                                <div class="command-desc">Включить музыку по названию или ссылке</div>
+                            </div>
+                        </div>
+                        <div class="command-item">
+                            <span class="command-code">/music_panel</span>
+                            <div class="command-info">
+                                <div class="command-name">/music_panel</div>
+                                <div class="command-desc">Отправить панель управления музыкой (только для администраторов)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="setup" class="setup">
+        <div class="container">
+            <h2 class="section-title">Быстрая установка</h2>
+            <p class="section-subtitle">Начните слушать музыку за 3 простых шага</p>
+
+            <div class="setup-steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Пригласите бота</h3>
+                        <p>Нажмите кнопку "Пригласить бота" и выберите ваш сервер Discord</p>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>Создайте панель</h3>
+                        <p>Используйте команду <code>/music_panel</code> чтобы создать панель управления</p>
+                    </div>
+                </div>
+
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Наслаждайтесь музыкой!</h3>
+                        <p>Зайдите в голосовой канал и нажмите "Включить музыку" на панели</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="visualizer" class="visualizer">
+        <div class="container">
+            <h2 class="section-title">Живая визуализация звука</h2>
+            <p class="section-subtitle">Музыка оживает вместе с битом</p>
+
+            <div class="audio-visualizer">
+                <canvas id="visualizerCanvas"></canvas>
+                <div class="visualizer-bars">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                </div>
+                <div class="visualizer-waveform">
+                    <svg viewBox="0 0 1000 200">
+                        <path id="wavePath" d="M0,100 L1000,100" stroke="#fff" stroke-width="2" fill="none"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <div class="logo">
+                        <span class="logo-icon">🎵</span>
+                        <span class="logo-text">Hallez Music</span>
+                    </div>
+                    <p>Лучший музыкальный бот для Discord серверов</p>
+                </div>
+
+                <div class="footer-section">
+                    <h4>Ссылки</h4>
+                    <ul>
+                        <li><a href="#features">Функции</a></li>
+                        <li><a href="#commands">Команды</a></li>
+                        <li><a href="#setup">Установка</a></li>
+                    </ul>
+                </div>
+
+                <div class="footer-section">
+                    <h4>Информация</h4>
+                    <ul>
+                        <li><a href="https://github.com/pavelpodkayfom1-oss/hallezov123">GitHub репозиторий</a></li>
+                        <li><a href="#features">Документация</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="footer-bottom">
+                <p>&copy; 2026 Hallez Music Bot. Все права защищены.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
