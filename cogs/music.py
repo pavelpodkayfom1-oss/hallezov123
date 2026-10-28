@@ -269,6 +269,33 @@ def _pick_stream(info: dict):
     return cands[0] if cands else None
 
 
+def _cookies_line() -> str:
+    """Что видно в консоли хостинга про куки: без них YouTube считает запросы ботом."""
+    if not os.path.exists(COOKIES_FILE):
+        return (f"cookies: НЕТ — файла {COOKIES_FILE} нет, YouTube будет отвечать "
+                "«Sign in to confirm you're not a bot». Положи cookies.txt во вкладку Files")
+    days = (time.time() - os.path.getmtime(COOKIES_FILE)) / 86400
+    return f"cookies: есть — {COOKIES_FILE}, файлу {days:.0f} дн."
+
+
+def _yt_problem(raw: str) -> str:
+    """Перевод сырой ошибки yt-dlp в то, что можно прочитать в канале семьи."""
+    low = raw.lower()
+    if "age-restricted" in low or "confirm your age" in low:
+        return ("Трек для взрослых — YouTube требует куки аккаунта 18+. Положи cookies.txt "
+                "во вкладку Files на хостинге, рестарт не нужен.")
+    if "sign in to confirm" in low or "not a bot" in low:
+        return ("YouTube не отдаёт трек: он решил, что это робот. Лечится свежим `cookies.txt` "
+                "во вкладке Files на хостинге (рядом с `main.py`) — рестарт не нужен.\n\n"
+                "А пока можно включить то, что уже лежит в библиотеке семьи: там YouTube не "
+                "трогает трек.")
+    if "video unavailable" in low or "private video" in low:
+        return "Видео недоступно: приватное, удалённое или только по ссылке."
+    if "timed out" in low or "http error 5" in low or "too many requests" in low:
+        return "YouTube не ответил вовремя — попробуй через минуту или возьми трек из библиотеки."
+    return f"YouTube не отдал трек: {raw[:160]}"
+
+
 def _resolve_sync(target: str) -> dict:
     """Блокирующий разбор через yt-dlp — его уводит в отдельный поток вызывающий."""
     import yt_dlp
@@ -313,7 +340,9 @@ async def _resolve_youtube(target: str) -> dict:
             raise RuntimeError("На хосте не стоит yt-dlp — добавь его в requirements.txt "
                                "и перезапусти бота")
         except Exception as e:
-            raise RuntimeError(f"YouTube не отдал трек: {str(e)[:160]}")
+            raw = str(e)
+            _log(f"разбор не удался: {raw[:220]}")
+            raise RuntimeError(_yt_problem(raw))
         finally:
             _trim()
     rss = _rss_mb()
@@ -847,6 +876,7 @@ class Music(commands.Cog):
             if not files:
                 _log("медиатека пуста: положи mp3 во вкладку Files или кнопкой «Закинуть»")
             _log(f"ffmpeg: {_ffmpeg_exe() or 'НЕ НАЙДЕН'}")
+            _log(_cookies_line())
 
     # ---------- библиотека ----------
     ASK_SECONDS = 90
