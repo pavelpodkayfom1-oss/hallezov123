@@ -393,6 +393,29 @@ def _cfg_save(guild_id, patch: dict) -> str:
         return f"Настройки не записались: `{e}`"
 
 
+def _web_track(track: dict, guild, elapsed=None):
+    """Трек для страницы: только то, что можно показать человеку без Discord.
+
+    У заказа из Discord автор лежит упоминанием `<@id>` — на странице его показывать
+    нельзя, поэтому имя достаётся из кэша сервера.
+    """
+    if not track:
+        return None
+    who = str(track.get("requester") or "")
+    m = re.match(r"<@!?(\d+)>", who)
+    if m:
+        member = guild.get_member(int(m.group(1)))
+        who = member.display_name if member else "кто-то из семьи"
+    return {
+        "title": str(track.get("title") or "без названия")[:120],
+        "who": who or "со страницы",
+        "duration": track.get("duration"),
+        "url": str(track.get("webpage_url") or "")[:200],
+        "thumb": str(track.get("thumbnail") or "")[:200] or None,
+        "elapsed": elapsed,
+    }
+
+
 class GuildPlayer:
     def __init__(self, guild_id=0):
         cfg = _cfg(guild_id or 0)
@@ -1118,6 +1141,122 @@ class Music(commands.Cog):
         if vc:
             await vc.disconnect(force=True)
         _trim()
+
+    # ══════════════════ то, чем пользуется страница музыки ══════════════════
+    # Со страницы заказ приходит без Discord-взаимодействия: автора знает только
+    # словами, поэтому эти методы принимают сервер и ник, а не `inter`.
+
+    def web_state(self, guild: disnake.Guild) -> dict:
+        vc = guild.voice_client
+        p = self.players.get(guild.id)
+        cfg = _cfg(guild.id)
+        volume = p.volume if p else cfg["volume"] / 100.0
+        elapsed = None
+        try:
+            if p and p.source and vc and vc.is_playing():
+                elapsed = max(0, int(p.source.position) // 1000)
+        except Exception:
+            elapsed = None
+        return {
+            "connected": bool(vc and vc.is_connected()),
+            "channel": vc.channel.name if vc and vc.channel else None,
+            "playing": bool(vc and vc.is_playing()),
+            "paused": bool(vc and vc.is_paused()),
+            "volume": int(round(volume * 100)),
+            "dj": bool(p.dj if p else cfg["dj"]),
+            "queue_max": cfg["queue"],
+            "cooldown": cfg["cooldown"],
+            "current": _web_track((p.current if p else None) or {}, guild, elapsed),
+            "queue": [_web_track(t, guild) for t in (list(p.queue) if p else [])],
+        }
+
+    async def web_enqueue(self, guild: disnake.Guild, query: str, nick: str,
+                          key: str = "") -> dict:
+        """Ставит заказ со страницы. `key` — с чем считать кулдаун (обычно IP)."""
+        cfg = _cfg(guild.id)
+        vc = guild.voice_client
+        if not vc or not vc.is_connected():
+            return {"error": "Бот сейчас ни в каком канале не сидит: "
+                             "сначала «В войс» в /музыка, потом заказ"}
+        if not (query or "").strip():
+            return {"error": "Пустой запрос — вставь ссылку или назови трек"}
+        p = self.get_player(guild)
+        if len(p.queue) >= cfg["queue"]:
+            return {"error": f"Очередь забита: {cfg['queue']} треков. Почисти кнопкой «Стоп»"}
+        who = "web:" + (key or nick or "?")
+        now = time.time()
+        wait = cfg["cooldown"] - (now - self._last_play.get(who, 0))
+        if wait > 0:
+            return {"error": f"Не так быстро: следующий заказ через {int(wait) + 1} сек"}
+        try:
+            track = await self._extract(query)
+        except Exception as e:
+            return {"error": str(e)[:200]}
+        self._last_play[who] = now
+        track["requester"] = nick
+        p.queue.append(track)
+        was_idle = not (vc.is_playing() or vc.is_paused())
+        if was_idle:
+            await self._play_next(guild)
+        await self._web_announce(p, track, nick)
+        return {"ok": True,
+                "did": ("Включила: " if was_idle else "В очереди: ") + track["title"]}
+
+    async def _web_announce(self, p: GuildPlayer, track: dict, nick: str) -> None:
+        """В Discord заказ с сайта иначе не виден: карточка в канал музыки."""
+        ch = p.text_channel
+        if ch is None:
+            return
+        try:
+            await ch.send(embed=_ok(self.bot, "ЗАКАЗ СО СТРАНИЦЫ",
+                                    f"### 🎵  **{track['title']}**\n\n"
+                                    f"{_e(self.bot, 'hz_megaphone', '📢')}  Заказал(а) {nick or 'кто-то'}"))
+        except Exception:
+            pass
+
+    async def web_action(self, guild: disnake.Guild, action: str, value=None) -> dict:
+        vc = guild.voice_client
+        if not vc or not vc.is_connected():
+            return {"error": "Бот сейчас ни в каком канале не сидит"}
+        p = self.get_player(guild)
+        if action == "pause":
+            if vc.is_playing():
+                vc.pause()
+                return {"ok": True, "did": "Пауза"}
+            if vc.is_paused():
+                vc.resume()
+                return {"ok": True, "did": "Играет дальше"}
+            return {"error": "Сейчас ничего не играет"}
+        if action == "skip":
+            if not (vc.is_playing() or vc.is_paused()):
+                return {"error": "Пропускать нечего"}
+            title = (p.current or {}).get("title", "трек")
+            p.votes.clear()
+            vc.stop()
+            return {"ok": True, "did": f"Пропустила: {title}"}
+        if action == "stop":
+            p.queue.clear()
+            p.dj = False
+            p.votes.clear()
+            if vc.is_playing() or vc.is_paused():
+                vc.stop()
+            _cfg_save(guild.id, {"dj": False})
+            return {"ok": True, "did": "Очередь очищена, авто-диджей выключен"}
+        if action == "volume":
+            try:
+                pct = max(5, min(100, int(value)))
+            except (TypeError, ValueError):
+                return {"error": "Громкость — число от 5 до 100"}
+            p.volume = pct / 100.0
+            if p.source:
+                p.source.volume = p.volume
+            _cfg_save(guild.id, {"volume": pct})
+            return {"ok": True, "did": f"Громкость {pct}%"}
+        if action == "dj":
+            p.dj = not p.dj
+            _cfg_save(guild.id, {"dj": p.dj})
+            return {"ok": True, "did": "Авто-диджей включён" if p.dj else "Авто-диджей выключен"}
+        return {"error": "Не знаю такой кнопки"}
 
     async def _say(self, inter, emb):
         """Ответ туда, где его ещё можно отправить: модалка уже defer'нута — идёт followup.
