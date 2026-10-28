@@ -1,11 +1,12 @@
 """Музыка в голосовом: очередь треков, панель заказов и библиотека семьи.
 
-Разбор YouTube выключен совсем: yt-dlp на пике ест 60-100 МБ, а у хостинга 256 МБ на
-всё — бот умирал посреди поиска. Теперь трек берётся из папки `media/` рядом с main.py
-её наполняют командой /music_add, куда mp3 прикладывается прямо в сообщении) либо
-сразу играется по прямой ссылке на звук. ffmpeg при этом читает поток сам, второй
-процесс с тяжёлым парсером не нужен и памяти хватает. Нужен ffmpeg: на хостинге его нет
-в PATH, поэтому берётся статический бинарник из imageio-ffmpeg (см. _ffmpeg_exe).
+Трек берётся тремя путями: из папки `media/` по имени (её наполняют командой
+/music_add, куда mp3 прикладывается прямо в сообщении), по прямой ссылке на звук —
+такую ffmpeg читает сам, и по ссылке на YouTube — тут уже нужен yt-dlp.
+Разбор YouTube идёт по одному запросу за раз и чистит память после каждого: парсер
+на пике просит 60-100 МБ, и два параллельных поиска уже бьют по лимиту хостинга.
+Нужен ffmpeg: на хостинге его нет в PATH, поэтому берётся статический бинарник
+из imageio-ffmpeg (см. _ffmpeg_exe).
 """
 import asyncio
 import json
@@ -232,6 +233,92 @@ def _ffmpeg_exe():
     return _EXE or None
 
 
+# ═════════════════════════ YouTube ═════════════════════════
+# Ссылки на YouTube сам ffmpeg не играет: нужен парсер, который достаёт адрес
+# аудиопотока. Один запрос за раз + очистка памяти после него — иначе два поиска
+# подряд поднимают бота до лимита хостинга посреди эфира.
+YT_HOSTS = ("youtube.com", "youtu.be", "music.youtube.com")
+# Куки с хостинга (файл рядом с main.py, в git не попадает) — для возрастных треков
+COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
+_YT_SEM = None
+
+
+def _is_yt(url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower()
+    return any(host == h or host.endswith("." + h) for h in YT_HOSTS)
+
+
+def _pick_stream(info: dict):
+    """Адрес аудиопотока из кучи формат, которые вернул YouTube.
+
+    Берём https-файл, а не плейлист m3u8: ffmpeg переживает обрывы на файле, а
+    с плейлистом встаёт на середине трека.
+    """
+    cands = []
+    if info.get("url"):
+        cands.append(info["url"])
+    for f in (info.get("requested_formats") or info.get("formats") or []):
+        if f.get("url") and (f.get("acodec") or "none") != "none":
+            cands.append(f["url"])
+    for u in cands:
+        if u.startswith("https://") and ".m3u8" not in u:
+            return u
+    return cands[0] if cands else None
+
+
+def _resolve_sync(target: str) -> dict:
+    """Блокирующий разбор через yt-dlp — его уводит в отдельный поток вызывающий."""
+    import yt_dlp
+
+    opts = {
+        "format": "bestaudio/best",
+        "noplaylist": True, "quiet": True, "no_warnings": True,
+        "skip_download": True, "socket_timeout": 15, "cachedir": False,
+        "extractor_args": {"youtube": {"player_client": ["android", "web"]}},
+    }
+    if os.path.exists(COOKIES_FILE):
+        opts["cookiefile"] = COOKIES_FILE
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(target, download=False)
+    if (info or {}).get("_type") == "playlist":
+        entries = [e for e in (info.get("entries") or []) if e]
+        if not entries:
+            raise RuntimeError("Плейлист пустой")
+        info = entries[0]
+    stream = _pick_stream(info)
+    if not stream:
+        raise RuntimeError("в ответе нет аудиопотока — попробуй другую ссылку")
+    return {
+        "title": (info.get("title") or target)[:120],
+        "stream_url": stream,
+        "webpage_url": info.get("webpage_url") or target,
+        "duration": info.get("duration"),
+        "thumbnail": info.get("thumbnail"),
+        "ts": time.time(),
+    }
+
+
+async def _resolve_youtube(target: str) -> dict:
+    global _YT_SEM
+    if _YT_SEM is None:
+        _YT_SEM = asyncio.Semaphore(1)
+    async with _YT_SEM:
+        t0 = time.time()
+        try:
+            track = await asyncio.to_thread(_resolve_sync, target)
+        except ImportError:
+            raise RuntimeError("На хосте не стоит yt-dlp — добавь его в requirements.txt "
+                               "и перезапусти бота")
+        except Exception as e:
+            raise RuntimeError(f"YouTube не отдал трек: {str(e)[:160]}")
+        finally:
+            _trim()
+    rss = _rss_mb()
+    _log(f"YouTube: «{track['title']}» за {time.time() - t0:.1f} с"
+         + (f", память {rss} МБ" if rss > 0 else ""))
+    return track
+
+
 def _color(key: str = "embed_color") -> int:
     try:
         return int(str(load_config().get(key, "0x990000")), 16)
@@ -377,7 +464,7 @@ class MusicModal(disnake.ui.Modal):
             custom_id="music_modal",
             components=[
                 disnake.ui.TextInput(
-                    label="Трек из библиотеки или ссылка на звук",
+                    label="Имя из библиотеки, ссылка на YouTube или на звук",
                     custom_id="query",
                     style=disnake.TextInputStyle.short,
                     placeholder="Например: Эксонад музыка",
@@ -1107,13 +1194,20 @@ class Music(commands.Cog):
             ephemeral=True)
 
     async def _extract(self, query: str) -> dict:
-        """Находит трек: прямая ссылка на звук играется как есть, остальное ищем в библиотеке."""
+        """Находит трек: YouTube-ссылка разбор через парсер, прямая ссылка на звук — как есть,
+        остальное ищем в библиотеке, а если имени там нет — пробуем найти на YouTube.
+        """
         query = query.strip()
         if not query:
             raise RuntimeError("Пустой запрос")
         if query.lower().startswith(("http://", "https://")):
+            if _is_yt(query):
+                return await _resolve_youtube(query)
             return self._from_link(query)
-        path = self._find_track(query)
+        try:
+            path = self._find_track(query)
+        except RuntimeError:
+            return await _resolve_youtube("ytsearch1:" + query)
         return {
             "title": _stem(path)[:120],
             "stream_url": path,
@@ -1374,9 +1468,9 @@ class Music(commands.Cog):
         return panel_embed(
             f"{pc}  МУЗЫКА СЕМЬИ", sections, guild=guild,
             intro=(f"*{crown}  Один голос на всю семью  {crown}*\n"
-                   f"{pc}  Треки лежат в библиотеке — без ссылок на двадцать минут вперёд."))
+                   f"{pc}  Имя из библиотеки, ссылка на YouTube или на звук — играет всё."))
 
-    @commands.slash_command(name="play", description="Включить трек из библиотеки (имя или прямая ссылка)")
+    @commands.slash_command(name="play", description="Включить трек: имя из библиотеки, ссылка на YouTube или на звук")
     async def play_cmd(self, inter: disnake.ApplicationCommandInteraction, запрос: str):
         await inter.response.defer(ephemeral=True)
         await self.handle_play(inter, запрос.strip())
