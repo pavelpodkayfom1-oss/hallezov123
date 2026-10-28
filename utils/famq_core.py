@@ -393,7 +393,8 @@ _DDL = [
         min_voice_hours INTEGER NOT NULL DEFAULT 0,
         end_ts INTEGER NOT NULL,
         status TEXT NOT NULL DEFAULT 'active',
-        winner_ids TEXT
+        winner_ids TEXT,
+        art_id INTEGER
     )""",
     """CREATE TABLE IF NOT EXISTS giveaway_entries (
         giveaway_id INTEGER NOT NULL,
