@@ -249,118 +249,152 @@ PAGE_HTML = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
-<title>HALLEZ | Music Studio</title>
+<title>HALLEZ · музыка семьи</title>
 <style nonce="__NONCE__">
-:root{--bg:#000;--surface:#0d0d0d;--surface2:#1a1a1a;--surface3:#262626;--text:#fff;--text2:#b3b3b3;
- --text3:#808080;--border:#333;--accent:#fff;--accent2:#d9d9d9}
+:root{--bg:#08080a;--surface:#0e0e12;--surface2:#15151b;--surface3:#1d1d25;--line:#26262f;
+ --text:#f4f4f7;--text2:#a6a6b2;--text3:#6e6e7b;--accent:#f4f4f7;--red:#e03e4c;--ok:#3dd68c}
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
- min-height:100vh;overflow-x:hidden}
-body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle at 20% 50%,rgba(255,255,255,.03),transparent 50%),
- radial-gradient(circle at 80% 80%,rgba(255,255,255,.02),transparent 40%);pointer-events:none;z-index:0}
-.container{max-width:1400px;margin:0 auto;padding:0 20px;position:relative;z-index:1}
-.header{padding:25px 0;border-bottom:1px solid var(--border);margin-bottom:30px}
-.header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}
-.brand{font-size:1.8rem;font-weight:700;letter-spacing:-1px}
-.status{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;background:var(--surface2);
- border:1px solid var(--border);font-size:.8rem;text-transform:uppercase;letter-spacing:1px}
-.status-dot{width:6px;height:6px;background:var(--text3);border-radius:50%}
-.status.active .status-dot{background:var(--accent);animation:pulse-dot 2s infinite}
-@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.3}}
-.subtitle{color:var(--text2);font-size:.9rem}
-.main-grid{display:grid;grid-template-columns:1fr 380px;gap:25px;margin-bottom:25px}
-.player-section{background:var(--surface);border:1px solid var(--border);padding:30px}
-.track-display{display:grid;grid-template-columns:180px 1fr;gap:25px;margin-bottom:30px}
-.artwork{width:180px;height:180px;background:var(--surface2);border:1px solid var(--border);
- display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
-.artwork img{width:100%;height:100%;object-fit:cover}
-.artwork-placeholder{font-size:4rem;opacity:.3}
-.track-info{display:flex;flex-direction:column;justify-content:center}
-.track-title{font-size:1.4rem;font-weight:600;margin-bottom:8px;line-height:1.3}
-.track-meta{color:var(--text2);font-size:.9rem;margin-bottom:20px}
-.progress-section{margin-top:auto}
-.progress-time{display:flex;justify-content:space-between;font-size:.75rem;color:var(--text3);margin-bottom:6px}
-.progress-bar{height:4px;background:var(--surface2);position:relative;cursor:pointer}
-.progress-bar:hover{height:6px}
-.progress-fill{height:100%;background:var(--accent);transition:width .3s linear}
-.waveform{display:flex;gap:2px;height:50px;align-items:flex-end;margin-top:15px}
-.wave-bar{flex:1;background:var(--surface3);min-height:4px;transition:all .3s}
-.wave-bar.active{background:var(--accent)}
-.controls-panel{background:var(--surface2);padding:20px;margin-top:25px;border:1px solid var(--border)}
-.controls-row{display:flex;gap:12px;margin-bottom:15px}
-.controls-row:last-child{margin-bottom:0}
-.ctrl-btn{flex:1;padding:14px;background:var(--surface);border:1px solid var(--border);color:var(--text);
- cursor:pointer;font:inherit;transition:all .2s;text-align:center;font-size:.85rem;text-transform:uppercase;
- letter-spacing:.5px}
-.ctrl-btn:hover{background:var(--surface3);border-color:var(--accent)}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;
+ font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+ background:radial-gradient(60% 45% at 12% -8%,rgba(224,62,76,.10),transparent 70%),
+ radial-gradient(50% 40% at 92% 105%,rgba(255,255,255,.045),transparent 70%)}
+.container{max-width:1240px;margin:0 auto;padding:0 20px;position:relative;z-index:1}
+
+.header{padding:26px 0 18px;border-bottom:1px solid var(--line);margin-bottom:26px}
+.header-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{font-size:1.55rem;font-weight:700;letter-spacing:-.5px}
+.brand span{color:var(--text3);font-weight:400;letter-spacing:.14em;font-size:.78rem;
+ text-transform:uppercase;margin-left:.55rem}
+.status{display:inline-flex;align-items:center;gap:8px;padding:7px 13px;background:var(--surface2);
+ border:1px solid var(--line);font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text2)}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--text3)}
+.status.active{color:var(--text);border-color:rgba(224,62,76,.4)}
+.status.active .status-dot{background:var(--red);animation:pulse 1.8s infinite}
+@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(224,62,76,.5)}50%{opacity:.55;box-shadow:0 0 0 5px rgba(224,62,76,0)}}
+.subtitle{color:var(--text3);font-size:.86rem;margin-top:8px}
+
+.main-grid{display:grid;grid-template-columns:1fr 360px;gap:22px;margin-bottom:22px}
+.card{background:var(--surface);border:1px solid var(--line)}
+.player-section{padding:26px}
+.track-display{display:grid;grid-template-columns:170px 1fr;gap:24px}
+.artwork{width:170px;height:170px;background:var(--surface2);border:1px solid var(--line);
+ display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+.artwork img{width:100%;height:100%;object-fit:cover;display:block}
+.artwork.is-live::after{content:"";position:absolute;inset:0;box-shadow:inset 0 0 0 1px rgba(224,62,76,.45)}
+.artwork-placeholder{font-size:3.2rem;color:var(--text3)}
+.track-info{display:flex;flex-direction:column;min-width:0}
+.track-title{font-size:1.3rem;font-weight:600;line-height:1.3;word-break:break-word}
+.track-meta{color:var(--text2);font-size:.86rem;margin-top:6px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.chip{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);
+ border:1px solid var(--line);padding:5px 9px;background:var(--surface2)}
+.chip b{color:var(--text);font-weight:600;letter-spacing:0}
+.progress-section{margin-top:auto;padding-top:22px}
+.progress-time{display:flex;justify-content:space-between;font-size:.74rem;color:var(--text3);
+ margin-bottom:7px;font-variant-numeric:tabular-nums}
+.progress-bar{height:3px;background:var(--surface3);position:relative;overflow:hidden}
+.progress-fill{height:100%;width:0;background:var(--accent);transition:width .9s linear}
+.progress-fill::after{content:"";position:absolute;right:0;top:-2px;width:2px;height:7px;background:var(--accent)}
+.waveform{display:flex;align-items:flex-end;gap:3px;height:44px;margin-top:20px;opacity:.5;
+ transition:opacity .4s}
+.waveform.on{opacity:1}
+.wave-bar{flex:1;height:12%;background:var(--surface3);transform-origin:bottom;border-radius:1px}
+.waveform.on .wave-bar{background:linear-gradient(180deg,var(--accent),#6d6d78);
+ animation:wv 1.15s ease-in-out infinite alternate;animation-play-state:paused}
+.waveform.playing .wave-bar{animation-play-state:running}
+@keyframes wv{from{height:12%}to{height:var(--h,70%)}}
+
+.controls-panel{background:var(--surface2);border:1px solid var(--line);padding:16px;margin-top:22px}
+.controls-row{display:flex;gap:10px;flex-wrap:wrap}
+.ctrl-btn{flex:1;min-width:110px;padding:13px 10px;background:var(--surface);border:1px solid var(--line);
+ color:var(--text);cursor:pointer;font:inherit;font-size:.78rem;text-transform:uppercase;letter-spacing:.09em;
+ transition:background .18s,border-color .18s,transform .12s,color .18s}
+.ctrl-btn:hover{border-color:var(--accent);background:var(--surface3)}
+.ctrl-btn:active{transform:translateY(1px)}
 .ctrl-btn.primary{background:var(--accent);color:var(--bg);border-color:var(--accent);font-weight:600}
-.ctrl-btn.primary:hover{background:var(--accent2)}
-.ctrl-btn.active{background:var(--surface3);border-color:var(--accent)}
-.ctrl-btn:disabled{opacity:.3;cursor:not-allowed}
-.sidebar{display:flex;flex-direction:column;gap:20px}
-.panel{background:var(--surface);border:1px solid var(--border);padding:20px}
-.panel-title{font-size:.75rem;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:15px;
- padding-bottom:10px;border-bottom:1px solid var(--border)}
-.input-group{margin-bottom:12px}
-.input-group:last-child{margin-bottom:0}
-.input-label{font-size:.75rem;color:var(--text2);margin-bottom:6px;display:block;text-transform:uppercase;letter-spacing:.5px}
-.text-input{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);color:var(--text);
- font:inherit;font-size:.9rem}
+.ctrl-btn.primary:hover{background:#fff}
+.ctrl-btn.on{border-color:var(--red);color:var(--red)}
+.ctrl-btn:disabled{opacity:.35;cursor:default;transform:none}
+.hint{color:var(--text3);font-size:.76rem;margin-top:12px}
+.btn-wide{display:block;width:100%;min-width:0}
+.queue-more{padding:6px 10px;font-size:.74rem;color:var(--text3)}
+
+.sidebar{display:flex;flex-direction:column;gap:18px}
+.panel{padding:18px}
+.panel-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);
+ margin-bottom:14px;padding-bottom:9px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+.panel-title b{color:var(--text);letter-spacing:0}
+.input-group{margin-bottom:11px}
+.input-label{display:block;font-size:.72rem;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em}
+.text-input{width:100%;padding:11px 12px;background:var(--surface2);border:1px solid var(--line);color:var(--text);
+ font:inherit;font-size:.9rem;transition:border-color .18s,background .18s}
 .text-input:focus{outline:none;border-color:var(--accent);background:var(--surface3)}
 .text-input::placeholder{color:var(--text3)}
-.slider-group{margin-bottom:18px}
-.slider-group:last-child{margin-bottom:0}
-.slider-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.slider-label{font-size:.75rem;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
-.slider-value{font-size:.75rem;color:var(--text);font-weight:600}
-.slider{-webkit-appearance:none;appearance:none;width:100%;height:3px;background:var(--surface2);outline:none;border:none}
-.slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:14px;height:14px;background:var(--accent);
- cursor:pointer;border:2px solid var(--bg)}
-.slider::-moz-range-thumb{width:14px;height:14px;background:var(--accent);cursor:pointer;border:2px solid var(--bg)}
-.queue-panel{max-height:400px;overflow-y:auto}
+.slider-row{display:flex;align-items:center;gap:12px;margin-top:14px}
+.slider{-webkit-appearance:none;appearance:none;flex:1;height:3px;background:var(--surface3);border:none;outline:none}
+.slider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--accent);
+ border:2px solid var(--bg);cursor:pointer;border-radius:50%}
+.slider::-moz-range-thumb{width:14px;height:14px;background:var(--accent);border:2px solid var(--bg);cursor:pointer;border-radius:50%}
+.slider-value{font-size:.78rem;color:var(--text);min-width:38px;text-align:right;font-variant-numeric:tabular-nums}
+.queue-panel{max-height:340px;overflow-y:auto;margin:0 -4px}
 .queue-panel::-webkit-scrollbar{width:6px}
-.queue-panel::-webkit-scrollbar-track{background:var(--surface2)}
-.queue-panel::-webkit-scrollbar-thumb{background:var(--border)}
-.queue-item{padding:12px;background:var(--surface2);border-left:2px solid transparent;margin-bottom:8px;
- transition:all .2s;cursor:pointer}
-.queue-item:hover{background:var(--surface3);border-left-color:var(--accent)}
-.queue-number{display:inline-block;width:24px;color:var(--text3);font-size:.75rem;font-weight:600}
-.queue-title{font-size:.85rem;color:var(--text);margin-bottom:4px}
-.queue-author{font-size:.75rem;color:var(--text3)}
-.empty-state{padding:30px;text-align:center;color:var(--text3);font-size:.9rem}
-.message{padding:10px 12px;font-size:.8rem;margin-top:8px;border-left:2px solid transparent}
-.message.success{color:var(--text);border-left-color:var(--accent)}
-.message.error{color:#ff6b6b;border-left-color:#ff6b6b}
-.footer{padding:20px 0;text-align:center;color:var(--text3);font-size:.75rem;text-transform:uppercase;
- letter-spacing:1px;border-top:1px solid var(--border);margin-top:30px}
+.queue-panel::-webkit-scrollbar-track{background:transparent}
+.queue-panel::-webkit-scrollbar-thumb{background:var(--line)}
+.queue-item{display:flex;gap:10px;padding:11px 10px;background:var(--surface2);border-left:2px solid transparent;
+ margin-bottom:7px;transition:background .18s,border-color .18s,transform .18s}
+.queue-item:hover{background:var(--surface3);border-left-color:var(--red);transform:translateX(2px)}
+.queue-number{color:var(--text3);font-size:.74rem;font-weight:600;min-width:18px;font-variant-numeric:tabular-nums}
+.queue-body{min-width:0}
+.queue-title{font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.queue-author{font-size:.74rem;color:var(--text3);margin-top:2px}
+.empty-state{padding:26px 14px;text-align:center;color:var(--text3);font-size:.85rem;line-height:1.5}
+.empty-state span{display:block;font-size:1.5rem;margin-bottom:8px;opacity:.55}
+.message{padding:0;font-size:.8rem;margin-top:10px;min-height:1.2em;color:transparent;transition:color .2s}
+.message.success{color:var(--ok)}
+.message.error{color:#ff6b73}
+.footer{padding:20px 0 34px;text-align:center;color:var(--text3);font-size:.75rem;letter-spacing:.04em}
 @media (max-width:1024px){
-.main-grid{grid-template-columns:1fr}
-.track-display{grid-template-columns:120px 1fr;gap:15px}
-.artwork{width:120px;height:120px}
-.controls-row{flex-wrap:wrap}
-.ctrl-btn{flex:1 1 calc(50% - 6px)}
+ .main-grid{grid-template-columns:1fr}
+ .track-display{grid-template-columns:130px 1fr;gap:18px}
+ .artwork{width:130px;height:130px}
+}
+@media (max-width:560px){
+ .container{padding:0 14px}
+ .player-section{padding:18px}
+ .track-display{grid-template-columns:1fr;gap:16px}
+ .artwork{width:100%;height:190px}
+ .ctrl-btn{min-width:calc(50% - 5px);flex:none}
+ .brand{font-size:1.3rem}
+ .brand span{display:block;margin:4px 0 0}
 }
 </style></head>
 <body>
 <div class="container">
 <header class="header">
 <div class="header-top">
-<div class="brand">HALLEZ MUSIC</div>
-<div class="status" id="status"><span class="status-dot"></span><span id="statusText">offline</span></div>
+<div class="brand">HALLEZ<span>музыка семьи</span></div>
+<div class="status" id="status"><span class="status-dot"></span><span id="statusText">подключаемся…</span></div>
 </div>
-<div class="subtitle">Professional Music Control System</div>
+<div class="subtitle">Заказываете отсюда — трек попадает в общую очередь и играет в голосовом канале.</div>
 </header>
 
 <div class="main-grid">
-<div class="player-section">
+<div class="card player-section">
 <div class="track-display">
 <div class="artwork" id="artwork"><div class="artwork-placeholder">♪</div></div>
 <div class="track-info">
-<div class="track-title" id="trackTitle">No track playing</div>
-<div class="track-meta" id="trackMeta">Select a track to start</div>
+<div class="track-title" id="trackTitle">Сейчас ничего не играет</div>
+<div class="track-meta" id="trackMeta">Закажи трек справа — он встанет в очередь.</div>
+<div class="chips">
+<div class="chip">очередь <b id="chipQueue">0</b></div>
+<div class="chip">громкость <b id="chipVol">—</b></div>
+<div class="chip">диджей <b id="chipDj">выкл</b></div>
+</div>
 <div class="progress-section">
 <div class="progress-time"><span id="currentTime">0:00</span><span id="totalTime">0:00</span></div>
-<div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
 </div>
 </div>
 </div>
@@ -369,260 +403,220 @@ body::before{content:"";position:fixed;inset:0;background:radial-gradient(circle
 
 <div class="controls-panel">
 <div class="controls-row">
-<button class="ctrl-btn" data-action="pause" id="pauseBtn">PAUSE</button>
-<button class="ctrl-btn" data-action="skip">SKIP</button>
-<button class="ctrl-btn" data-action="stop">STOP</button>
-<button class="ctrl-btn" data-action="dj" id="djBtn">AUTO DJ</button>
+<button class="ctrl-btn primary" data-action="pause" id="pauseBtn">Пауза</button>
+<button class="ctrl-btn" data-action="skip">Пропустить</button>
+<button class="ctrl-btn" data-action="dj" id="djBtn">Авто-диджей</button>
+<button class="ctrl-btn" data-action="stop">Стоп</button>
 </div>
+<div class="slider-row">
+<input type="range" class="slider" id="volSlider" min="5" max="100" step="5" value="50" aria-label="Громкость">
+<span class="slider-value" id="volValue">50%</span>
+</div>
+<div class="hint" id="hint">«Стоп» чистит всю очередь — он для своих.</div>
 </div>
 </div>
 
 <aside class="sidebar">
-<div class="panel">
-<div class="panel-title">Add Track</div>
+<div class="card panel">
+<div class="panel-title">Заказать трек</div>
 <div class="input-group">
-<label class="input-label">YouTube URL or Track Name</label>
-<input type="text" class="text-input" id="trackInput" placeholder="Enter URL or search...">
+<label class="input-label" for="trackInput">Что включить</label>
+<input type="text" class="text-input" id="trackInput" maxlength="200" autocomplete="off"
+ placeholder="Имя из библиотеки или ссылка">
 </div>
 <div class="input-group">
-<label class="input-label">Your Name</label>
-<input type="text" class="text-input" id="nickInput" placeholder="Your nickname">
+<label class="input-label" for="nickInput">Кто заказал</label>
+<input type="text" class="text-input" id="nickInput" maxlength="32" autocomplete="off" placeholder="Твоё имя">
 </div>
-<button class="ctrl-btn primary" id="addBtn">ADD TO QUEUE</button>
-<div class="message" id="message"></div>
+<button class="ctrl-btn primary btn-wide" id="addBtn">В очередь</button>
+<div class="message" id="message">&nbsp;</div>
 </div>
 
-<div class="panel">
-<div class="panel-title">Audio Settings</div>
-<div class="slider-group">
-<div class="slider-header"><span class="slider-label">Volume</span><span class="slider-value" id="volValue">50%</span></div>
-<input type="range" class="slider" id="volSlider" min="5" max="100" step="5" value="50">
-</div>
-<div class="slider-group">
-<div class="slider-header"><span class="slider-label">Bass</span><span class="slider-value" id="bassValue">0</span></div>
-<input type="range" class="slider" id="bassSlider" min="-10" max="10" step="1" value="0">
-</div>
-<div class="slider-group">
-<div class="slider-header"><span class="slider-label">Treble</span><span class="slider-value" id="trebleValue">0</span></div>
-<input type="range" class="slider" id="trebleSlider" min="-10" max="10" step="1" value="0">
-</div>
-<div class="slider-group">
-<div class="slider-header"><span class="slider-label">Speed</span><span class="slider-value" id="speedValue">1.0x</span></div>
-<input type="range" class="slider" id="speedSlider" min="0.5" max="2" step="0.1" value="1">
-</div>
-</div>
-
-<div class="panel">
-<div class="panel-title">Queue (<span id="queueCount">0</span>)</div>
+<div class="card panel">
+<div class="panel-title">Очередь <b id="queueCount">0</b></div>
 <div class="queue-panel" id="queueList"></div>
 </div>
 </aside>
 </div>
 
-<footer class="footer">Hallez Music Control System &bull; Advanced Audio Management</footer>
+<footer class="footer">Общий плеер семьи · заказы видны всем в канале</footer>
 </div>
 
 <script nonce="__NONCE__">
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const $ = id => document.getElementById(id);
 let refreshTimer = null;
+let clock = {elapsed:0, duration:0, at:0, running:false};
 
-// Waveform bars
-for(let i=0;i<30;i++){
-const bar = document.createElement('div');
-bar.className = 'wave-bar';
-$('waveform').appendChild(bar);
-}
-
-function updateWaveform(){
-const bars = document.querySelectorAll('.wave-bar');
-bars.forEach((bar,i)=>{
-const h = Math.random()*100;
-bar.style.height = h + '%';
-if(Math.random()>.7) bar.classList.add('active');
-else bar.classList.remove('active');
-});
-}
-setInterval(updateWaveform,150);
+// полоса из 44 столбиков: высота и задержка задаются один раз, дальше крутит CSS
+(function buildWave(){
+ const box = $('waveform'), frag = document.createDocumentFragment();
+ for(let i=0;i<44;i++){
+  const bar = document.createElement('div');
+  bar.className = 'wave-bar';
+  bar.style.setProperty('--h', (28 + Math.abs(Math.sin(i*1.7))*70).toFixed(0) + '%');
+  bar.style.animationDelay = (i % 11) * 0.09 + 's';
+  bar.style.animationDuration = (0.85 + (i % 5) * 0.13).toFixed(2) + 's';
+  frag.appendChild(bar);
+ }
+ box.appendChild(frag);
+})();
 
 function fmt(sec){
-if(!sec) return '0:00';
-sec = Math.round(sec);
-const m = Math.floor(sec/60);
-const s = sec%60;
-return m+':'+(s<10?'0':'')+s;
+ if(!sec || sec < 0) return '0:00';
+ sec = Math.round(sec);
+ return Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0');
 }
 
-async function api(path,body){
-const init = {method:body?'POST':'GET',cache:'no-store',
-headers:{'X-Requested-With':'hz-music'}};
-if(body){init.headers['Content-Type']='application/json';init.body=JSON.stringify(body);}
-const r = await fetch(path,init);
-let data = {};
-try{data = await r.json();}catch(e){}
-if(!r.ok) throw new Error(data.error||'Error '+r.status);
-return data;
+async function api(path, body){
+ const init = {method: body ? 'POST' : 'GET', cache:'no-store',
+  headers:{'X-Requested-With':'hz-music'}};
+ if(body){ init.headers['Content-Type']='application/json'; init.body=JSON.stringify(body); }
+ const r = await fetch(path, init);
+ let data = {};
+ try{ data = await r.json(); }catch(e){ /* бот перезапустился — вместо json прилетела страница */ }
+ if(!r.ok) throw new Error(data.error || ('Сервер ответил ' + r.status));
+ return data;
 }
 
-function showMsg(text,type){
-const msg = $('message');
-msg.textContent = text;
-msg.className = 'message '+(type||'');
-setTimeout(()=>msg.className='message',3000);
+function showMsg(text, type){
+ const msg = $('message');
+ msg.textContent = text;
+ msg.className = 'message ' + (type || '');
+ clearTimeout(showMsg._t);
+ showMsg._t = setTimeout(()=>{ msg.className='message'; msg.innerHTML='&nbsp;'; }, 3200);
 }
+
+// прогресс дорисовываем между опросами, чтобы ползунок шёл плавно, а не скачками раз в 3 сек
+function tick(){
+ if(clock.running && clock.duration){
+  const sec = clock.elapsed + (Date.now() - clock.at)/1000;
+  const pct = Math.min(100, sec/clock.duration*100);
+  $('progressFill').style.width = pct + '%';
+  $('currentTime').textContent = fmt(Math.min(sec, clock.duration));
+ }
+}
+setInterval(tick, 1000);
 
 function updateUI(state){
-// Status
-const status = $('status');
-const statusText = $('statusText');
-if(state.connected){
-status.classList.add('active');
-statusText.textContent = 'live: '+( state.channel||'voice');
-}else{
-status.classList.remove('active');
-statusText.textContent = 'offline';
-}
+ const live = !!state.connected, playing = !!state.playing, paused = !!state.paused;
+ const status = $('status');
+ status.classList.toggle('active', live);
+ $('statusText').textContent = live
+  ? (playing ? 'в эфире · ' + (state.channel || 'голосовой') : (paused ? 'на паузе' : 'ждёт заказов'))
+  : 'бот не в голосовом';
 
-// Track
-const cur = state.current;
-if(cur){
-$('trackTitle').textContent = cur.title||'Unknown';
-$('trackMeta').textContent = 'Requested by '+cur.who;
-$('currentTime').textContent = fmt(cur.elapsed);
-$('totalTime').textContent = fmt(cur.duration);
-const pct = cur.duration ? (cur.elapsed/cur.duration*100):0;
-$('progressFill').style.width = pct+'%';
+ const wave = $('waveform');
+ wave.classList.toggle('on', playing || paused);
+ wave.classList.toggle('playing', playing);
 
-if(cur.thumb){
-$('artwork').innerHTML = '<img src="'+esc(cur.thumb)+'" alt="">';
-}else{
-$('artwork').innerHTML = '<div class="artwork-placeholder">♪</div>';
-}
-}else{
-$('trackTitle').textContent = 'No track playing';
-$('trackMeta').textContent = 'Queue is empty';
-$('currentTime').textContent = '0:00';
-$('totalTime').textContent = '0:00';
-$('progressFill').style.width = '0%';
-$('artwork').innerHTML = '<div class="artwork-placeholder">♪</div>';
-}
+ const cur = state.current;
+ if(cur){
+  $('trackTitle').textContent = cur.title || 'без названия';
+  $('trackMeta').textContent = 'заказал ' + (cur.who || 'кто-то');
+  clock = {elapsed: cur.elapsed || 0, duration: cur.duration || 0, at: Date.now(), running: playing};
+  $('totalTime').textContent = fmt(cur.duration);
+  $('currentTime').textContent = fmt(cur.elapsed);
+  $('progressFill').style.width = (cur.duration ? Math.min(100, cur.elapsed/cur.duration*100) : 0) + '%';
+  $('artwork').classList.toggle('is-live', playing);
+  $('artwork').innerHTML = cur.thumb
+   ? '<img src="' + esc(cur.thumb) + '" alt="">'
+   : '<div class="artwork-placeholder">♪</div>';
+ }else{
+  clock = {elapsed:0, duration:0, at:0, running:false};
+  $('trackTitle').textContent = playing ? 'звучит' : 'Сейчас ничего не играет';
+  $('trackMeta').textContent = live ? 'Очередь пуста — закажи первым.' : 'Боту нужно зайти в голосовой канал.';
+  $('currentTime').textContent = '0:00';
+  $('totalTime').textContent = '0:00';
+  $('progressFill').style.width = '0%';
+  $('artwork').classList.remove('is-live');
+  $('artwork').innerHTML = '<div class="artwork-placeholder">♪</div>';
+ }
 
-// Volume
-$('volSlider').value = state.volume||50;
-$('volValue').textContent = (state.volume||50)+'%';
+ const vol = state.volume || 0;
+ $('volSlider').value = vol;
+ $('volValue').textContent = vol + '%';
+ $('chipVol').textContent = vol + '%';
+ $('chipQueue').textContent = (state.queue || []).length;
+ $('chipDj').textContent = state.dj ? 'вкл' : 'выкл';
+ $('djBtn').classList.toggle('on', !!state.dj);
+ $('pauseBtn').textContent = paused ? 'Продолжить' : 'Пауза';
+ $('pauseBtn').disabled = !(playing || paused);
 
-// DJ
-$('djBtn').classList.toggle('active',!!state.dj);
-
-// Queue
-const qlist = $('queueList');
-const queue = state.queue||[];
-$('queueCount').textContent = queue.length;
-qlist.innerHTML = '';
-if(queue.length){
-queue.slice(0,20).forEach((t,i)=>{
-const item = document.createElement('div');
-item.className = 'queue-item';
-item.innerHTML = '<span class="queue-number">'+(i+1)+'</span>'+
-'<div class="queue-title">'+esc(t.title)+'</div>'+
-'<div class="queue-author">'+esc(t.who)+'</div>';
-qlist.appendChild(item);
-});
-if(queue.length>20){
-const more = document.createElement('div');
-more.className = 'empty-state';
-more.textContent = '+'+(queue.length-20)+' more tracks';
-qlist.appendChild(more);
-}
-}else{
-qlist.innerHTML = '<div class="empty-state">Queue is empty</div>';
-}
+ const qlist = $('queueList'), queue = state.queue || [];
+ $('queueCount').textContent = queue.length;
+ qlist.innerHTML = '';
+ if(queue.length){
+  queue.slice(0, 20).forEach((t, i) => {
+   const item = document.createElement('div');
+   item.className = 'queue-item';
+   item.innerHTML = '<div class="queue-number">' + (i+1) + '</div>' +
+    '<div class="queue-body"><div class="queue-title">' + esc(t.title) + '</div>' +
+    '<div class="queue-author">' + esc(t.who) + '</div></div>';
+   qlist.appendChild(item);
+  });
+  if(queue.length > 20){
+   const more = document.createElement('div');
+   more.className = 'queue-more';
+   more.textContent = 'и ещё ' + (queue.length - 20);
+   qlist.appendChild(more);
+  }
+ }else{
+  qlist.innerHTML = '<div class="empty-state"><span>♪</span>Очередь пустая. ' +
+   'Напиши имя трека справа — он заиграет следом.</div>';
+ }
 }
 
 async function refresh(){
-try{
-const state = await api('/music/api/state');
-updateUI(state);
-}catch(e){
-console.error(e);
-}
+ try{ updateUI(await api('/music/api/state')); }
+ catch(e){ $('statusText').textContent = 'связь потеряна'; }
 }
 
-// Controls
-document.querySelectorAll('[data-action]').forEach(btn=>{
-btn.addEventListener('click',async()=>{
-const action = btn.dataset.action;
-btn.disabled = true;
-try{
-await api('/music/api/action',{action});
-showMsg('Done','success');
-await refresh();
-}catch(e){
-showMsg(e.message,'error');
+async function act(action, value){
+ try{
+  const r = await api('/music/api/action', value === undefined ? {action} : {action, value});
+  showMsg(r.did || 'Готово', 'success');
+  await refresh();
+ }catch(e){ showMsg(e.message, 'error'); }
 }
-btn.disabled = false;
-});
+
+document.querySelectorAll('[data-action]').forEach(btn => {
+ btn.addEventListener('click', async () => {
+  btn.disabled = true;
+  await act(btn.dataset.action);
+  btn.disabled = false;
+ });
 });
 
-// Add track
-$('addBtn').addEventListener('click',async()=>{
-const query = $('trackInput').value.trim();
-const nick = $('nickInput').value.trim();
-if(!query){showMsg('Enter track URL or name','error');return;}
-$('addBtn').disabled = true;
-$('addBtn').textContent = 'ADDING...';
-try{
-await api('/music/api/order',{query,nick:nick||'Guest'});
-$('trackInput').value = '';
-showMsg('Track added to queue','success');
-localStorage.setItem('nick',nick);
-await refresh();
-}catch(e){
-showMsg(e.message,'error');
+async function order(){
+ const query = $('trackInput').value.trim();
+ const nick = $('nickInput').value.trim();
+ if(!query){ showMsg('Напиши имя трека или вставь ссылку', 'error'); $('trackInput').focus(); return; }
+ const btn = $('addBtn');
+ btn.disabled = true; btn.textContent = 'Ставим…';
+ try{
+  const r = await api('/music/api/order', {query, nick: nick || 'гость'});
+  $('trackInput').value = '';
+  showMsg(r.did || 'Трек в очереди', 'success');
+  if(nick) localStorage.setItem('nick', nick);
+  await refresh();
+ }catch(e){ showMsg(e.message, 'error'); }
+ btn.disabled = false; btn.textContent = 'В очередь';
 }
-$('addBtn').disabled = false;
-$('addBtn').textContent = 'ADD TO QUEUE';
-});
 
-// Volume
-$('volSlider').addEventListener('input',()=>{
-const v = $('volSlider').value;
-$('volValue').textContent = v+'%';
-});
-$('volSlider').addEventListener('change',async()=>{
-try{
-await api('/music/api/action',{action:'volume',value:Number($('volSlider').value)});
-}catch(e){
-showMsg(e.message,'error');
-}
-});
+$('addBtn').addEventListener('click', order);
+$('trackInput').addEventListener('keydown', e => { if(e.key === 'Enter') order(); });
+$('volSlider').addEventListener('change', () => act('volume', Number($('volSlider').value)));
+$('volSlider').addEventListener('input', () => { $('volValue').textContent = $('volSlider').value + '%'; });
 
-// Audio settings (visual only for now)
-['bass','treble','speed'].forEach(name=>{
-const slider = $(name+'Slider');
-const value = $(name+'Value');
-slider.addEventListener('input',()=>{
-let v = slider.value;
-if(name==='speed') v = v+'x';
-value.textContent = v;
-});
-});
+const saved = localStorage.getItem('nick');
+if(saved) $('nickInput').value = saved;
 
-// Load saved nick
-const savedNick = localStorage.getItem('nick');
-if(savedNick) $('nickInput').value = savedNick;
-
-// Auto refresh
 refresh();
-refreshTimer = setInterval(refresh,3000);
-document.addEventListener('visibilitychange',()=>{
-if(document.hidden){
-if(refreshTimer) clearInterval(refreshTimer);
-refreshTimer = null;
-}else if(!refreshTimer){
-refresh();
-refreshTimer = setInterval(refresh,3000);
-}
+refreshTimer = setInterval(refresh, 3000);
+document.addEventListener('visibilitychange', () => {
+ if(document.hidden){ clearInterval(refreshTimer); refreshTimer = null; }
+ else if(!refreshTimer){ refresh(); refreshTimer = setInterval(refresh, 3000); }
 });
 </script>
 </body></html>
