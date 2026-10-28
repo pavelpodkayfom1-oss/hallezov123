@@ -358,7 +358,7 @@ class Dates(commands.Cog):
         if not getattr(self.bot, "_dates_view_added", False):
             self.bot.add_view(DatesView())
             self.bot._dates_view_added = True
-        if not self.daily.is_beating():
+        if not self.daily.is_running():
             self.daily.change_interval(minutes=5)
             self.daily.start()
 
@@ -426,7 +426,7 @@ class Dates(commands.Cog):
                     color_key="warning_color")
 
     @commands.slash_command(name="даты", description="Календарь семьи: ДР, стаж, события",
-                            dm_permission=False)
+                            contexts=disnake.InteractionContextTypes(guild=True))
     async def dates_panel(self, inter: disnake.ApplicationCommandInteraction):
         embed = await _panel(inter.bot, inter.guild)
         await inter.channel.send(embed=embed, view=DatesView())

@@ -190,12 +190,12 @@ class Streams(commands.Cog):
         if not getattr(self.bot, "_streams_view_added", False):
             self.bot.add_view(StreamsView())
             self.bot._streams_view_added = True
-        if not self.watch.is_beating():
+        if not self.watch.is_running():
             self.watch.change_interval(seconds=CHECK_SECONDS)
             self.watch.start()
 
     @commands.slash_command(name="стримы", description="Панель авто-анонсов Twitch-стримов",
-                            dm_permission=False,
+                            contexts=disnake.InteractionContextTypes(guild=True),
                             default_member_permissions=disnake.Permissions(manage_guild=True))
     async def streams_panel(self, inter: disnake.ApplicationCommandInteraction):
         await inter.channel.send(embed=await _panel(inter.bot, inter.guild), view=StreamsView())

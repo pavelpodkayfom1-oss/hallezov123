@@ -146,7 +146,7 @@ class Reminders(commands.Cog):
         if not getattr(self.bot, "_rem_view_added", False):
             self.bot.add_view(ReminderActions("__warmup__"))
             self.bot._rem_view_added = True
-        if not self.tick.is_beating():
+        if not self.tick.is_running():
             self.tick.change_interval(seconds=30)
             self.tick.start()
 
@@ -192,12 +192,12 @@ class Reminders(commands.Cog):
             pass
 
     @commands.slash_command(name="напомни", description="Напомнить мне в ЛС о чём-то",
-                            dm_permission=False)
+                            contexts=disnake.InteractionContextTypes(guild=True))
     async def remind_me(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_modal(ReminderModal())
 
     @commands.slash_command(name="напоминания", description="Мои напоминания и отмена",
-                            dm_permission=False)
+                            contexts=disnake.InteractionContextTypes(guild=True))
     async def my_reminders(self, inter: disnake.ApplicationCommandInteraction):
         rows = _mine(_load(), inter.author.id)
         view = disnake.ui.View(timeout=None)

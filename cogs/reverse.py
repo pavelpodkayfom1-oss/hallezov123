@@ -184,7 +184,7 @@ class Reverse(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.slash_command(name="reverse", dm_permission=False,
+    @commands.slash_command(name="reverse", contexts=disnake.InteractionContextTypes(guild=True),
                             description="Откатить настройки, тексты и базу на шаг назад")
     async def reverse(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter):

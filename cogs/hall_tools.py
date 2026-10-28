@@ -59,7 +59,9 @@ ROSTER_ROLE_SIGNS = (
 )
 ROSTER_ROLE_DEFAULT = ("hz_joobicat", "hz_bluecrewmate", "hz_bluetick")
 ROSTER_WARN = ("hz_animatedarrowred", "hz_info")             # знак у поля «не влезло»
-ROSTER_MAX_ROLES = 40           # сколько ролей авто-список может показать
+ROSTER_MAX_ROLES = 120          # сколько ролей авто-список может разобрать: на RP-сервере
+                                # ранги семьи легко оказываются ниже 40 служебных и цветовых
+                                # ролей, и тогда состав «исчезал» целиком
 ROSTER_FLUSH_DELAY = 20         # секунд ожидания после смены ролей: пачим залпом, без спама правками
 
 SETTINGS_PATH = os.path.join(
@@ -1006,7 +1008,7 @@ class HallTools(commands.Cog):
         await send_log(self.bot, e)
 
     # ── /уволить ──
-    @commands.slash_command(name="уволить", description="Уволить участника из семьи", dm_permission=False)
+    @commands.slash_command(name="уволить", description="Уволить участника из семьи", contexts=disnake.InteractionContextTypes(guild=True))
     async def fire(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -1075,7 +1077,7 @@ class HallTools(commands.Cog):
         await inter.edit_original_response(content="\n".join([summary] + notes))
 
     # ── /отпуск ──
-    @commands.slash_command(name="отпуск", description="Подать заявку на отпуск / неактив", dm_permission=False)
+    @commands.slash_command(name="отпуск", description="Подать заявку на отпуск / неактив", contexts=disnake.InteractionContextTypes(guild=True))
     async def leave(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -1131,7 +1133,7 @@ class HallTools(commands.Cog):
             embed=note_embed(f"✅ Заявка #{leave_id} отправлена руководству. Ответ придёт в личные сообщения 🌴"), ephemeral=True
         )
 
-    @commands.slash_command(name="отпуск-список", description="Кто сейчас в отпуске", dm_permission=False)
+    @commands.slash_command(name="отпуск-список", description="Кто сейчас в отпуске", contexts=disnake.InteractionContextTypes(guild=True))
     async def leave_list(self, inter: disnake.ApplicationCommandInteraction):
         if not can_manage(inter.author):
             await inter.response.send_message(embed=note_embed("❌ Нет прав."), ephemeral=True)
@@ -1146,7 +1148,7 @@ class HallTools(commands.Cog):
         e = make_embed("🌴 Сейчас в отпуске", "\n".join(lines)[:4000])
         await inter.response.send_message(embed=e, ephemeral=True)
 
-    @commands.slash_command(name="афк-список", description="Кто сейчас в статусе АФК", dm_permission=False)
+    @commands.slash_command(name="афк-список", description="Кто сейчас в статусе АФК", contexts=disnake.InteractionContextTypes(guild=True))
     async def afk_list(self, inter: disnake.ApplicationCommandInteraction):
         if not can_manage(inter.author):
             await inter.response.send_message(embed=note_embed("❌ Нет прав."), ephemeral=True)
@@ -1171,7 +1173,7 @@ class HallTools(commands.Cog):
         return bool(row)
 
     # ── /hall ──
-    @commands.slash_command(name="hall", description=f"Панель настроек {brand_name()}", dm_permission=False)
+    @commands.slash_command(name="hall", description=f"Панель настроек {brand_name()}", contexts=disnake.InteractionContextTypes(guild=True))
     async def hall(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter.author):
             await inter.response.send_message(embed=note_embed("❌ Только для администрации."), ephemeral=True)
@@ -1182,7 +1184,7 @@ class HallTools(commands.Cog):
 
     # ── Аудит эмодзи ──
     @commands.slash_command(name="hz_emojis", description="Какие эмодзи пака видит бот на этом сервере",
-                            dm_permission=False)
+                            contexts=disnake.InteractionContextTypes(guild=True))
     async def hz_emojis(self, inter: disnake.ApplicationCommandInteraction):
         """Служебная проверка стиля: id эмодзи меняются при каждой загрузке пака, а имя, которого
         на сервере нет, молча исчезает из текста. Здесь видно, какими знаками можно пользоваться.
@@ -1228,6 +1230,18 @@ class HallTools(commands.Cog):
                 continue  # все его носители уже показаны выше — лишняя секция не нужна
             seen.update(m.id for m in members)
             sections.append((title, members))
+        # В авто-режиме человек не должен исчезать молча: у рольного состава бывает две
+        # причины выпасть — роль попала в исключения или не доехала до среза в 40 ролей.
+        # Тогда человек уходит в «Вне списка», и по этому блоку видно, что именно отвалилось.
+        if auto:
+            rest = sorted(
+                (m for m in guild.members
+                 if not m.bot and m.id not in seen
+                 and any(not (r.is_default() or r.managed) for r in m.roles)),
+                key=lambda m: m.display_name.lower(),
+            )
+            if rest:
+                sections.append(("Вне списка", rest))
         return sections
 
     def build_roster_embed(self, sections) -> disnake.Embed:
@@ -1242,11 +1256,16 @@ class HallTools(commands.Cog):
         name = brand_name()
         total = len({m.id for _, ms in sections for m in ms})
         marks = [brand.pick(self.bot, *tier) for tier in ROSTER_TIER]
+        head = f"Всего: **{total}**  ·  от старших к младшим  ·  обновляется само"
+        stray = sum(len(ms) for title, ms in sections if title == "Вне списка")
+        if stray:
+            head += (f"\n{stray} человек вне своей роли: её убрали из списка вручную "
+                     f"или она ниже {ROSTER_MAX_ROLES}-го места в иерархии.")
         e = make_embed(
             f"{marks[0]} Состав семьи {name}".strip(),
-            f"Всего: **{total}**  ·  от старших к младшим  ·  обновляется само",
+            head,
         )
-        spent, dropped = 0, False
+        spent, dropped, shown = 0, False, set()
         for rank, (title, members) in enumerate(sections):
             tier = marks[0] if rank == 0 else \
                 marks[1] if rank < 4 else marks[2] if rank < 8 else marks[3]
@@ -1262,11 +1281,19 @@ class HallTools(commands.Cog):
                     break
                 spent += len(chunk) + len(label)
                 e.add_field(name=label, value=chunk, inline=False)
+                shown.update(m.id for m in members[start:start + ROSTER_ROWS])
             if dropped:
                 break
-        if dropped and len(e.fields) < 25:
-            note = f"{brand.pick(self.bot, *ROSTER_WARN)} часть списка не влезла — полный состав в списке ролей сервера"
-            e.add_field(name="…", inline=False, value=note.strip())
+        if dropped:
+            # молча обрезать список нельзя: без этих людей пост выглядит так,
+            # будто состав почти пуст. Сколько не влезло — пишем явно.
+            left = len([m for _, ms in sections for m in ms if m.id not in shown])
+            note = (f"{brand.pick(self.bot, *ROSTER_WARN)} не влезло **{left}** "
+                    f"чел. — полный состав в списке ролей сервера").strip()
+            if len(e.fields) < 25:
+                e.add_field(name="…", inline=False, value=note)
+            else:
+                e.description = (e.description or "") + f"\n{note}"
         return e
 
     async def update_roster(self, guild: disnake.Guild, force: bool = False) -> bool:

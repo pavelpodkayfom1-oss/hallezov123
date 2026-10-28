@@ -1050,13 +1050,15 @@ class Treasury(commands.Cog):
         if not files:
             return
         try:
-            await review_msg.edit(files=files)
+            # edit() возвращает сообщение, собранное из ответа Discord: только в нём
+            # лежат и старые, и новые вложения (у прежнего объекта attachments не меняются)
+            review_msg = await review_msg.edit(files=files)
         except disnake.DiscordException:
             return
         st = _load()
         rep = (st["reports"] or {}).get(rid)
         if rep:
-            rep["photos"] = len(review_msg.attachments) + len(files)
+            rep["photos"] = len(review_msg.attachments)
             _save(st)
         try:
             await message.delete()

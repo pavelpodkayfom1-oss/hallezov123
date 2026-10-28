@@ -162,7 +162,7 @@ class Polls(commands.Cog):
 
     @commands.Cog.listener()
     async def on_ready(self):
-        if not self.close_due.is_beating():
+        if not self.close_due.is_running():
             self.close_due.change_interval(seconds=30)
             self.close_due.start()
 
@@ -178,13 +178,13 @@ class Polls(commands.Cog):
         print(f"[polls] цикл закрытия: {error}")
 
     @commands.slash_command(name="опрос", description="Создать опрос с кнопками",
-                            dm_permission=False,
+                            contexts=disnake.InteractionContextTypes(guild=True),
                             default_member_permissions=disnake.Permissions(manage_messages=True))
     async def poll_new(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_modal(PollModal())
 
     @commands.slash_command(name="опросы", description="Активные опросы семьи",
-                            dm_permission=False)
+                            contexts=disnake.InteractionContextTypes(guild=True))
     async def poll_list(self, inter: disnake.ApplicationCommandInteraction):
         polls = [p for p in _upcoming(_load()) if str(p.get("guild", "")) == str(inter.guild.id)]
         rows = []

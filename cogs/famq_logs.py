@@ -501,7 +501,7 @@ class FamLogs(commands.Cog):
         return inter.author.id in read_json(BASE / "config.json").get("admin_user_ids", [])
 
     @commands.slash_command(name="logs", description="Настройка логов семьи",
-                            default_member_permissions=disnake.Permissions(manage_guild=True), dm_permission=False)
+                            default_member_permissions=disnake.Permissions(manage_guild=True), contexts=disnake.InteractionContextTypes(guild=True))
     async def logs(self, inter: disnake.ApplicationCommandInteraction):
         pass
 
