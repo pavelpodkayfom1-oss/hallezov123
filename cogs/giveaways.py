@@ -85,8 +85,6 @@ def gw_embed(row: dict, count: int, winners: Optional[List[int]] = None, ended: 
         e.description = f"Розыгрыш официально закрыт. <t:{row['end_ts']}:R>"
     if art_id:
         e.set_image(url=f"attachment://sbor_{art_id}.jpg")
-    elif banner:
-        e.set_image(url=f"attachment://{BANNER_NAME}")
     cond = []
     if row["min_rank"]: cond.append(f"🎖️ Ранг: **{row['min_rank']}**+")
     if row["min_voice_hours"]: cond.append(f"🎙️ Войс: **{row['min_voice_hours']}ч**+")
