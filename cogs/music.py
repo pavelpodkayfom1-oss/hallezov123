@@ -156,6 +156,9 @@ def _playlists_text(data: dict) -> str:
     return "🎼 Плейлисты семьи\n" + "\n".join(lines)
 
 
+_LINK_RE = re.compile(r"^https?://\S+$", re.I)
+
+
 def _stem_to_path(stem: str):
     """Путь к треку из плейлиста, если файл до сих пор в библиотеке."""
     want = str(stem or "").strip().lower()
@@ -481,16 +484,19 @@ class PlaylistModal(disnake.ui.Modal):
 
 
 class MusicModal(disnake.ui.Modal):
+    """Форма заказа. Label поля держим до 45 символов: Discord отвечает 400 и кнопка
+    «Заказать» молча не открывается — так и было с прошлой длинной подписью."""
+
     def __init__(self):
         super().__init__(
-            title="🎧 Какую музыку включить?",
+            title="Какую музыку включить?",
             custom_id="music_modal",
             components=[
                 disnake.ui.TextInput(
-                    label="Имя из библиотеки, ссылка на YouTube или на звук",
+                    label="Имя трека или ссылка",
                     custom_id="query",
                     style=disnake.TextInputStyle.short,
-                    placeholder="Например: Эксонад музыка",
+                    placeholder="Эксонад музыка · ссылка на YouTube · ссылка на звук",
                     max_length=200,
                 )
             ],
@@ -565,18 +571,75 @@ def _panel_banner(embed: disnake.Embed):
     return disnake.File(PANEL_BANNER, filename="media_banner.jpg")
 
 
-class MusicPanelView(disnake.ui.View):
-    """Постоянная панель в канале музыки: custom_id держат кнопки живыми после рестарта.
+MORE_ITEMS = [
+    ("stop", "⏹", "Остановить и почистить", "очередь забывается, авто-диджей выключается"),
+    ("add", "📥", "Закинуть трек", f"mp3 из сообщения, до {MAX_FILES_IN_MSG} за раз"),
+    ("library", "🎧", "Треки семьи", "что лежит в библиотеке"),
+    ("pl", "📖", "Плейлисты", "включить сохранённую очередь целиком"),
+    ("pl_save", "💾", "Очередь в плейлист", "сохранить то, что сейчас стоит"),
+    ("dj", "🔁", "Авто-диджей", "сам берёт случайный трек, когда очередь пуста"),
+    ("vote", "🗳", "Скип голосом", "пропускаем большинством в канале"),
+    ("cfg", "⚙️", "Настройки", "громкость, кулдаун, размер очереди, авто-выход"),
+    ("site", "🌐", "Сайт музыки", "заказ из браузера: вставил ссылку — играет"),
+    ("refresh", "🔄", "Обновить панель", "живое «сейчас играет» и свежая очередь"),
+]
 
-    Кнопки без эмодзи и почти все одним стилем: ряд = одна тема, цвет только у того,
-    что реально выделяется (заказ и выход).
+
+class MoreMenu(disnake.ui.StringSelect):
+    """Всё, что жмут реже, чем паузу: одна строка вместо трёх рядов кнопок."""
+
+    def __init__(self):
+        super().__init__(
+            custom_id="music:more",
+            placeholder="Ещё · стоп, библиотека, плейлисты, настройки",
+            min_values=1, max_values=1,
+            options=[disnake.SelectOption(label=lab, emoji=em, description=desc,
+                                          value="music:" + val)
+                     for val, em, lab, desc in MORE_ITEMS],
+        )
+
+    async def callback(self, inter: disnake.MessageInteraction):
+        cog = inter.bot.get_cog("Music")
+        what = self.values[0].partition(":")[2]
+        if what == "stop":
+            await cog.stop_all(inter)
+        elif what == "add":
+            await cog.ask_file(inter)
+        elif what == "library":
+            await cog.show_library(inter)
+        elif what == "pl":
+            await cog.show_playlists(inter)
+        elif what == "pl_save":
+            await cog.start_playlist_save(inter)
+        elif what == "dj":
+            await cog.toggle_dj(inter)
+        elif what == "vote":
+            await cog.vote_skip(inter)
+        elif what == "cfg":
+            await cog.show_settings(inter)
+        elif what == "site":
+            await cog.say_site(inter)
+        elif what == "refresh":
+            await inter.response.edit_message(embed=cog._panel_embed(inter.guild),
+                                              view=MusicPanelView())
+        else:
+            await inter.response.defer(ephemeral=True)
+
+
+class MusicPanelView(disnake.ui.View):
+    """Панель музыки в канале: три ряда вместо шести рядов кнопок.
+
+    Ряд 0 — как начать, ряд 1 — пульт того, что играет, ряд 2 — редкое в одном
+    выпадающем списке. custom_id держат кнопки живыми после рестарта. Эмодзи на
+    кнопках unicode: серверные бренд-эмодзи в кнопках не рисуются.
     """
 
     def __init__(self, bot=None):
         super().__init__(timeout=None)
+        self.add_item(MoreMenu())
 
-    # ---------- ряд 1: заказ ----------
-    @disnake.ui.button(label="Заказать", style=disnake.ButtonStyle.primary,
+    # ---------- ряд 1: начать ----------
+    @disnake.ui.button(label="Заказать", emoji="🎵", style=disnake.ButtonStyle.primary,
                        custom_id="music:play", row=0)
     async def play(self, button, inter: disnake.MessageInteraction):
         if not inter.author.voice or not inter.author.voice.channel:
@@ -589,7 +652,7 @@ class MusicPanelView(disnake.ui.View):
                 ephemeral=True)
         await inter.response.send_modal(MusicModal())
 
-    @disnake.ui.button(label="В войс", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="В войс", emoji="🎧", style=disnake.ButtonStyle.secondary,
                        custom_id="music:join", row=0)
     async def join(self, button, inter: disnake.MessageInteraction):
         cog: "Music" = inter.bot.get_cog("Music")
@@ -606,7 +669,7 @@ class MusicPanelView(disnake.ui.View):
                       f"{meg}  Жму «Заказать» — или напиши имя трека в канале"),
             view=TalkView(inter.bot))
 
-    @disnake.ui.button(label="Выйти", style=disnake.ButtonStyle.danger,
+    @disnake.ui.button(label="Выйти", emoji="🚪", style=disnake.ButtonStyle.danger,
                        custom_id="music:leave", row=0)
     async def leave(self, button, inter: disnake.MessageInteraction):
         cog: "Music" = inter.bot.get_cog("Music")
@@ -619,8 +682,8 @@ class MusicPanelView(disnake.ui.View):
                       f"{_e(inter.bot, 'hz_pcicon', '🎧')}  Голос выключен, очередь забыта."),
             ephemeral=True)
 
-    # ---------- ряд 2: что играет ----------
-    @disnake.ui.button(label="Пауза", style=disnake.ButtonStyle.secondary,
+    # ---------- ряд 2: пульт ----------
+    @disnake.ui.button(label="Пауза", emoji="⏯", style=disnake.ButtonStyle.secondary,
                        custom_id="music:pause", row=1)
     async def pause(self, button, inter: disnake.MessageInteraction):
         cog: "Music" = inter.bot.get_cog("Music")
@@ -643,7 +706,7 @@ class MusicPanelView(disnake.ui.View):
                        "закажи трек кнопкой «Заказать».")
         await inter.response.send_message(embed=emb, ephemeral=True)
 
-    @disnake.ui.button(label="Скип", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Скип", emoji="⏭", style=disnake.ButtonStyle.secondary,
                        custom_id="music:skip", row=1)
     async def skip(self, button, inter: disnake.MessageInteraction):
         cog: "Music" = inter.bot.get_cog("Music")
@@ -663,78 +726,20 @@ class MusicPanelView(disnake.ui.View):
             emb = _err(inter.bot, "НЕЧЕГО ПРОПУСКАТЬ", "⏭  Сейчас ничего не играет.")
         await inter.response.send_message(embed=emb, ephemeral=True)
 
-    @disnake.ui.button(label="Стоп", style=disnake.ButtonStyle.secondary,
-                       custom_id="music:stop", row=1)
-    async def stop(self, button, inter: disnake.MessageInteraction):
-        cog: "Music" = inter.bot.get_cog("Music")
-        vc = await cog.check_control(inter)
-        if not vc:
-            return
-        p = cog.get_player(inter.guild)
-        p.queue.clear()
-        p.dj = False
-        p.votes.clear()
-        if vc.is_playing() or vc.is_paused():
-            vc.stop()
-        await inter.response.send_message(
-            embed=_ok(inter.bot, "СТОП",
-                      f"⏹  Очередь очищена\n\n"
-                      f"{_e(inter.bot, 'pinkghost', '🔁')}  Авто-диджей выключен, "
-                      "иначе он бы сразу подставил случайный трек."),
-            ephemeral=True)
-
-    @disnake.ui.button(label="Очередь", style=disnake.ButtonStyle.secondary,
+    @disnake.ui.button(label="Очередь", emoji="📜", style=disnake.ButtonStyle.secondary,
                        custom_id="music:queue", row=1)
     async def queue(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").show_queue(inter)
 
-    @disnake.ui.button(label="Скип голосом", style=disnake.ButtonStyle.secondary,
-                       custom_id="music:vote", row=1)
-    async def vote(self, button, inter: disnake.MessageInteraction):
-        await inter.bot.get_cog("Music").vote_skip(inter)
-
-    # ---------- ряд 3: громкость, диджей, настройки ----------
-    @disnake.ui.button(label="Тише", style=disnake.ButtonStyle.secondary,
-                       custom_id="music:vol_down", row=2)
+    @disnake.ui.button(label="Тише", emoji="🔉", style=disnake.ButtonStyle.secondary,
+                       custom_id="music:vol_down", row=1)
     async def vol_down(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").change_volume(inter, -0.1)
 
-    @disnake.ui.button(label="Громче", style=disnake.ButtonStyle.secondary,
-                       custom_id="music:vol_up", row=2)
+    @disnake.ui.button(label="Громче", emoji="🔊", style=disnake.ButtonStyle.secondary,
+                       custom_id="music:vol_up", row=1)
     async def vol_up(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").change_volume(inter, +0.1)
-
-    @disnake.ui.button(label="Диджей", style=disnake.ButtonStyle.secondary,
-                       custom_id="music:dj", row=2)
-    async def dj(self, button, inter: disnake.MessageInteraction):
-        await inter.bot.get_cog("Music").toggle_dj(inter)
-
-    @disnake.ui.button(label="Настройки", style=disnake.ButtonStyle.secondary,
-                       custom_id="music:cfg", row=2)
-    async def cfg(self, button, inter: disnake.MessageInteraction):
-        await inter.bot.get_cog("Music").show_settings(inter)
-
-    # ---------- ряд 4: библиотека и плейлисты ----------
-    @disnake.ui.button(label="Закинуть", style=disnake.ButtonStyle.secondary,
-                       custom_id="music:add", row=3)
-    async def add(self, button, inter: disnake.MessageInteraction):
-        await inter.bot.get_cog("Music").ask_file(inter)
-
-    @disnake.ui.button(label="Треки", style=disnake.ButtonStyle.secondary,
-                       custom_id="music:library", row=3)
-    async def library(self, button, inter: disnake.MessageInteraction):
-        await inter.bot.get_cog("Music").show_library(inter)
-
-    @disnake.ui.button(label="Плейлисты", style=disnake.ButtonStyle.secondary,
-                       custom_id="music:pl", row=3)
-    async def playlists(self, button, inter: disnake.MessageInteraction):
-        await inter.bot.get_cog("Music").show_playlists(inter)
-
-    @disnake.ui.button(label="В плейлист", style=disnake.ButtonStyle.secondary,
-                       custom_id="music:pl_save", row=3)
-    async def pl_save(self, button, inter: disnake.MessageInteraction):
-        await inter.bot.get_cog("Music").start_playlist_save(inter)
-
 
 class MusicSettingsView(disnake.ui.View):
     """Экран настроек: каждая кнопка шагает значение и сразу перерисовывает экран."""
@@ -985,7 +990,7 @@ class Music(commands.Cog):
             return await inter.followup.send(
                 embed=_err(self.bot, "ОЧЕРЕДЬ ПОЛНАЯ",
                            f"{_e(self.bot, 'hz_trainicon', '📜')}  Стоит {limit} треков — "
-                           "почисти кнопкой «Стоп»."),
+                           "«Остановить» — в списке «Ещё»."),
                 ephemeral=True)
         added, missing = [], []
         for stem in tracks[:room]:
@@ -1087,12 +1092,76 @@ class Music(commands.Cog):
                       f"⏭  В канале {len(listeners)} слушают — нужно большинство."),
             ephemeral=True)
 
+    def _text_order(self, message) -> str:
+        """Сообщение в канале музыки — это заказ, если в нём ссылка или имя из библиотеки.
+
+        Порядок держит человека в том же голосовом канале, где сидит бот, и слушает
+        только тот канал, где лежит панель: обычная переписка в чате не должна
+        случайно включать музыку.
+        """
+        guild = message.guild
+        text = str(message.content or "").strip()
+        if guild is None or not (3 <= len(text) <= 200) or message.attachments:
+            return ""
+        if text.startswith(("/", "@", "!")):
+            return ""
+        p = self.players.get(guild.id)
+        ch = getattr(p, "text_channel", None) if p else None
+        if ch is None or ch.id != message.channel.id:
+            return ""
+        vc = guild.voice_client
+        if not vc or not vc.is_connected() or not vc.channel:
+            return ""
+        voice = getattr(message.author, "voice", None)
+        if not voice or not voice.channel or voice.channel.id != vc.channel.id:
+            return ""
+        if _LINK_RE.match(text) or _stem_to_path(text):
+            return text
+        return ""
+
+    async def order_text(self, message, query: str):
+        """Тот же заказ, что и кнопкой, только набором текста: без слэш-команды."""
+        guild = message.guild
+        cfg = _cfg(guild.id)
+        now = time.time()
+        wait = cfg["cooldown"] - (now - self._last_play.get(message.author.id, 0))
+        if wait > 0:
+            return await message.reply(f"⏳  Следующий заказ через {int(wait) + 1} сек",
+                                       mention_author=False)
+        p = self.get_player(guild)
+        if len(p.queue) >= cfg["queue"]:
+            return await message.reply(
+                f"📜  Очередь забита: {cfg['queue']} треков. «Остановить» — в списке «Ещё»",
+                mention_author=False)
+        self._last_play[message.author.id] = now
+        try:
+            track = await self._extract(query)
+        except Exception as e:
+            self._last_play.pop(message.author.id, None)
+            return await message.reply(f"🎧  Не нашёл: {str(e)[:120]}", mention_author=False)
+        track["requester"] = message.author.mention
+        p.queue.append(track)
+        vc = guild.voice_client
+        was_idle = not (vc and (vc.is_playing() or vc.is_paused()))
+        emb = _ok(self.bot, "ЗАКАЗ ИЗ КАНАЛА",
+                  f"### 🎵  **{track['title']}**\n\n"
+                  f"{_e(self.bot, 'hz_megaphone', '📢')}  Заказал(а) {message.author.mention}")
+        try:
+            await message.reply(embed=emb, mention_author=False)
+        except Exception:
+            pass
+        if was_idle:
+            await self._play_next(guild)
+
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot:
             return
         stamp = self._pending.get(message.author.id)
         if not stamp or stamp[0] != message.channel.id:
+            query = self._text_order(message)
+            if query:
+                await self.order_text(message, query)
             return
         if time.time() - stamp[1] > self.ASK_SECONDS:
             self._pending.pop(message.author.id, None)
@@ -1182,7 +1251,8 @@ class Music(commands.Cog):
             return {"error": "Пустой запрос — вставь ссылку или назови трек"}
         p = self.get_player(guild)
         if len(p.queue) >= cfg["queue"]:
-            return {"error": f"Очередь забита: {cfg['queue']} треков. Почисти кнопкой «Стоп»"}
+            return {"error": f"Очередь забита: {cfg['queue']} треков. "
+                             "Попроси штаб нажать «Остановить» в списке «Ещё»"}
         who = "web:" + (key or nick or "?")
         now = time.time()
         wait = cfg["cooldown"] - (now - self._last_play.get(who, 0))
@@ -1414,7 +1484,7 @@ class Music(commands.Cog):
             return await inter.followup.send(
                 embed=_err(self.bot, "ОЧЕРЕДЬ ЗАБИТА",
                            f"{_e(self.bot, 'hz_trainicon', '📜')}  Стоит {cfg['queue']} треков — "
-                           "почисти кнопкой «Стоп»."),
+                           "«Остановить» — в списке «Ещё»."),
                 ephemeral=True)
         vc = await self.ensure_voice(inter)
         if not vc:
@@ -1564,10 +1634,45 @@ class Music(commands.Cog):
             except Exception:
                 pass
 
+    async def stop_all(self, inter):
+        """Очистить очередь и заглушить авто-диджей: пункт из списка «Ещё»."""
+        vc = await self.check_control(inter)
+        if not vc:
+            return
+        p = self.get_player(inter.guild)
+        p.queue.clear()
+        p.dj = False
+        p.votes.clear()
+        if vc.is_playing() or vc.is_paused():
+            vc.stop()
+        _cfg_save(inter.guild.id, {"dj": False})
+        await inter.response.send_message(
+            embed=_ok(self.bot, "СТОП",
+                      f"⏹  Очередь очищена\n\n"
+                      f"{_e(self.bot, 'pinkghost', '🔁')}  Авто-диджей выключен, "
+                      "иначе он бы сразу подставил случайный трек."),
+            ephemeral=True)
+
+    async def say_site(self, inter):
+        pc = _e(self.bot, "hz_pcicon", "🎧")
+        url = (os.getenv("MUSIC_URL") or load_config().get("music_site_url") or "").strip()
+        if url:
+            emb = _ok(self.bot, "САЙТ МУЗЫКИ",
+                      f"### {pc}  {url}\n\n"
+                      f"{_e(self.bot, 'hz_megaphone', '📢')}  Открыт без пароля: вставил "
+                      "ссылку или имя — трек в общей очереди.")
+        else:
+            emb = _err(self.bot, "ССЫЛКА НЕ НАСТРОЕНА",
+                       f"{_e(self.bot, 'hz_warn', '⚠️')}  Сайт музыки работает на порту "
+                       "8081, но своего адреса у него ещё нет. Добавь `MUSIC_URL` в `.env` "
+                       "на хостинге — и здесь появится ссылка.")
+        await inter.response.send_message(embed=emb, ephemeral=True)
+
     # ---------- команды ----------
     @commands.slash_command(name="music_panel", description="Отправить панель музыки в этот канал",
                             default_member_permissions=disnake.Permissions(manage_guild=True))
     async def music_panel(self, inter: disnake.ApplicationCommandInteraction):
+        self.get_player(inter.guild).text_channel = inter.channel
         emb = self._panel_embed(inter.guild)
         await inter.channel.send(embed=emb, view=MusicPanelView(self.bot),
                                  file=_panel_banner(emb))
@@ -1576,6 +1681,24 @@ class Music(commands.Cog):
                       f"{_e(self.bot, 'hz_megaphone', '📢')}  Кнопки живут в канале и после "
                       "рестарта бота."),
             ephemeral=True)
+
+    def _now_line(self, guild) -> str:
+        """Живая строка панели: что играет сейчас. Обновляется кнопкой, а не циклом."""
+        pc = _e(self.bot, "hz_pcicon", "🎧")
+        train = _e(self.bot, "hz_trainicon", "📜")
+        ghost = _e(self.bot, "pinkghost", "🔁")
+        vc = guild.voice_client if guild else None
+        if not vc or not vc.is_connected():
+            return f"{pc}  Бот не в голосовом — нажмите «В войс»"
+        p = self.players.get(guild.id)
+        cur = (p.current if p else None) or {}
+        vol = int(round((p.volume if p else _cfg(guild.id)["volume"] / 100.0) * 100))
+        state = "⏸ пауза" if vc.is_paused() else ("▶ играет" if vc.is_playing() else "🔇 тишина")
+        title = str(cur.get("title") or "очередь пуста")[:70]
+        dj = "вкл" if (p and p.dj) else "выкл"
+        return (f"{state}  **{title}**\n"
+                f"{train}  очередь {len(p.queue) if p else 0}  ·  {ghost}  диджей {dj}  ·  "
+                f"🎚  {vol}%")
 
     def _panel_embed(self, guild) -> disnake.Embed:
         pc = _e(self.bot, "hz_pcicon", "🎧")
@@ -1587,18 +1710,21 @@ class Music(commands.Cog):
         bot_i = _e(self.bot, "hz_botv2", "🤖")
         crown = _e(self.bot, "red_crown", "👑")
         sections = [
+            (f"{pc}  СЕЙЧАС", self._now_line(guild)),
             (f"{meg}  ЗАКАЗ",
-             f"{pc}  Зайди в голос и жми «Заказать» — имя из библиотеки семьи или прямая "
-             "ссылка на звук"),
+             f"{pc}  «Заказать» — имя из библиотеки, ссылка на YouTube или на звук. "
+             "Можно и просто написать имя трека или ссылку в этом канале, стоя в голосе. "
+             "🌐  «Сайт музыки» в списке «Ещё» — то же самое из браузера, без пароля"),
             (f"{gift}  БИБЛИОТЕКА",
-             f"«Закинуть» принимает mp3 из сообщения (до {MAX_FILES_IN_MSG} за раз, "
-             f"до {MAX_TRACK_MB} МБ). Файл, положенный во вкладку Files рядом с `main.py`, "
-             "тоже играется сразу"),
-            (f"{train}  УПРАВЛЕНИЕ",
-             "пауза · скип · стоп · громкость · «Скип голосом» — решает большинство "
-             "в канале, а не один нахал"),
+             f"«Закинуть трек» в списке «Ещё» принимает mp3 из сообщения (до "
+             f"{MAX_FILES_IN_MSG} за раз, до {MAX_TRACK_MB} МБ). Файл, положенный во "
+             "вкладку Files рядом с `main.py`, тоже играется сразу"),
+            (f"{train}  ПУЛЬТ",
+             "пауза · скип · тише · громче · очередь — вторым рядом. Стоп, «Скип "
+             "голосом», плейлисты, авто-диджей и настройки — в списке «Ещё», чтобы "
+             "не искать нужную кнопку среди шестнадцати"),
             (f"{book}  ПЛЕЙЛИСТЫ",
-             f"«В плейлист» сохраняет собранную очередь, «Плейлисты» включает её "
+             f"«Очередь в плейлист» сохраняет собранное, «Плейлисты» включает её "
              "одним нажатием"),
             (f"{ghost}  АВТО-ДИДЖЕЙ И НАСТРОЙКИ",
              f"кончилась очередь — диджей сам берёт случайный трек; {bot_i} «Настройки» "
