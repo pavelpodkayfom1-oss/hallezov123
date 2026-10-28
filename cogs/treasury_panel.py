@@ -100,6 +100,36 @@ def _warn(bot=None, guild=None, head: str = "ТАК НЕ ВЫЙДЕТ", text: st
     return note_embed(text, "error", title=f"{warn}  {head}", guild=guild)
 
 
+# id slash-команды «отчёт»: чип в сообщении клиент рисует кликабельным, и это единственный
+# способ попасть из кнопки в форму с полем для файла
+_CHIP_ID: dict = {}
+
+
+async def _report_chip(bot, guild) -> str:
+    """`</имя:id>` — формат, из-за которого Discord рисует в сообщении кликабельную команду.
+
+    Локальные `get_*_command_named` в disnake 2.12 читают кэш и не знают про команды, которые
+    синк зарегистрировал сам, поэтому id берём одним HTTP-запросом на сервер и держим в кэше.
+    Без id текст всё равно остаётся читаемым — `/отчёт` руками тоже находится.
+    """
+    key = int(guild.id) if guild is not None else 0
+    cid = _CHIP_ID.get(key)
+    if cid is None:
+        hit = None
+        try:
+            app = bot.application_id
+            cmds = (await bot.http.get_guild_commands(app, key) if key
+                    else await bot.http.get_global_commands(app))
+            hit = next((c for c in cmds if c.get("name") == "отчёт"), None)
+        except Exception:
+            hit = None
+        if not hit:
+            return "`/отчёт`"
+        cid = int(hit["id"])
+        _CHIP_ID[key] = cid
+    return f"</отчёт:{cid}>"
+
+
 def _need_manage(bot=None, guild=None) -> disnake.Embed:
     pencil = _e(bot, "hz_pencil", "✍️")
     bits = _e(bot, "hz_bitsicon", "💎")
@@ -200,7 +230,7 @@ def _bank_text(bot) -> str:
     )
 
 
-def _reports_text(bot) -> str:
+def _reports_text(bot, chip: str = "`/отчёт`") -> str:
     pencil = _e(bot, "hz_pencil", "✍️")
     cart = _e(bot, "hz_shoppingcart", "🛒")
     meg = _e(bot, "hz_megaphone", "📢")
@@ -217,7 +247,7 @@ def _reports_text(bot) -> str:
         f"{n[3]}  **Кому** — на кого потратили и на сколько человек\n"
         f"{n[4]}  **Детали** — всё, что стоит знать проверяющему\n\n"
         f"### 📎  СКРИНЫ\n"
-        f"Со скринами отчёт подаётся командой **`/отчёт`** — там поле «Скриншот», "
+        f"Со скринами отчёт подаётся командой {chip} — там есть поле «Скриншот», "
         f"куда можно перетащить чек или скрин перевода (до {MAX_PHOTOS} штук).\n"
         f"Кнопка **«🧾 Подать отчёт»** — это быстрая форма без файлов: после неё можно "
         f"прикрепить скрины ответом в этом канале в течение 2 минут.\n\n"
@@ -490,6 +520,19 @@ class ReportsView(disnake.ui.View):
         pass
 
 
+class ReportHowTo(disnake.ui.View):
+    """Экран после «Подать отчёт»: Discord даёт поле с файлом только в команде,
+    поэтому тут кликабельный чип `/отчёт`, а кнопкой — быстрая форма без скринов."""
+
+    def __init__(self):
+        super().__init__(timeout=600)
+
+    @disnake.ui.button(label="Форма без скринов", emoji="✍️", style=disnake.ButtonStyle.secondary,
+                       custom_id="hzkaz:new:form", row=0)
+    async def form(self, button, inter: disnake.MessageInteraction):
+        pass
+
+
 class ReviewView(disnake.ui.View):
     def __init__(self, rid: str):
         super().__init__(timeout=None)
@@ -614,7 +657,8 @@ class Treasury(commands.Cog):
             на_что: str = commands.Param(description="Статья: форма, транспорт, откат после рейда"),
             кому: str = commands.Param(description="На кого и на сколько человек"),
             детали: str = commands.Param("", description="Где брали, кто платил, почему столько"),
-            скриншот: disnake.Attachment = commands.Param(None, description="Чек или скрин перевода"),
+            скриншот: disnake.Attachment = commands.Param(
+                None, description="Прикрепи 1–3 скрина: чек или скрин перевода"),
             скриншот_2: disnake.Attachment = commands.Param(None, description="Второй скрин"),
             скриншот_3: disnake.Attachment = commands.Param(None, description="Третий скрин"),
     ) -> None:
@@ -1094,7 +1138,28 @@ class Treasury(commands.Cog):
             if not _allowed(inter, st, "manage"):
                 return await inter.response.send_message(embed=_deny(self.bot, inter.guild), ephemeral=True)
             return await inter.response.send_modal(TopUpModal())
+        if action == "new" and cid.endswith(":form"):
+            action = "new_form"
+
         if action == "new":
+            if not _allowed(inter, st, "manage"):
+                return await inter.response.send_message(
+                    embed=_need_manage(self.bot, inter.guild),
+                    ephemeral=True)
+            pencil = _e(self.bot, "hz_pencil", "✍️")
+            chip = await _report_chip(self.bot, inter.guild)
+            # чип команды клиент рисует только в тексте сообщения, в эмбеде он мог бы
+            # остаться сырым </отчёт:123...>
+            return await inter.response.send_message(
+                content=f"📎  Со скринами — вот этой командой: {chip}",
+                embed=note_embed(
+                    f"В ней есть поле для файла: чек или скрин перевода перетаскивается "
+                    f"прямо в форму (до {MAX_PHOTOS} штук).\n"
+                    f"{pencil}  **Без скринов** — быстрая форма кнопкой ниже. После неё скрины "
+                    f"можно прикрепить ответом в канал отчётов в течение 2 минут.",
+                    title=f"{pencil}  КАК СДАТЬ ОТЧЁТ", guild=inter.guild),
+                view=ReportHowTo(), ephemeral=True)
+        if action == "new_form":
             if not _allowed(inter, st, "manage"):
                 return await inter.response.send_message(
                     embed=_need_manage(self.bot, inter.guild),
