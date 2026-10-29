@@ -80,8 +80,11 @@ def _kick_text(member, note: str) -> str:
     return text
 
 
-async def _announce(guild, embed) -> bool:
-    """Куда писать: привязанный канал → канал логов киков → общий канал сервера."""
+async def _announce(guild, embed, bot=None, fallback_user: int = 0) -> bool:
+    """Куда писать: привязанный канал → канал логов киков → общий канал → в личку тому,
+    кто внёс в ЧС. Последний вариант нужен потому, что на чужом сервере (фама) каналов
+    из config.json нет, и без него бот выгоняет молча — а выглядит это как «текст не пишет».
+    """
     cid = int(_load().get("channel") or 0)
     if cid:
         channel = guild.get_channel(cid)
@@ -94,10 +97,17 @@ async def _announce(guild, embed) -> bool:
     if await core.send_log(guild, "kick", embed):
         return True
     channel = guild.system_channel
-    if channel is None:
+    if channel is not None:
+        try:
+            await channel.send(embed=embed, allowed_mentions=disnake.AllowedMentions.none())
+            return True
+        except Exception:
+            pass
+    if bot is None or not fallback_user:
         return False
     try:
-        await channel.send(embed=embed, allowed_mentions=disnake.AllowedMentions.none())
+        user = bot.get_user(fallback_user) or await bot.fetch_user(fallback_user)
+        await user.send(embed=embed, allowed_mentions=disnake.AllowedMentions.none())
         return True
     except Exception:
         return False
@@ -147,7 +157,8 @@ async def _eject(member, note: str, tries: int):
         return False, f"не вышло ({exc.__class__.__name__}): {_exc_text(exc) or 'без текста'}{hier}"
 
 
-async def _report(member, note: str, tries: int, kicked: bool, outcome: str) -> None:
+async def _report(member, note: str, tries: int, kicked: bool, outcome: str,
+                  bot=None, who: int = 0, where=None) -> None:
     text = _kick_text(member, note)
     if kicked:
         embed = card(get_text("chs_kick_title", "⛔ Чёрный список"), text, guild=member.guild)
@@ -156,7 +167,15 @@ async def _report(member, note: str, tries: int, kicked: bool, outcome: str) -> 
                               + f"{datetime.now(MSK).strftime('%d.%m.%Y %H:%M')}")
     else:
         embed = note_embed(f"{text}\n\n⚠️ Кик не прошёл: {outcome}.")
-    sent = await _announce(member.guild, embed)
+    sent = await _announce(member.guild, embed, bot, who)
+    if not sent and where is not None:
+        # писать было некуда — хотя бы тот, кто нажал кнопку, узнаёт об этом сразу
+        try:
+            await where.send(embed=note_embed(
+                "⚠️ Выгнал, но написать про это некуда: канал не привязан и писать в ЛС "
+                "не вышло. Нажми «Писать сюда» в том канале, где это нужно видеть."))
+        except Exception:
+            pass
     print(f"⛔ ЧС: {member} ({tries}) → {outcome}"
           + ("" if sent else " · писать некуда"), flush=True)
 
@@ -307,6 +326,7 @@ class Chs(commands.Cog):
 
     @chs.sub_command(name="панель", description="Отправить панель ЧС в этот канал")
     async def chs_panel(self, inter: disnake.ApplicationCommandInteraction):
+        cid = int(_load().get("channel") or 0)
         emb = card(get_text("chs_panel_title", "⛔ Чёрный список семьи"), guild=inter.guild)
         emb.description = get_text(
             "chs_panel_desc",
@@ -314,7 +334,10 @@ class Chs(commands.Cog):
             "и писать сюда.") + "\n\n" + get_text(
             "chs_panel_extra",
             "Текст при выдворении правится в редакторе панели (ключ `chs_kick_text`), "
-            "он живёт без рестарта.")
+            "он живёт без рестарта.") + "\n\n📣 " + (
+            f"пишу про ЧС в <#{cid}>" if cid else
+            get_text("chs_panel_unbound",
+                     "канал, куда писать, ещё не выбран — нажми «Писать сюда»."))
         await inter.channel.send(embed=emb, view=ChsView())
         await inter.response.send_message(embed=note_embed("✅ Панель ЧС отправлена."),
                                           ephemeral=True)
@@ -391,6 +414,13 @@ class Chs(commands.Cog):
                             len(data["list"]) - MAX_ROWS]:
                 data["list"].pop(key, None)
         _save(data)
+        # «он текст не пишет» = канал не привязан. Если его не выбрали — считаем, что это
+        # тот канал, где кнопку нажали, и говорим об этом в ответе.
+        auto_bind = 0
+        if not int(data.get("channel") or 0) and getattr(inter, "channel_id", None):
+            data["channel"] = int(inter.channel_id)
+            _save(data)
+            auto_bind = data["channel"]
         lines = [f"⛔ В ЧС: {', '.join('`' + k + '`' for k in added)}" if added else "⛔ Никого не добавил."]
         if skipped:
             lines.append(f"Уже был(и) в списке: {', '.join('`' + k + '`' for k in skipped)}")
@@ -400,17 +430,17 @@ class Chs(commands.Cog):
             why = entry.get("note") or (note or "")
             tries = int(entry.get("tries") or 0)
             kicked, outcome = await _eject(member, why, tries)
-            await _report(member, why, tries, kicked, outcome)
+            await _report(member, why, tries, kicked, outcome, inter.bot,
+                          inter.author.id, inter.channel)
             lines.append(("👌 Выгнал его прямо сейчас." if kicked
                           else f"⚠️ Он на сервере, но выгнать не вышло: {outcome}."))
         if absent:
             lines.append(get_text("chs_absent", "На этом сервере их не нашёл: ")
                          + ", ".join("`" + k + "`" for k in absent)
                          + " — выгоню при заходе.")
-        if not data.get("channel"):
-            lines.append(get_text("chs_no_channel",
-                                  "Канал для таких записей не привязан — напишу в канал логов "
-                                  "киков, а если его нет — в общий. Кнопка «Писать сюда» решает."))
+        if auto_bind:
+            lines.append(get_text("chs_auto_bind", "Канал для записей про ЧС не был выбран — "
+                             "записал этот. Кнопка «Писать сюда» меняет его."))
         await inter.response.send_message(embed=note_embed("\n".join(lines)), ephemeral=True)
 
     async def do_remove(self, inter, raw: str) -> None:
@@ -448,7 +478,8 @@ class Chs(commands.Cog):
         tries = entry["tries"]
         note = entry.get("note") or ""
         kicked, outcome = await _eject(member, note, tries)
-        await _report(member, note, tries, kicked, outcome)
+        await _report(member, note, tries, kicked, outcome, self.bot,
+                      int(entry.get("by") or 0))
 
 
 def setup(bot: commands.Bot):
