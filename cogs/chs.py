@@ -20,7 +20,7 @@ from disnake.ext import commands
 
 from utils import famq_core as core
 from utils.checks import get_text, is_admin
-from utils.embeds import card, list_embed, note_embed
+from utils.embeds import card, clip, list_embed, note_embed
 
 MSK = timezone(timedelta(hours=3))
 STATE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -72,7 +72,7 @@ def _human(who: dict) -> str:
 def _kick_text(member, note: str) -> str:
     text = get_text(
         "chs_kick_text",
-        "⛔ **{name}** — ты в чёрном списке семьи. Накуролесил и зашёл снова: "
+        "⛔ **{name}** — ты в чёрном списке семьи: {reason}. Накуролесил и зашёл снова: "
         "такое не пройдёт. {mention} Разбирайся с руководством.")
     for token, value in (("{mention}", member.mention), ("{name}", member.display_name),
                          ("{id}", str(member.id)), ("{reason}", note or "без причины")):
@@ -129,6 +129,22 @@ def _hierarchy(member) -> str:
         return ""
 
 
+async def _dm_him(member, note: str):
+    """Личка выгоняемому — строго до кика.
+
+    После выдворения общего сервера нет, и бот уже не может написать человеку: Discord
+    разрешает боту ЛС только с теми, кто с ним где-то вместе. Поэтому сначала сообщение,
+    потом кик — иначе «он текст не видел».
+    """
+    try:
+        await member.send(embed=note_embed(_kick_text(member, note)),
+                          allowed_mentions=disnake.AllowedMentions.none())
+        return True, "в личку написал"
+    except Exception as exc:
+        why = _exc_text(exc)[:90] or exc.__class__.__name__
+        return False, f"в личку не пустило ({why})"
+
+
 async def _eject(member, note: str, tries: int):
     """Выгнать и вернуть (получилось, почему). Без этого человек, который уже сидит на
     сервере, висел бы в ЧС вечно: события «зашёл» для него не будет."""
@@ -158,15 +174,18 @@ async def _eject(member, note: str, tries: int):
 
 
 async def _report(member, note: str, tries: int, kicked: bool, outcome: str,
-                  bot=None, who: int = 0, where=None) -> None:
+                  bot=None, who: int = 0, where=None, dm_note: str = "") -> None:
     text = _kick_text(member, note)
+    foot = (f"ID {member.id} · "
+            + (f"зашёл {tries} раз · " if tries else "внесён только что · ")
+            + f"{datetime.now(MSK).strftime('%d.%m.%Y %H:%M')}")
     if kicked:
         embed = card(get_text("chs_kick_title", "⛔ Чёрный список"), text, guild=member.guild)
-        embed.set_footer(text=f"ID {member.id} · "
-                              + (f"зашёл {tries} раз · " if tries else "внесён только что · ")
-                              + f"{datetime.now(MSK).strftime('%d.%m.%Y %H:%M')}")
+        # футер Discord терпит 204 символа: длинный текст ошибки сюда не просится
+        embed.set_footer(text=clip(foot + (f" · {dm_note}" if dm_note else ""), 200))
     else:
-        embed = note_embed(f"{text}\n\n⚠️ Кик не прошёл: {outcome}.")
+        embed = note_embed(f"{text}\n\n⚠️ Кик не прошёл: {outcome}."
+                           + (f"\n{dm_note}." if dm_note else ""))
     sent = await _announce(member.guild, embed, bot, who)
     if not sent and where is not None:
         # писать было некуда — хотя бы тот, кто нажал кнопку, узнаёт об этом сразу
@@ -330,8 +349,9 @@ class Chs(commands.Cog):
         emb = card(get_text("chs_panel_title", "⛔ Чёрный список семьи"), guild=inter.guild)
         emb.description = get_text(
             "chs_panel_desc",
-            "Внеси ID — и при каждом заходе на сервер бот будет выгонять этого человека "
-            "и писать сюда.") + "\n\n" + get_text(
+            "Внеси ID: бот выгонит его — сразу, если он уже на сервере, иначе при заходе. "
+            "Ему текст улетает в личку (до кика, потом бот уже не сможет написать), "
+            "а запись ложится в канал ниже.") + "\n\n" + get_text(
             "chs_panel_extra",
             "Текст при выдворении правится в редакторе панели (ключ `chs_kick_text`), "
             "он живёт без рестарта.") + "\n\n📣 " + (
@@ -429,11 +449,13 @@ class Chs(commands.Cog):
             entry = data["list"].get(str(member.id)) or {}
             why = entry.get("note") or (note or "")
             tries = int(entry.get("tries") or 0)
+            _dm_ok, dm_note = await _dm_him(member, why)
             kicked, outcome = await _eject(member, why, tries)
             await _report(member, why, tries, kicked, outcome, inter.bot,
-                          inter.author.id, inter.channel)
-            lines.append(("👌 Выгнал его прямо сейчас." if kicked
-                          else f"⚠️ Он на сервере, но выгнать не вышло: {outcome}."))
+                          inter.author.id, inter.channel, dm_note)
+            lines.append(("👌 Выгнал его прямо сейчас" if kicked
+                          else f"⚠️ Он на сервере, но выгнать не вышло: {outcome}")
+                         + f" · {dm_note}.")
         if absent:
             lines.append(get_text("chs_absent", "На этом сервере их не нашёл: ")
                          + ", ".join("`" + k + "`" for k in absent)
@@ -477,9 +499,10 @@ class Chs(commands.Cog):
 
         tries = entry["tries"]
         note = entry.get("note") or ""
+        _dm_ok, dm_note = await _dm_him(member, note)
         kicked, outcome = await _eject(member, note, tries)
         await _report(member, note, tries, kicked, outcome, self.bot,
-                      int(entry.get("by") or 0))
+                      int(entry.get("by") or 0), None, dm_note)
 
 
 def setup(bot: commands.Bot):
