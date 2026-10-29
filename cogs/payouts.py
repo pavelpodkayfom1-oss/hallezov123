@@ -29,6 +29,8 @@ ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 
 BANK_BANNER = "payouts_bank.jpg"
 CLAIM_BANNER = "payouts_requests.jpg"
+# Своя полоска цвета: с общей красной карточкой выплаты читались как казна.
+ACCENT = "pay_color"
 
 CATEGORY = "💸 ВЫПЛАТЫ СЕМЬИ"
 CHANNELS = {
@@ -62,124 +64,92 @@ def _T(bot, key: str, default: str, **subs) -> str:
     return text
 
 
-T_PANEL_TITLE = ":red_crown:  ВЫПЛАТЫ СЕМЬИ"
+T_PANEL_TITLE = "💸  ВЫПЛАТЫ"
 T_PANEL_INTRO = (
-    "*:red_crown:  Взял дело — сделал — получил  :red_crown:*\n"
-    ":hz_house:  Одно нажатие поднимает ветку: фонд, заявки, приёмка и логи.\n"
-    ":hz_pencil:  Дальше — выбрать роль приёмки и задать фонд, кнопки ниже."
+    "Взял дело — сделал — подал заявку — получил.\n"
+    "Подниму четыре канала: фонд, заявки, приёмка и логи."
 )
 
-T_BANK_HEAD = ":red_crown:  ФОНД ВЫПЛАТ"
-T_CLAIMS_HEAD = ":hz_pencil:  ЗАЯВКИ НА ВЫПЛАТУ"
-T_REVIEW_HEAD = ":hz_moderator:  ПРИЁМКА ВЫПЛАТ"
-T_LOGS_HEAD = ":hz_book:  ЛОГИ ВЫПЛАТ"
+T_BANK_HEAD = "💸  ФОНД ВЫПЛАТ"
+T_CLAIMS_HEAD = "🧾  ЗАЯВКИ НА ВЫПЛАТУ"
+T_REVIEW_HEAD = "✅  ПРИЁМКА ВЫПЛАТ"
+T_LOGS_HEAD = "📜  ЛОГИ ВЫПЛАТ"
 
 T_BANK_TEXT = (
-    "*:red_crown:  Фонд не пустеет молча  :red_crown:*\n\n"
-    "### :hz_bitsicon:  ЧТО ЗДЕСЬ\n"
-    ":number1:  Деньги на выплаты за дела: зарплата, награды за ивенты, помощь своим\n"
-    ":number2:  Каждая выплата идёт через **заявку** и **приёмку**\n"
-    ":number3:  Остаток фонда видят только **свои** — управление выплатами и приёмка\n\n"
-    "### :hz_pcicon:  КНОПКИ\n"
-    ":hz_bitsicon:  **💸 Фонд выплат** — сколько есть сейчас\n"
-    ":hz_book:  **📜 Книга выплат** — кому, сколько и за что\n"
-    ":hz_gifticon:  **➕ Пополнить** — записать взнос, он тоже остаётся в книге\n\n"
-    "> :hz_house:  Заявка подаётся в канале ниже. Деньги уходят **только после приёмки**."
+    "Деньги на дела семьи: зарплата, награды, помощь своим.\n"
+    "Уходят только когда приёмка жмёт «Выплатить».\n\n"
+    "💸 **Фонд** — сколько есть сейчас\n"
+    "📜 **Книга** — кому, сколько и за что\n"
+    "➕ **Пополнить** — записать взнос"
 )
 
 T_CLAIMS_TEXT = (
-    "*:hz_pencil:  Сделал дело — забирай деньги  :hz_pencil:*\n\n"
-    "### :hz_shoppingcart:  КАК ОТДАТЬ ЗАЯВКУ\n"
-    ":number1:  Нажми **«🧾 Подать заявку»** — откроется форма\n"
-    ":number2:  **Твой ник** — как тебя зовут в игре, по нему и платим\n"
-    ":number3:  **Что сделали** — дело целиком: что брали, кому отдали, сколько времени ушло\n"
-    ":number4:  **Сколько платим** — сумма, которую просишь\n"
-    ":number5:  **Поступило в баланс** — сколько это дело принесло семье: можно пропустить\n\n"
-    "### 📎  СКРИНЫ\n"
-    "Перетаскиваются прямо в форму, до 3 файлов: скрин перевода, итог сделки, фото товара.\n"
-    "Приёмка видит их сразу на карточке. Если под рукой ничего нет — прикрепи скрины\n"
-    "ответом в этот канал в течение 2 минут после отправки, бот подтянет их к заявке сам.\n\n"
-    "### :hz_megaphone:  ЧТО ДАЛЬШЕ\n"
-    "✅  Приняли → сумма снялась с фонда, тебе придёт **ЛС**, запись уйдёт в **📜 логи**\n"
-    "❌  Отклонили → фонд **не тронут**, в ЛС вернётся причина\n\n"
-    "> :hz_warn:  Пиши как есть: :hz_book: книга выплат сходится до последней монеты,\n"
-    "> и это спокойнее, чем объясняться потом. :red_crown:"
+    "Сделал дело — жми **«🧾 Подать заявку»** и заполни форму:\n"
+    "ник · что сделал · сколько платим.\n"
+    "«Поступило в баланс» — по желанию, можно пропустить.\n\n"
+    "📎 Скрины перетаскиваются прямо в форму, до трёх.\n"
+    "Не перетащил — кинь их ответом в этот канал за 2 минуты.\n\n"
+    "Заявку видит только приёмка. Решение придёт тебе в ЛС."
 )
 
 T_REVIEW_TEXT = (
-    "*:red_crown:  Приёмка выплат  :red_crown:*\n\n"
-    "### :hz_moderator:  КТО РЕШАЕТ\n"
-    ":hz_moderatorpurple:  Роль, которой выдана приёмка, жмёт **«Выплатить»** или **«Отклонить»**\n"
-    ":hz_book:  Канал виден только своим: без нужной роли его просто нет в списке\n\n"
-    "### :hz_bitsicon:  ИСХОД ЗАЯВКИ\n"
-    "✅  **Выплачено** → деньги снимаются с фонда, человеку приходит **ЛС**, запись в **📜 логах**\n"
-    "❌  **Отклонено** → фонд не трогается, в ЛС уходит причина\n\n"
-    "> :hz_warn:  Заявка принимается один раз: повторная кнопка уже ничего не снимет."
+    "Канал только для роли приёмки — без роли его не видно.\n\n"
+    "✅ **Выплатить** — сумма снимется с фонда, автору придёт ЛС\n"
+    "❌ **Отклонить** — фонд не тронут, в ЛС уйдёт причина\n\n"
+    "Заявку можно принять только один раз."
 )
 
 T_LOGS_TEXT = (
-    "*:hz_book:  История денег семьи  :hz_book:*\n\n"
-    "### :hz_trainicon:  ЧТО СЮДА ПАДАЕТ\n"
-    ":hz_gifticon:  Каждое **пополнение** фонда\n"
-    ":hz_bitsicon:  Каждая **принятая выплата** — ник, сумма и дело\n"
-    ":hz_shoppingcart:  Изменения остатка руками руководства\n\n"
-    "### :hz_megaphone:  ПОРЯДОК В КАНАЛЕ\n"
-    ":red_crown:  Тут только записи бота: обсуждение — в заявках, вопросы — руководству\n\n"
-    "> :hz_book:  Логи не чистят и не правят руками — по ним семью и проверяют."
+    "Только записи бота: пополнения фонда и принятые выплаты.\n"
+    "Обсуждение — в канале заявок. Логи не правят руками."
 )
 
-T_BANK_TOPIC = ":red_crown:  Фонд выплат — остаток и книга выплат семьи"
-T_CLAIMS_TOPIC = ":hz_pencil:  Заявки на выплату — ник, дело и сколько платим"
-T_REVIEW_TOPIC = ":hz_moderator:  Приёмка выплат — видит и решает только нужная роль"
-T_LOGS_TOPIC = ":hz_book:  Логи выплат — принятые выплаты и пополнения"
-T_DEFAULT_TOPIC = ":red_crown:  Выплаты семьи"
+T_BANK_TOPIC = "💸  Фонд выплат: остаток и книга"
+T_CLAIMS_TOPIC = "🧾  Заявки на выплату: ник, дело, сумма"
+T_REVIEW_TOPIC = "✅  Приёмка: решает только роль приёмки"
+T_LOGS_TOPIC = "📜  Логи: пополнения и принятые выплаты"
+T_DEFAULT_TOPIC = "💸  Выплаты семьи"
 
-T_FUND_TITLE = ":red_crown:  ФОНД ВЫПЛАТ"
+T_FUND_TITLE = "💸  ФОНД ВЫПЛАТ"
 T_FUND_TEXT = (
-    "### :hz_bitsicon:  {balance}\n\n"
-    ":hz_gifticon:  Пополнено **{raised}**\n"
-    ":hz_bitsicon:  Выплачено **{paid}**\n"
-    ":hz_book:  Записей в книге **{moves}**\n"
-    ":hz_botv2:  Заявок подано **{claims}**\n\n"
-    "> :red_crown:  Деньги уходят только из принятой заявки."
+    "### {balance}\n\n"
+    "➕ Пополнено **{raised}**  ·  💸 Выплачено **{paid}**\n"
+    "🧾 Заявок **{claims}**  ·  📜 Записей **{moves}**\n\n"
+    "> Деньги уходят только из принятой заявки."
 )
-T_BOOK_TITLE = ":hz_book:  КНИГА ВЫПЛАТ"
-T_BOOK_EMPTY = ":hz_book:  Книга чистая — выплат ещё не было."
-T_BOOK_NOTE = ":hz_bitsicon:  Остаток **{balance}** · последние 12 записей"
-T_MINE_TITLE = ":hz_pencil:  МОИ ЗАЯВКИ"
+T_BOOK_TITLE = "📜  КНИГА ВЫПЛАТ"
+T_BOOK_EMPTY = "📜  Книга чистая — выплат ещё не было."
+T_BOOK_NOTE = "💸  Остаток **{balance}** · последние 12 записей"
+T_MINE_TITLE = "🧾  МОИ ЗАЯВКИ"
 T_MINE_EMPTY = (
-    ":hz_pencil:  Ты ещё не подавал заявок на выплату.\n"
-    ":hz_bitsicon:  Форма — кнопка «🧾 Подать заявку» в канале заявок."
+    "🧾  Ты ещё не подавал заявок.\n"
+    "Кнопка «🧾 Подать заявку» — в канале заявок."
 )
-T_MINE_NOTE = "⏳ ждёт приёмку · ✅ выплачено — деньги сняты · ❌ отклонена"
-T_CLAIM_TITLE = ":hz_bitsicon:  ЗАЯВКА #{id}"
+T_MINE_NOTE = "⏳ ждёт приёмку · ✅ выплачено · ❌ отклонена"
+T_CLAIM_TITLE = "🧾  ЗАЯВКА #{id}"
 T_STATUS_OK = "Выплачено — сумма снята с фонда"
 T_STATUS_NO = "Отклонено — фонд не тронут"
 T_STATUS_WAIT = "Ждёт приёмки"
 T_DONE_TEXT = (
-    "### :red_crown:  Ветка выплат готова\n\n"
-    ":hz_house:  {made}\n\n"
-    ":hz_pencil:  Осталось два шага — прямо в этом сообщении:\n"
-    ":number1:  выбрать **роль управления** и **роль приёмки**\n"
-    ":number2:  :hz_bitsicon:  задать остаток кнопкой **«⚖️ Задать фонд»**\n\n"
-    "> :hz_house:  Баннеры, объяснения и кнопки уже лежат в каналах. Заявку может подать любой."
+    "### 💸  Ветка выплат готова\n\n"
+    "{made}\n\n"
+    "Осталось два шага — прямо тут:\n"
+    "1️⃣  выбрать роль управления и роль приёмки\n"
+    "2️⃣  задать остаток кнопкой **«⚖️ Задать фонд»**"
 )
-T_OK_TITLE = ":red_crown:  ВЫПЛАТА ПРИНЯТА"
+T_OK_TITLE = "💸  ВЫПЛАТА ПРИНЯТА"
 T_OK_TEXT = (
-    "### :hz_bitsicon:  Тебе платят {amount}\n\n"
-    ":hz_pencil:  Заявка **#{id}** принята\n"
-    ":hz_shoppingcart:  **Дело** — {what}\n"
-    ":hz_membericon:  **Ник в заявке** — {nick}\n"
-    ":hz_moderator:  **Принял** <@{decided}>\n\n"
-    "> :red_crown:  Деньги выдаёт руководство семьи. Сумма или дело не сходится — напиши ему."
+    "### Тебе платят {amount}\n\n"
+    "🧾  Заявка **#{id}** · дело: {what}\n"
+    "✅  Принял <@{decided}>\n\n"
+    "> Не сходится — напиши руководству."
 )
-T_NO_TITLE = ":red_crown:  ВЫПЛАТА ОТКЛОНЕНА"
+T_NO_TITLE = "🧾  ВЫПЛАТА ОТКЛОНЕНА"
 T_NO_TEXT = (
-    "### :hz_warn:  Заявка **#{id}** отклонена\n\n"
-    ":hz_shoppingcart:  **Дело** — {what}\n"
-    ":hz_bitsicon:  **Просил** {amount}\n"
-    ":hz_moderator:  **Решил** <@{decided}>\n\n"
-    "> :red_crown:  Пояснение: {why}"
+    "### Заявка **#{id}** отклонена\n\n"
+    "💸  Просил {amount} · дело: {what}\n"
+    "❌  Решил <@{decided}>\n\n"
+    "> Пояснение: {why}"
 )
 
 
@@ -229,8 +199,8 @@ def _allowed(inter, st: dict, key: str) -> bool:
 
 
 def _deny(bot=None, guild=None) -> disnake.Embed:
-    warn = _e(bot, "hz_warn", "⚠️")
-    crown = _e(bot, "red_crown", "👑")
+    warn = "⚠️"
+    crown = "👑"
     return note_embed(
         f"{warn}  Это канал выплат: фонд и книга видны только своим.\n\n"
         f"{crown}  Роль выдаёт руководство семьи — экран `/выплаты`.",
@@ -238,9 +208,9 @@ def _deny(bot=None, guild=None) -> disnake.Embed:
 
 
 def _not_here(bot=None, guild=None) -> disnake.Embed:
-    forbidden = _e(bot, "hz_warn", "⛔")
-    mod = _e(bot, "hz_moderator", "🛡")
-    crown = _e(bot, "red_crown", "👑")
+    forbidden = "⛔"
+    mod = "🛡"
+    crown = "👑"
     return note_embed(
         f"{forbidden}  Приёмка выплат — не твой канал.\n\n"
         f"{mod}  Тут решают судьбу каждой заявки\n"
@@ -249,7 +219,7 @@ def _not_here(bot=None, guild=None) -> disnake.Embed:
 
 
 def _warn(bot=None, guild=None, head: str = "ТАК НЕ ВЫЙДЕТ", text: str = "") -> disnake.Embed:
-    warn = _e(bot, "hz_warn", "⚠️")
+    warn = "⚠️"
     return note_embed(text, "error", title=f"{warn}  {head}", guild=guild)
 
 
@@ -318,13 +288,9 @@ async def _has_bot_message(ch, guild) -> bool:
     return False
 
 
-def _e(bot, name: str, fallback: str) -> str:
-    return brand.emoji(bot, name, fallback)
-
-
 # ─────────────────────────── карточки ───────────────────────────
 def _fund_embed(bot, guild, st: dict) -> disnake.Embed:
-    emb = card(_T(bot, "pay_fund_title", T_FUND_TITLE), guild=guild)
+    emb = card(_T(bot, "pay_fund_title", T_FUND_TITLE), guild=guild, color_key=ACCENT)
     emb.description = _T(bot, "pay_fund_text", T_FUND_TEXT,
                          balance=_n(st["balance"]), raised=_n(st["raised"]),
                          paid=_n(st["paid"]), moves=len(st["moves"]), claims=st["seq"])
@@ -332,9 +298,7 @@ def _fund_embed(bot, guild, st: dict) -> disnake.Embed:
 
 
 def _book_embed(bot, guild, st: dict) -> disnake.Embed:
-    gift = _e(bot, "hz_gifticon", "➕")
-    bits = _e(bot, "hz_bitsicon", "💎")
-    scale = _e(bot, "hz_shoppingcart", "🧾")
+    gift, bits, scale = "➕", "💸", "⚖️"
     rows = []
     for m in list(reversed(st["moves"]))[:12]:
         icon = gift if m["kind"] == "topup" else (bits if m["kind"] == "pay" else scale)
@@ -342,7 +306,8 @@ def _book_embed(bot, guild, st: dict) -> disnake.Embed:
         rows.append([f"{icon}  {sign}{_n(m['amount'])}",
                      f"{clip(m['note'], 90)}\n<@{m['by']}> · {_when(m['ts'])} · "
                      f"остаток **{_n(m['bal'])}**"])
-    return list_embed(_T(bot, "pay_book_title", T_BOOK_TITLE), rows, guild=guild, inline=False,
+    return list_embed(_T(bot, "pay_book_title", T_BOOK_TITLE), rows, guild=guild, color_key=ACCENT,
+                      inline=False,
                       empty=_T(bot, "pay_book_empty", T_BOOK_EMPTY),
                       note=_T(bot, "pay_book_note", T_BOOK_NOTE, balance=_n(st["balance"])))
 
@@ -354,13 +319,13 @@ def _claim_embed(bot, guild, pay: dict) -> disnake.Embed:
              "no": _T(bot, "pay_status_no", T_STATUS_NO),
              "wait": _T(bot, "pay_status_wait", T_STATUS_WAIT)}
     word = words.get(status, words["wait"])
-    bits = _e(bot, "hz_bitsicon", "💎")
-    pencil = _e(bot, "hz_pencil", "✍️")
-    like = _e(bot, "hz_membericon", "👤")
-    cart = _e(bot, "hz_shoppingcart", "🧾")
-    book = _e(bot, "hz_book", "📖")
+    bits = "💸"
+    pencil = "🧾"
+    like = "👤"
+    cart = "➕"
+    book = "📜"
     emb = card(_T(bot, "pay_claim_title", T_CLAIM_TITLE, id=pay["id"]), guild=guild,
-               color_key={"ok": "success_color", "no": "error_color"}.get(status, "embed_color"))
+               color_key={"ok": "success_color", "no": "error_color"}.get(status, ACCENT))
     emb.description = (
         f"### {bits}  {_n(pay['amount'])}\n\n"
         f"{like}  **{_T(bot, 'pay_field_nick', 'Твой ник')}** — {clip(pay['nick'], 60)}\n"
@@ -390,7 +355,8 @@ def _mine_embed(bot, st: dict, uid: int, guild=None) -> disnake.Embed:
         icon = {"wait": "⏳", "ok": "✅", "no": "❌"}.get(pay.get("status") or "wait", "⏳")
         rows.append([f"{icon}  #{pay['id']} · {_n(pay['amount'])}",
                      f"{clip(pay['what'], 60)}\n{_when(pay['ts'])}"])
-    return list_embed(_T(bot, "pay_mine_title", T_MINE_TITLE), rows, guild=guild, inline=False,
+    return list_embed(_T(bot, "pay_mine_title", T_MINE_TITLE), rows, guild=guild, color_key=ACCENT,
+                      inline=False,
                       empty=_T(bot, "pay_mine_empty", T_MINE_EMPTY),
                       note=_T(bot, "pay_mine_note", T_MINE_NOTE))
 
@@ -442,7 +408,7 @@ class ClaimModal(disnake.ui.Modal):
         if cog is None:
             return await inter.response.send_message(
                 embed=_warn(inter.bot, inter.guild, "ВЫПЛАТЫ СПЯТ",
-                            f"{_e(inter.bot, 'hz_botv2', '🤖')}  Модуль выплат не загружен — "
+                            "🤖  Модуль выплат не загружен — "
                             "нужен рестарт бота."),
                 ephemeral=inter.guild is not None)
         shots = [a for a in (inter.resolved_values.get("photos") or [])
@@ -699,16 +665,12 @@ class Payouts(commands.Cog):
             return await inter.response.send_message(embed=_deny(self.bot, inter.guild),
                                                      ephemeral=True)
         st = _load()
-        sec_bank = _T(self.bot, "pay_sec_bank_title", ":hz_bitsicon:  ФОНД ВЫПЛАТ")
-        sec_claims = _T(self.bot, "pay_sec_claims_title", ":hz_pencil:  ЗАЯВКИ")
-        sec_review = _T(self.bot, "pay_sec_review_title", ":hz_moderator:  ПРИЁМКА")
-        sec_logs = _T(self.bot, "pay_sec_logs_title", ":hz_book:  ЛОГИ ВЫПЛАТ")
-        sections = []
-        for key, title in (("bank", sec_bank), ("claims", sec_claims),
-                           ("review", sec_review), ("logs", sec_logs)):
+        rows = []
+        for key, label in (("bank", "💸  фонд"), ("claims", "🧾  заявки"),
+                           ("review", "✅  приёмка"), ("logs", "📜  логи")):
             cid = (st["channels"] or {}).get(key)
             ch = inter.guild.get_channel(int(cid)) if cid else None
-            sections.append((title, ch.mention if ch else _T(
+            rows.append(f"{label} — " + (ch.mention if ch else _T(
                 self.bot, "pay_channel_missing",
                 "_нет — нажми «🏗 Создать ветку выплат» ниже_")))
         manage = " ".join(f"<@&{r}>" for r in _roles(st, "manage")) or \
@@ -718,20 +680,23 @@ class Payouts(commands.Cog):
                "_не выбрана — приёмка берёт роль управления_")
         waiting = sum(1 for p in (st["claims"] or {}).values()
                       if (p.get("status") or "wait") == "wait")
-        sections.append((_T(self.bot, "pay_sec_fund_title", ":hz_bitsicon:  ОСТАТОК ФОНДА"),
-                         _T(self.bot, "pay_sec_fund_text",
-                            "**{balance}**\n:hz_gifticon:  пополнено {raised} · "
-                            ":hz_bitsicon:  выплачено {paid} · :hz_pencil:  заявок {claims} · "
-                            ":hz_book:  записей {moves} · ⏳ ждёт {waiting}",
-                            balance=_n(st["balance"]), raised=_n(st["raised"]),
-                            paid=_n(st["paid"]), claims=st["seq"], moves=len(st["moves"]),
-                            waiting=waiting)))
-        sections.append((_T(self.bot, "pay_sec_manage_title",
-                            ":hz_moderatorpurple:  УПРАВЛЕНИЕ ВЫПЛАТАМИ"), manage))
-        sections.append((_T(self.bot, "pay_sec_approve_title",
-                            ":hz_moderator:  ПРИЁМКА ВЫПЛАТ"), approve))
+        sections = [
+            (_T(self.bot, "pay_sec_channels_title", "🏗  КАНАЛЫ"), "\n".join(rows)),
+            (_T(self.bot, "pay_sec_fund_title", "💸  ОСТАТОК ФОНДА"),
+             _T(self.bot, "pay_sec_fund_text",
+                "**{balance}**\n➕  пополнено {raised}  ·  💸  выплачено {paid}\n"
+                "🧾  заявок {claims}  ·  📜  записей {moves}  ·  ⏳  ждёт {waiting}",
+                balance=_n(st["balance"]), raised=_n(st["raised"]),
+                paid=_n(st["paid"]), claims=st["seq"], moves=len(st["moves"]),
+                waiting=waiting)),
+            (_T(self.bot, "pay_sec_roles_title", "👥  РОЛИ"),
+             _T(self.bot, "pay_sec_roles_text",
+                "👑  Управление — {manage}\n🛡  Приёмка — {approve}",
+                manage=manage, approve=approve)),
+        ]
         emb = panel_embed(
             _T(self.bot, "pay_panel_title", T_PANEL_TITLE), sections, guild=inter.guild,
+            color_key=ACCENT,
             intro=_T(self.bot, "pay_panel_intro", T_PANEL_INTRO))
         await inter.response.send_message(embed=emb, view=PanelView(st), ephemeral=True,
                                           file=_put_banner(emb, BANK_BANNER))
@@ -742,7 +707,7 @@ class Payouts(commands.Cog):
         if guild is None:
             return await inter.followup.send(
                 embed=_warn(self.bot, None, "ТОЛЬКО НА СЕРВЕРЕ",
-                            f"{_e(self.bot, 'hz_house', '🏠')}  Выплаты живут на сервере семьи — "
+                            f"{'🏠'}  Выплаты живут на сервере семьи — "
                             "собирать ветку нужно там, в `/выплаты`."),
                 ephemeral=True)
         st = _load()
@@ -814,20 +779,20 @@ class Payouts(commands.Cog):
         if inter.guild is None:
             return await inter.followup.send(
                 embed=_warn(self.bot, None, "ТОЛЬКО НА СЕРВЕРЕ",
-                            f"{_e(self.bot, 'hz_house', '🏠')}  Баннеры кладутся в каналы выплат "
+                            f"{'🏠'}  Баннеры кладутся в каналы выплат "
                             "на сервере семьи."),
                 ephemeral=True)
         st = _load()
         done = await self._post_banners(inter.guild, st)
-        star = _e(self.bot, "hz_winterstar", "⭐")
-        crown = _e(self.bot, "red_crown", "👑")
-        house = _e(self.bot, "hz_house", "🏠")
-        pencil = _e(self.bot, "hz_pencil", "✍️")
+        star = "⭐"
+        crown = "👑"
+        house = "🏠"
+        pencil = "✍️"
         if done:
             emb = note_embed(
                 f"### {star}  Витрина выплат обновлена\n\n"
                 f"{crown}  **Фонд** и **заявки** — объяснение сверху, баннер под текстом\n"
-                f"{_e(self.bot, 'hz_moderator', '🛡')}  **Приёмка** и **логи** — памятки для своих\n\n"
+                f"{'🛡'}  **Приёмка** и **логи** — памятки для своих\n\n"
                 f"> {house}  Старые карточки убраны, кнопки на местах.",
                 "success", title=f"{star}  БАННЕРЫ ПЕРЕЗАЛИТЫ", guild=inter.guild)
         else:
@@ -849,19 +814,19 @@ class Payouts(commands.Cog):
                     except disnake.DiscordException:
                         pass
         bank_emb = card(_T(self.bot, "pay_bank_head", T_BANK_HEAD),
-                        _T(self.bot, "pay_bank_text", T_BANK_TEXT), guild=guild)
+                        _T(self.bot, "pay_bank_text", T_BANK_TEXT), guild=guild, color_key=ACCENT)
         await ch["bank"].send(embed=bank_emb, view=BankView(),
                               file=_put_banner(bank_emb, BANK_BANNER))
         claims_emb = card(_T(self.bot, "pay_claims_head", T_CLAIMS_HEAD),
-                          _T(self.bot, "pay_claims_text", T_CLAIMS_TEXT), guild=guild)
+                          _T(self.bot, "pay_claims_text", T_CLAIMS_TEXT), guild=guild, color_key=ACCENT)
         await ch["claims"].send(embed=claims_emb, view=ClaimsView(),
                                  file=_put_banner(claims_emb, CLAIM_BANNER))
         # Приватные каналы: ключи текстов названы прямо здесь, иначе редактор «Тексты»
         # не найдёт их в исходнике и правка не дойдёт до канала.
         memos = (("review", card(_T(self.bot, "pay_review_head", T_REVIEW_HEAD),
-                                 _T(self.bot, "pay_review_text", T_REVIEW_TEXT), guild=guild)),
+                                 _T(self.bot, "pay_review_text", T_REVIEW_TEXT), guild=guild, color_key=ACCENT)),
                  ("logs", card(_T(self.bot, "pay_logs_head", T_LOGS_HEAD),
-                               _T(self.bot, "pay_logs_text", T_LOGS_TEXT), guild=guild)))
+                               _T(self.bot, "pay_logs_text", T_LOGS_TEXT), guild=guild, color_key=ACCENT)))
         for key, memo in memos:
             c = ch[key]
             if c is None or await _has_bot_message(c, guild):
@@ -882,10 +847,10 @@ class Payouts(commands.Cog):
         label = "Роль управления выплатами" if key == "manage" else "Роль приёмки выплат"
         names = " ".join(f"<@&{r}>" for r in st["roles"][key]) or \
             f"_{label.lower()} сброшена — выплатами правят только админы семьи_"
-        crown = _e(self.bot, "red_crown", "👑")
-        mod = _e(self.bot, "hz_moderator", "🛡")
-        bits = _e(self.bot, "hz_bitsicon", "💎")
-        pencil = _e(self.bot, "hz_pencil", "✍️")
+        crown = "👑"
+        mod = "🛡"
+        bits = "💸"
+        pencil = "✍️"
         await inter.response.send_message(
             embed=note_embed(f"### {mod}  {label}\n{names}\n\n"
                              f"{bits}  Доступ к приёмке и логам выплат уже переставлен\n"
@@ -903,7 +868,7 @@ class Payouts(commands.Cog):
         if value is None:
             return await inter.response.send_message(
                 embed=_warn(self.bot, inter.guild, "НЕ ПОНЯЛ СУММУ",
-                            f"{_e(self.bot, 'hz_bitsicon', '💎')}  Остаток фонда пишут цифрами: "
+                            f"💸  Остаток фонда пишут цифрами: "
                             "`15000` или `15к`."),
                 ephemeral=True)
         st = _load()
@@ -911,9 +876,9 @@ class Payouts(commands.Cog):
         st["balance"] = value
         _move(st, "set", value - old, inter.author.id, note or "ручная корректировка фонда")
         _save(st)
-        bits = _e(self.bot, "hz_bitsicon", "💎")
-        pencil = _e(self.bot, "hz_pencil", "✍️")
-        crown = _e(self.bot, "red_crown", "👑")
+        bits = "💸"
+        pencil = "✍️"
+        crown = "👑"
         await inter.response.send_message(
             embed=note_embed(f"### {bits}  {_n(old)}  →  {_n(value)}\n\n"
                              f"{pencil}  {note or 'без пояснения'}\n\n"
@@ -932,15 +897,15 @@ class Payouts(commands.Cog):
         if value is None:
             return await inter.response.send_message(
                 embed=_warn(self.bot, inter.guild, "НЕ ПОНЯЛ СУММУ",
-                            f"{_e(self.bot, 'hz_gifticon', '🎁')}  Взнос пишут цифрами: "
+                            f"{'🎁'}  Взнос пишут цифрами: "
                             "`50000` или `50к`."), ephemeral=True)
         st["balance"] = int(st["balance"]) + value
         st["raised"] = int(st["raised"]) + value
         _move(st, "topup", value, inter.author.id, note or "пополнение фонда выплат")
         _save(st)
-        gift = _e(self.bot, "hz_gifticon", "🎁")
-        bits = _e(self.bot, "hz_bitsicon", "💎")
-        book = _e(self.bot, "hz_book", "📖")
+        gift = "🎁"
+        bits = "💸"
+        book = "📜"
         await inter.response.send_message(
             embed=note_embed(f"### {gift}  +{_n(value)}\n\n"
                              f"{bits}  Остаток фонда: **{_n(st['balance'])}** · "
@@ -1003,18 +968,18 @@ class Payouts(commands.Cog):
         if res.get("error") == "sum":
             return await self._answer(
                 inter, _warn(self.bot, inter.guild, "НЕ ПОНЯЛ СУММУ",
-                             f"{_e(self.bot, 'hz_bitsicon', '💎')}  Сумму выплаты пишут цифрами: "
+                             f"💸  Сумму выплаты пишут цифрами: "
                              "`15000` или `15к`."))
         if res.get("error") == "review":
             return await self._answer(
                 inter, _warn(self.bot, inter.guild, "НЕТ КАНАЛА ПРИЁМКИ",
-                             f"{_e(self.bot, 'hz_moderator', '🛡')}  Приёмки ещё нет — на экране "
+                             f"{'🛡'}  Приёмки ещё нет — на экране "
                              "`/выплаты` нажми «🏗 Создать ветку выплат», потом подавай заявку."))
         pid, review = res["pid"], res["review"]
-        bits = _e(self.bot, "hz_bitsicon", "💎")
-        pencil = _e(self.bot, "hz_pencil", "✍️")
-        mod = _e(self.bot, "hz_moderator", "🛡")
-        like = _e(self.bot, "hz_membericon", "👤")
+        bits = "💸"
+        pencil = "✍️"
+        mod = "🛡"
+        like = "👤"
         photo = "📎"
         lines = [f"### {pencil}  Заявка #{pid} ушла в {review.mention}\n",
                  f"{bits}  **{_n(res['value'])}** спишутся с фонда только после приёмки\n"
@@ -1046,13 +1011,13 @@ class Payouts(commands.Cog):
         if not pay:
             return await inter.response.send_message(
                 embed=_warn(self.bot, inter.guild, "ЗАЯВКА НЕ НАЙДЕНА",
-                            f"{_e(self.bot, 'hz_book', '📖')}  Такая заявка уже стёрта из книги — "
+                            f"📜  Такая заявка уже стёрта из книги — "
                             "карточка в канале осталась старой."),
                 ephemeral=True)
         if (pay.get("status") or "wait") != "wait":
             return await inter.response.send_message(
                 embed=_warn(self.bot, inter.guild, "ЗАЯВКА ЗАКРЫТА",
-                            f"{_e(self.bot, 'hz_bitsicon', '💎')}  Заявку #{pid} уже решили — "
+                            f"💸  Заявку #{pid} уже решили — "
                             "второй раз деньги не снимаются."), ephemeral=True)
         pay["status"] = "ok" if accept else "no"
         pay["decided_by"] = int(inter.author.id)
@@ -1070,7 +1035,7 @@ class Payouts(commands.Cog):
         _save(st)
         if accept:
             await self._log(inter.guild,
-                            f"{_e(self.bot, 'hz_bitsicon', '💎')}  Выплачено по заявке **#{pid}** — "
+                            f"💸  Выплачено по заявке **#{pid}** — "
                             f"**{_n(pay['amount'])}** → {pay['nick']}",
                             int(pay["by"]), clip(pay["what"], 200), balance=int(st["balance"]))
         await inter.response.edit_message(embed=_claim_embed(self.bot, inter.guild, pay),
@@ -1082,7 +1047,7 @@ class Payouts(commands.Cog):
         заглядывать ему некуда — канал виден только своей роли."""
         author = inter.guild.get_member(int(pay["by"])) if inter.guild else None
         ok = pay["status"] == "ok"
-        warn = _e(self.bot, "hz_warn", "⚠️")
+        warn = "⚠️"
         if author is None:
             print(f"💸 Выплата #{pay['id']}: автора заявки не найти в ЛС — "
                   f"<@{pay['by']}>, {pay['nick']}", flush=True)
@@ -1113,10 +1078,10 @@ class Payouts(commands.Cog):
         ch = guild.get_channel(cid) if (guild and cid) else None
         if ch is None:
             return
-        member = _e(self.bot, "hz_membericon", "👤")
+        member = "👤"
         when = "🕒"
-        bits = _e(self.bot, "hz_bitsicon", "💎")
-        emb = card(title, guild=guild)
+        bits = "💸"
+        emb = card(title, guild=guild, color_key=ACCENT)
         emb.description = (f"{note}\n\n"
                            f"{member}  <@{who}>\n"
                            f"{when}  {_when(int(time.time()))}\n"
