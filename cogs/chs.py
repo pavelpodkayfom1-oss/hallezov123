@@ -103,24 +103,48 @@ async def _announce(guild, embed) -> bool:
         return False
 
 
+def _exc_text(exc) -> str:
+    """Живой текст Discord вместо нашей догадки: 403 бывает и от ролей, и от 2FA на сервере."""
+    return " ".join(str(getattr(exc, "text", "") or exc).split())[:220]
+
+
+def _hierarchy(member) -> str:
+    """Позиции ролей числами: спор «у него новичок, у меня админ» решается по номерам Discord."""
+    try:
+        mine = member.guild.me.top_role
+        theirs = member.top_role
+        return (f"моя роль «{mine.name}» №{mine.position}, "
+                f"его «{theirs.name}» №{theirs.position}")
+    except Exception:
+        return ""
+
+
 async def _eject(member, note: str, tries: int):
     """Выгнать и вернуть (получилось, почему). Без этого человек, который уже сидит на
     сервере, висел бы в ЧС вечно: события «зашёл» для него не будет."""
     guild = member.guild
+    hier = _hierarchy(member)
+    hier = f" · {hier}" if hier else ""
     if member.id == guild.owner_id:
         return False, "это владелец сервера — его не трогаем"
     if getattr(member, "bot", False):
         return False, "это бот"
     if not guild.me.guild_permissions.kick_members:
-        return False, get_text("chs_no_perm", "у меня нет права «Управлять участниками»")
+        return False, get_text("chs_no_perm", "у меня нет права «Управлять участниками»") + hier
     try:
         await member.kick(reason=f"ЧС семьи: {note or 'внесён руководством'}"
                                  + (f" · заход №{tries}" if tries else ""))
         return True, get_text("chs_kicked", "выдворен")
-    except disnake.Forbidden:
-        return False, "Discord не дал: у него роль старлее моей"
+    except disnake.Forbidden as exc:
+        why = _exc_text(exc)
+        hint = (" · на сервере включён обязательный 2FA для модерации — сними его в "
+                "«Настройки сервера → Безопасность»"
+                if "two-factor" in why.lower() or "2fa" in why.lower() else "")
+        return False, f"Discord не дал: {why or 'роль старлее моей'}{hint}{hier}"
+    except disnake.NotFound:
+        return False, "Discord говорит, что его тут нет — возможно, уже вылетел"
     except Exception as exc:
-        return False, f"не вышло ({exc.__class__.__name__})"
+        return False, f"не вышло ({exc.__class__.__name__}): {_exc_text(exc) or 'без текста'}{hier}"
 
 
 async def _report(member, note: str, tries: int, kicked: bool, outcome: str) -> None:
@@ -342,12 +366,14 @@ class Chs(commands.Cog):
             return member
 
         data = _load()
-        added, skipped, present = [], [], []
+        added, skipped, present, absent = [], [], [], []
         for user_id in ids:
             key = str(user_id)
             member = await find(user_id)
             if member is not None:
                 present.append(member)
+            else:
+                absent.append(key)
             if key in data["list"]:
                 skipped.append(key)
                 continue
@@ -377,6 +403,10 @@ class Chs(commands.Cog):
             await _report(member, why, tries, kicked, outcome)
             lines.append(("👌 Выгнал его прямо сейчас." if kicked
                           else f"⚠️ Он на сервере, но выгнать не вышло: {outcome}."))
+        if absent:
+            lines.append(get_text("chs_absent", "На этом сервере их не нашёл: ")
+                         + ", ".join("`" + k + "`" for k in absent)
+                         + " — выгоню при заходе.")
         if not data.get("channel"):
             lines.append(get_text("chs_no_channel",
                                   "Канал для таких записей не привязан — напишу в канал логов "
