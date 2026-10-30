@@ -13,6 +13,7 @@ import json
 import os
 import random
 import re
+import sys
 import tempfile
 import time
 from collections import deque
@@ -43,9 +44,17 @@ SETTINGS_FILE = os.path.join(BASE_DIR, "music_settings.json")
 
 
 def _site_url() -> str:
-    """Адрес сайта музыки. Кнопка «Сайт» открывает его сразу, без сообщения-ссылки,
-    поэтому адрес читается при каждом построении панели: `.env` правится на хостинге."""
-    return (os.getenv("MUSIC_URL") or load_config().get("music_site_url") or "").strip()
+    """Адрес сайта музыки: сначала заданный вручную, потом тот, что бот увидел сам.
+
+    Кнопка «Сайт» открывает адрес сразу, без сообщения-ссылки, поэтому он читается
+    при каждом построении панели. Хостинг отдаёт наружу один адрес, и узнать его
+    можно только из живых запросов — их запоминает `cogs.music_web`.
+    """
+    url = (os.getenv("MUSIC_URL") or load_config().get("music_site_url") or "").strip()
+    if url:
+        return url
+    web_cog = sys.modules.get("cogs.music_web")
+    return (getattr(web_cog, "public_url", lambda: "")() or "").strip()
 
 
 def _trim():
@@ -628,8 +637,9 @@ T_ANN_LINE = ("> :hz_trainicon:  длительность {dur}\n"
               "> :hz_bluemodroleicon:  звук {bar}  {vol}%")
 T_ANN_WHO = "> :hz_megaphone:  Заказал(а) {who}"
 T_DJ_OFF = ":pinkghost:  Библиотека кончилась — авто-диджей выключен."
-T_SITE_NOBTN = (":hz_warn:  Своего адреса у сайта пока нет. Добавь `MUSIC_URL` в `.env` "
-                "на хостинге — и вверху панели появится кнопка **«Сайт»**.")
+T_SITE_NOBTN = (":hz_warn:  Адрес ещё не виден: бот берёт его из живых входов на сайт "
+                "и сам покажет кнопку **«Сайт»** вверху панели. Задать вручную можно "
+                "`MUSIC_URL` в `.env`.")
 
 
 def _ok(bot, head: str, text: str, guild=None) -> disnake.Embed:

@@ -56,6 +56,32 @@ def _open_for_writes() -> bool:
     return bool(_conf().get("music_page_open", True))
 
 
+# Хостинг наружу отдаёт один адрес, и мы его видим только в заголовках живых
+# запросов. Запоминаем, чтобы кнопка «Сайт» на панели в Discord появилась сама,
+# без ручной строчки в .env.
+_front: Dict[str, str] = {}
+
+
+def _note_front(request: web.Request) -> None:
+    host = (request.headers.get("X-Forwarded-Host") or request.headers.get("Host") or "").strip()
+    if not host or host.startswith(("127.", "localhost", "0.0.0.0")):
+        return
+    secure = request.headers.get("X-Forwarded-Proto", "").lower() == "https" or request.is_secure()
+    _front["url"] = f"{'https' if secure else 'http'}://{host}"
+
+
+def public_url() -> str:
+    """Наружный адрес сайта музыки: пустой, пока бот ещё не видел ни одного входа.
+
+    Без косой черты на конце: `/music` сам перенаправляет на страницу, а короткая
+    ссылка людям понятнее.
+    """
+    base = _front.get("url") or ""
+    if not base:
+        return ""
+    return base + (PREFIX if _front.get("share") else "/")
+
+
 class _Hits:
     """Сколько записей прилетело с одного адреса за последнее время."""
 
@@ -97,6 +123,7 @@ def _guild(bot):
 
 @web.middleware
 async def _guard(request: web.Request, handler):
+    _note_front(request)
     if request.path in WRITE_PATHS:
         if request.headers.get("X-Requested-With") != "hz-music":
             return web.json_response({"error": "Только со страницы сайта"}, status=403)
@@ -129,6 +156,7 @@ class MusicWeb(commands.Cog):
         else:
             app.router.add_get("/", self.h_page)
         self.app = app
+        _front["share"] = "1" if self.share_front else ""
 
     async def cog_load(self) -> None:
         self.session = aiohttp.ClientSession(auto_decompress=False)
