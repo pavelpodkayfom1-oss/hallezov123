@@ -41,6 +41,7 @@ from aiohttp import web
 from disnake.ext import commands
 
 from utils.panel_ui import INDEX_HTML
+from utils import panel_extras as extras
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 COGS_DIR = BASE_DIR / "cogs"
@@ -300,6 +301,7 @@ class WebPanel(commands.Cog):
         self._task: Optional[asyncio.Task] = None
         self._sleep_task: Optional[asyncio.Task] = None
         self._sleep_until: Optional[int] = None
+        self._sched_task: Optional[asyncio.Task] = None
 
         _install_tee()
 
@@ -311,10 +313,13 @@ class WebPanel(commands.Cog):
             )
             return
         self._task = bot.loop.create_task(self._start())
+        self._sched_task = bot.loop.create_task(self._sched_loop())
 
     def cog_unload(self) -> None:
         if self._task:
             self._task.cancel()
+        if getattr(self, "_sched_task", None):
+            self._sched_task.cancel()
         if self._sleep_task:
             self._sleep_task.cancel()
         if self.runner:
@@ -362,6 +367,13 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/emojis", self.h_emojis)
             app.router.add_get("/api/emojis/image", self.h_emoji_image)
             app.router.add_post("/api/emojis/upload", self.h_emoji_upload)
+            app.router.add_get("/api/notes", self.h_notes)
+            app.router.add_post("/api/notes/add", self.h_note_add)
+            app.router.add_post("/api/notes/update", self.h_note_update)
+            app.router.add_post("/api/notes/delete", self.h_note_delete)
+            app.router.add_get("/api/schedule", self.h_sched)
+            app.router.add_post("/api/schedule/add", self.h_sched_add)
+            app.router.add_post("/api/schedule/cancel", self.h_sched_cancel)
             app.router.add_get("/api/commands", self.h_commands)
             app.router.add_post("/api/commands/run", self.h_command_run)
             app.router.add_post("/api/commands/press", self.h_command_press)
@@ -734,6 +746,63 @@ class WebPanel(commands.Cog):
         print(f"📣 Панель: рассылка {'накидка' if res.get('dry') else 'отправлена'}: "
               f"{str(res.get('error') or res.get('sent') or res.get('would'))[:120]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
+
+    # ---- заметки штаба и планировщик ----
+    async def h_notes(self, request: web.Request) -> web.Response:
+        return _json({"notes": extras.notes_list()})
+
+    async def h_note_add(self, request: web.Request) -> web.Response:
+        b = await _body(request)
+        res = extras.note_add(b.get("text"), b.get("color"), b.get("pinned"))
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_note_update(self, request: web.Request) -> web.Response:
+        b = await _body(request)
+        res = extras.note_update(b.get("id"), b)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_note_delete(self, request: web.Request) -> web.Response:
+        b = await _body(request)
+        res = extras.note_delete(b.get("id"))
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_sched(self, request: web.Request) -> web.Response:
+        return _json({"items": extras.sched_list(), "now": int(time.time())})
+
+    async def h_sched_add(self, request: web.Request) -> web.Response:
+        b = await _body(request)
+        res = extras.sched_add(b)
+        if not res.get("error"):
+            print(f"⏰ Панель: запланировано сообщение в #{res['item'].get('channel_name') or res['item']['channel']}",
+                  flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_sched_cancel(self, request: web.Request) -> web.Response:
+        b = await _body(request)
+        res = extras.sched_cancel(b.get("id"))
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def _sched_loop(self) -> None:
+        """Раз в 20 секунд отправляет всё, что подошло по времени."""
+        await self.bot.wait_until_ready()
+        while True:
+            try:
+                due = extras.sched_due()
+                if due:
+                    tools, err = self._tools()
+                    if not err:
+                        for it in due:
+                            res = await tools.post_channel(
+                                self.bot, it.get("channel"), it.get("text", ""), it.get("title", ""),
+                                it.get("color", ""), bool(it.get("ping")))
+                            extras.sched_mark(it["id"], res)
+                            print(f"⏰ Планировщик: в {res.get('where', it.get('channel'))}: "
+                                  f"{str(res.get('error') or 'отправлено')[:120]}", flush=True)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                print(f"⚠️ Планировщик: {type(e).__name__}: {e}", flush=True)
+            await asyncio.sleep(20)
 
     # ---- тексты бота ----
     async def h_texts(self, request: web.Request) -> web.Response:

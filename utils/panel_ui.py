@@ -814,6 +814,63 @@ html[data-theme=light] .hudfield input::selection{background:rgba(0,0,0,.2)}
 .shots figcaption{font-size:.7rem;color:var(--muted);text-align:center;margin-top:.15rem}
 .shots button{position:absolute;top:-7px;right:-7px;width:22px;height:22px;border-radius:50%;
   border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer;line-height:1;padding:0}
+
+/* ---------- пульс, заметки, планировщик ---------- */
+.pulsebox{padding:1rem 1.1rem .9rem;margin-top:1.1rem}
+.pulsehead{display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:.5rem}
+.pulsehead h2{margin:0;font-size:1.02rem}
+.pulse{display:block;width:100%;height:150px}
+.pulsecap{display:flex;gap:1.4rem;flex-wrap:wrap;margin-top:.5rem;font:.72rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.pulsecap b{color:var(--text);font-weight:600;margin-left:.3em}
+.composer{margin-bottom:1rem}
+.row.between{justify-content:space-between;align-items:center}
+.notebar{margin:.4rem 0 1rem;gap:1rem}
+.notebar input{max-width:340px}
+.notes{columns:3 260px;column-gap:.9rem}
+.note-c{break-inside:avoid;margin:0 0 .9rem;padding:.95rem 1rem .6rem;display:flex;flex-direction:column;gap:.55rem;border-left:3px solid var(--line2)}
+.note-c.pinned{border-color:var(--line2);border-left-color:var(--text)}
+.note-c.t-white{border-left-color:#fff}
+.note-c.t-ok{border-left-color:var(--ok)}
+.note-c.t-warn{border-left-color:var(--warn)}
+.note-c.t-bad{border-left-color:var(--err)}
+.nbody{white-space:pre-wrap;word-break:break-word;line-height:1.5}
+.nbody textarea{width:100%;min-height:120px}
+.note-c footer{display:flex;align-items:center;justify-content:space-between;gap:.5rem;border-top:1px solid var(--line);padding-top:.4rem}
+.nact{display:flex;gap:.1rem;opacity:.55;transition:opacity .15s}
+.note-c:hover .nact,.note-c:focus-within .nact{opacity:1}
+.ibtn{background:none;border:0;color:var(--text);cursor:pointer;width:30px;height:30px;border-radius:8px;font-size:.95rem;line-height:1}
+.ibtn:hover{background:var(--hover)}
+.ibtn.on{color:var(--warn)}
+.tones{display:flex;gap:.45rem}
+.tone{width:22px;height:22px;border-radius:50%;border:2px solid var(--line2);cursor:pointer;padding:0;background:var(--panel3)}
+.tone.t-white{background:#fff}.tone.t-ok{background:var(--ok)}.tone.t-warn{background:var(--warn)}.tone.t-bad{background:var(--err)}
+.tone.on{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--text)}
+.empty{padding:1.4rem;text-align:center;color:var(--muted)}
+.plist{display:flex;flex-direction:column;gap:.6rem}
+.plitem{display:grid;grid-template-columns:120px 1fr auto;gap:.9rem;align-items:start;padding:.85rem 1rem}
+.plwhen{display:flex;flex-direction:column;gap:.15rem}
+.plmain{min-width:0}
+.plsnip{margin:.35rem 0 0;white-space:pre-wrap;word-break:break-word;color:var(--muted)}
+.plitem.sent,.plitem.fail{opacity:.8}
+.plitem.fail{border-left:3px solid var(--err)}
+@media (max-width:640px){.plitem{grid-template-columns:1fr auto}.plwhen{grid-column:1/-1;flex-direction:row;gap:.6rem;align-items:baseline}}
+
+/* вход: приветствие, шкала заряда, слежение за курсором */
+.hudsay{min-height:1.2em;font:.74rem/1.3 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--text)}
+.hudsay::after{content:"▌";margin-left:.2em;animation:blink 1s steps(1) infinite;color:var(--muted)}
+.hudmeter{display:grid;grid-template-columns:repeat(14,1fr);gap:3px;height:6px;margin-top:.15rem}
+.hudmeter i{background:var(--line2);transition:background .12s,box-shadow .12s}
+.hudmeter i.on{background:var(--text);box-shadow:0 0 6px rgba(255,255,255,.5)}
+html[data-theme=light] .hudmeter i.on{box-shadow:none}
+.hudeye{position:absolute;right:0;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--muted);cursor:pointer;
+  font:.6rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.14em;text-transform:uppercase;padding:.5em}
+.hudeye:hover,.hudeye[aria-pressed=true]{color:var(--text)}
+.hudcaps{min-height:1em;font:.66rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--warn)}
+.hud.typing .reactor{filter:drop-shadow(0 0 30px rgba(255,255,255,.75))}
+.reactor{transform:translate3d(calc(var(--px,0)*9px),calc(var(--py,0)*7px),0);transition:transform .25s ease-out,filter .2s}
+.hudgrid{inset:-40px;transform:translate3d(calc(var(--px,0)*-16px),calc(var(--py,0)*-12px),0);transition:transform .3s ease-out}
+@media (hover:none),(prefers-reduced-motion:reduce){.reactor,.hudgrid{transform:none}}
 </style>
 </head>
 <body>
@@ -928,6 +985,11 @@ function dateText() {
   return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear();
 }
 
+function hudGreeting() {
+  const hr = new Date().getHours();
+  return (hr < 5 ? 'Доброй ночи' : hr < 12 ? 'Доброе утро' : hr < 18 ? 'Добрый день' : 'Добрый вечер') + '. Жду код доступа';
+}
+
 function showLogin(msg) {
   stopTimer();
   state.isDirty = () => false;
@@ -938,6 +1000,18 @@ function showLogin(msg) {
   const reactor = h('div', { class: 'reactor', 'aria-hidden': 'true' });
   reactor.innerHTML = REACTOR_SVG;
   const btn = h('button', { class: 'hudbtn', type: 'submit' }, h('span', null, 'Авторизация'));
+  const say = h('div', { class: 'hudsay', 'aria-live': 'polite' }, '');
+  const METER = 14;
+  const meter = h('div', { class: 'hudmeter', 'aria-hidden': 'true' }, Array.from({ length: METER }, () => h('i')));
+  const caps = h('div', { class: 'hudcaps', role: 'status' }, '');
+  const eye = h('button', { class: 'hudeye', type: 'button', 'aria-pressed': 'false', 'aria-label': 'Показать пароль', tabindex: '-1',
+    onclick: () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      eye.setAttribute('aria-pressed', show ? 'true' : 'false');
+      eye.textContent = show ? 'скрыть' : 'показать';
+      input.focus();
+    } }, 'показать');
   const checks = [['Ядро питания', 'норма'], ['Канал шифрования', 'активен'], ['Идентификация', 'ожидание']];
   const log = h('div', { class: 'hudlog', 'aria-hidden': 'true' }, checks.map(([t, v], i) =>
     h('div', { style: 'animation-delay:' + (0.45 + i * 0.4).toFixed(2) + 's' }, h('span', null, t), h('i'), h('b', null, v))));
@@ -976,8 +1050,11 @@ function showLogin(msg) {
     reactor,
     h('div', { class: 'hudcap' }, 'Защищённый доступ'),
     h('h1', null, 'Панель управления'),
+    say,
     log,
-    h('label', { class: 'hudfield' }, input),
+    h('label', { class: 'hudfield' }, input, eye),
+    meter,
+    caps,
     btn,
     stat,
     err,
@@ -992,6 +1069,42 @@ function showLogin(msg) {
     h('div', { class: 'hudflash' }));
   $app.replaceChildren(wrap);
   state.timer = setInterval(() => { const c = document.getElementById('hudclock'); if (c) c.textContent = clockText(); }, 1000);
+
+  // приветствие печатается по буквам; если экран уже заменили, печать сама останавливается
+  const phrase = hudGreeting();
+  let ch = 0;
+  const typer = setInterval(() => {
+    if (!say.isConnected || ch >= phrase.length) { clearInterval(typer); if (say.isConnected) say.textContent = phrase; return; }
+    ch += 1; say.textContent = phrase.slice(0, ch);
+  }, 38);
+
+  // шкала «заряда» растёт с каждым символом, реактор вспыхивает при вводе
+  let typingT = 0;
+  input.addEventListener('input', () => {
+    const lit = Math.min(METER, input.value.length);
+    meter.childNodes.forEach((n, i) => n.classList.toggle('on', i < lit));
+    form.classList.add('typing');
+    clearTimeout(typingT);
+    typingT = setTimeout(() => form.classList.remove('typing'), 450);
+  });
+  const capsCheck = (e) => {
+    const on = !!(e.getModifierState && e.getModifierState('CapsLock'));
+    caps.textContent = on ? 'Включён Caps Lock' : '';
+  };
+  input.addEventListener('keydown', capsCheck);
+  input.addEventListener('keyup', capsCheck);
+  input.addEventListener('blur', () => { caps.textContent = ''; });
+
+  // лёгкий параллакс: реактор и сетка чуть следуют за курсором
+  let raf = 0;
+  wrap.addEventListener('pointermove', (e) => {
+    if (raf || e.pointerType === 'touch') return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      wrap.style.setProperty('--px', ((e.clientX / window.innerWidth) * 2 - 1).toFixed(3));
+      wrap.style.setProperty('--py', ((e.clientY / window.innerHeight) * 2 - 1).toFixed(3));
+    });
+  });
   input.focus();
 }
 
@@ -1029,6 +1142,8 @@ const PAGES = [
   ['overview', 'Обзор', 'dash', 'Семья'],
   ['apps', 'Заявки', 'inbox', 'Семья'],
   ['send', 'Сообщения', 'send', 'Семья'],
+  ['plan', 'Планировщик', 'clock', 'Семья'],
+  ['notes', 'Заметки', 'note', 'Семья'],
   ['screens', 'Экраны', 'screen', 'Семья'],
   ['texts', 'Тексты', 'type', 'Семья'],
   ['stickers', 'Стикеры', 'image', 'Семья'],
@@ -1061,6 +1176,8 @@ const ICONS = {
   out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>',
   bank: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
+  note: '<path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
   menu: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
 };
 function icon(name) {
@@ -1185,7 +1302,7 @@ async function go(page) {
   const content = document.getElementById('content');
   content.replaceChildren(skeleton());
   try {
-    const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, screens: pageScreens,
+    const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, plan: pagePlan, notes: pageNotes, screens: pageScreens,
       texts: pageTexts, stickers: pageStickers, kazna: pageKazna, emojis: pageEmojis,
       diag: pageDiag, audit: pageAudit, shots: pageShots,
       modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
@@ -1308,9 +1425,11 @@ async function pageOverview() {
       okIcon ? h('img', { src: g.icon, alt: '', referrerpolicy: 'no-referrer' }) : h('div', { class: 'ava' }, (g.name || '?').slice(0, 1).toUpperCase()),
       h('div', { style: null }, h('b', null, g.name), h('span', { class: 'muted small' }, (g.members == null ? '?' : g.members) + ' участников')));
   }));
+  const pulse = pulseChart(d.latency_ms);
   state.timer = setInterval(async () => {
     try {
       const n = await api('/api/overview');
+      pulse.push(n.latency_ms);
       put('st', n.ready ? 'В сети' : 'Запускается', n.ready ? 'ok' : 'warn');
       put('ping', n.latency_ms == null ? '—' : n.latency_ms + ' мс');
       put('up', fmtUptime(n.uptime_s));
@@ -1320,14 +1439,277 @@ async function pageOverview() {
       Object.keys(n.stats || {}).forEach((k) => put('db_' + k, n.stats[k]));
       markLive(true);
     } catch (e) { markLive(false); }
-  }, 15000);
+  }, 5000);
   return h('div', null,
-    pageHead(d.bot_name || 'Бот', (d.user ? d.user + (d.user_id ? ' · ID ' + d.user_id : '') : 'Не авторизован в Discord') + ' · данные обновляются сами раз в 15 секунд',
+    pageHead(d.bot_name || 'Бот', (d.user ? d.user + (d.user_id ? ' · ID ' + d.user_id : '') : 'Не авторизован в Discord') + ' · данные обновляются сами раз в 5 секунд',
       h('button', { class: 'btn', onclick: () => go('overview') }, 'Обновить')),
-    stats, db,
+    stats, pulse, db,
     h('div', { class: 'section-title' }, 'Серверы'),
     d.guilds.length ? guilds : h('p', { class: 'muted' }, 'Бот пока ни на одном сервере.')
   );
+}
+
+/* ---------- Пульс бота (живой график на обзоре) ---------- */
+function pulseChart(first) {
+  const N = 40;
+  const lat = [];
+  const cv = h('canvas', { class: 'pulse', 'aria-label': 'График пинга бота за последние минуты', role: 'img' });
+  const hi = h('b', null, '—'), lo = h('b', null, '—'), avg = h('b', null, '—'), now = h('b', null, '—');
+  const legend = h('div', { class: 'pulsecap' },
+    h('span', null, 'Сейчас ', now), h('span', null, 'Мин ', lo), h('span', null, 'Средний ', avg), h('span', null, 'Макс ', hi));
+  const H = 150;
+  function draw() {
+    const w = cv.clientWidth || 640, dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(H * dpr); }
+    const c = cv.getContext('2d');
+    if (!c) return;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, w, H);
+    const cs = getComputedStyle(document.documentElement);
+    const fg = cs.getPropertyValue('--text').trim() || '#fff';
+    const grid = cs.getPropertyValue('--line2').trim() || 'rgba(255,255,255,.2)';
+    c.lineWidth = 1; c.strokeStyle = grid; c.globalAlpha = .5;
+    for (let i = 1; i < 4; i++) { const y = Math.round(H * i / 4) + .5; c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke(); }
+    for (let x = 0; x < w; x += 48) { c.beginPath(); c.moveTo(x + .5, 0); c.lineTo(x + .5, H); c.stroke(); }
+    c.globalAlpha = 1;
+    const pts = lat.filter((v) => v !== null);
+    if (!pts.length) {
+      c.fillStyle = grid; c.font = '12px ui-monospace,Menlo,monospace'; c.textAlign = 'center';
+      c.fillText('жду первые замеры…', w / 2, H / 2); return;
+    }
+    const top = Math.max(120, Math.max(...pts) * 1.25);
+    const step = w / (N - 1), off = 0;
+    const xy = lat.map((v, i) => (v === null ? null : [(off + i) * step, H - 14 - (v / top) * (H - 30)]));
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    const live = xy.filter(Boolean);
+    const g = c.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, 'rgba(255,255,255,.16)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.beginPath(); live.forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
+    c.lineTo(live[live.length - 1][0], H); c.lineTo(live[0][0], H); c.closePath();
+    c.fillStyle = fg; c.globalAlpha = .1; c.fill(); c.globalAlpha = 1;
+    c.beginPath(); live.forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
+    c.strokeStyle = fg; c.lineWidth = 2; c.shadowColor = fg; c.shadowBlur = 8; c.stroke(); c.shadowBlur = 0;
+    const last = live[live.length - 1];
+    c.beginPath(); c.arc(last[0], last[1], 7, 0, 6.2832); c.globalAlpha = .18; c.fillStyle = fg; c.fill();
+    c.globalAlpha = 1; c.beginPath(); c.arc(last[0], last[1], 3.2, 0, 6.2832); c.fill();
+    c.fillStyle = grid; c.font = '10px ui-monospace,Menlo,monospace'; c.textAlign = 'left';
+    c.fillText(Math.round(top) + ' мс', 6, 12);
+  }
+  function push(ms) {
+    lat.push(typeof ms === 'number' ? ms : null);
+    if (lat.length > N) lat.shift();
+    const pts = lat.filter((v) => v !== null);
+    now.textContent = pts.length ? pts[pts.length - 1] + ' мс' : '—';
+    lo.textContent = pts.length ? Math.min(...pts) + ' мс' : '—';
+    hi.textContent = pts.length ? Math.max(...pts) + ' мс' : '—';
+    avg.textContent = pts.length ? Math.round(pts.reduce((a, b) => a + b, 0) / pts.length) + ' мс' : '—';
+    draw();
+  }
+  push(first);
+  if (typeof ResizeObserver === 'function') new ResizeObserver(draw).observe(cv);
+  const box = h('div', { class: 'card pulsebox' },
+    h('div', { class: 'pulsehead' }, h('h2', null, 'Пульс бота'), h('small', { class: 'muted' }, 'пинг до Discord, замер раз в 5 секунд, на графике последние ~3 минуты')), cv, legend);
+  box.push = push;
+  requestAnimationFrame(draw);
+  return box;
+}
+
+/* ---------- Заметки штаба ---------- */
+const NOTE_TONES = [['', 'Обычная'], ['white', 'Светлая'], ['ok', 'Зелёная'], ['warn', 'Жёлтая'], ['bad', 'Красная']];
+function fmtWhen(ts) {
+  return new Date(ts * 1000).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+async function pageNotes() {
+  let notes = (await api('/api/notes')).notes || [];
+  let tone = '', pinNew = false, q = '';
+  const grid = h('div', { class: 'notes' });
+  const count = h('small', { class: 'muted' }, '');
+  const ta = h('textarea', { class: 'msg', maxlength: '2000', placeholder: 'Договорённость, список дел, мысль на потом…  Ctrl+Enter — добавить' });
+  const tones = h('div', { class: 'tones', role: 'radiogroup', 'aria-label': 'Цвет заметки' });
+  function drawTones() {
+    tones.replaceChildren(...NOTE_TONES.map(([k, label]) => h('button', {
+      type: 'button', class: 'tone t-' + (k || 'plain') + (k === tone ? ' on' : ''), title: label, 'aria-label': label,
+      role: 'radio', 'aria-checked': k === tone ? 'true' : 'false', onclick: () => { tone = k; drawTones(); }
+    })));
+  }
+  async function save(n, fields) {
+    try {
+      const r = await api('/api/notes/update', { method: 'POST', body: Object.assign({ id: n.id }, fields) });
+      Object.assign(n, r.note);
+      draw();
+    } catch (e) { toast(e.message, 'err'); }
+  }
+  function card(n) {
+    const body = h('div', { class: 'nbody' }, richNode(n.text));
+    const el = h('article', { class: 'card note-c t-' + (n.color || 'plain') + (n.pinned ? ' pinned' : '') }, body);
+    const edit = () => {
+      const t = h('textarea', { class: 'msg', maxlength: '2000' });
+      t.value = n.text;
+      const row = h('div', { class: 'row end' },
+        h('button', { class: 'btn', onclick: draw }, 'Отмена'),
+        h('button', { class: 'btn primary', onclick: () => save(n, { text: t.value }) }, 'Сохранить'));
+      body.replaceChildren(t, row);
+      t.focus();
+    };
+    el.append(h('footer', null,
+      h('small', { class: 'muted' }, fmtWhen(n.ts)),
+      h('span', { class: 'nact' },
+        h('button', { class: 'ibtn' + (n.pinned ? ' on' : ''), title: n.pinned ? 'Открепить' : 'Закрепить наверху', 'aria-label': 'Закрепить',
+          onclick: () => save(n, { pinned: !n.pinned }) }, n.pinned ? '★' : '☆'),
+        h('button', { class: 'ibtn', title: 'Сменить цвет', 'aria-label': 'Сменить цвет', onclick: () => {
+          const i = NOTE_TONES.findIndex(([k]) => k === (n.color || ''));
+          save(n, { color: NOTE_TONES[(i + 1) % NOTE_TONES.length][0] });
+        } }, '◐'),
+        h('button', { class: 'ibtn', title: 'Править', 'aria-label': 'Править', onclick: edit }, '✎'),
+        h('button', { class: 'ibtn', title: 'Удалить', 'aria-label': 'Удалить', onclick: async () => {
+          if (!(await confirmBox('Удалить заметку?', 'Она пропадёт у всех, кто пользуется панелью.', 'Удалить', true))) return;
+          try { await api('/api/notes/delete', { method: 'POST', body: { id: n.id } }); notes = notes.filter((x) => x.id !== n.id); draw(); }
+          catch (e) { toast(e.message, 'err'); }
+        } }, '✕')
+      )));
+    return el;
+  }
+  function draw() {
+    const s = q.trim().toLowerCase();
+    const list = notes.filter((n) => !s || n.text.toLowerCase().includes(s))
+      .sort((a, b) => (b.pinned - a.pinned) || (b.ts - a.ts));
+    count.textContent = notes.length ? (s ? 'Найдено ' + list.length + ' из ' + notes.length : 'Всего заметок: ' + notes.length) : '';
+    grid.replaceChildren(...list.map(card));
+    if (!list.length) grid.append(h('div', { class: 'card empty' }, notes.length ? 'По запросу ничего нет.' : 'Пока пусто. Первая заметка — выше.'));
+  }
+  async function add() {
+    if (!ta.value.trim()) { toast('Напиши хоть что-нибудь', 'err'); return; }
+    try {
+      const r = await api('/api/notes/add', { method: 'POST', body: { text: ta.value, color: tone, pinned: pinNew } });
+      notes.push(r.note); ta.value = ''; draw();
+    } catch (e) { toast(e.message, 'err'); }
+  }
+  ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); add(); } });
+  const pin = h('input', { type: 'checkbox', onchange: (e) => { pinNew = e.target.checked; } });
+  const search = h('input', { type: 'search', placeholder: 'Найти в заметках…', 'aria-label': 'Поиск по заметкам' });
+  search.addEventListener('input', () => { q = search.value; draw(); });
+  drawTones(); draw();
+  return h('div', null,
+    pageHead('Заметки штаба', 'Общий блокнот: то, что записано здесь, видят все, кто входит в панель.'),
+    h('div', { class: 'card form composer' }, h('div', { class: 'row' }, emojiButton(ta)), ta,
+      h('div', { class: 'row between' }, h('div', { class: 'row' }, tones, h('label', { class: 'row small' }, pin, 'Закрепить')),
+        h('button', { class: 'btn primary', onclick: add }, 'Добавить'))),
+    h('div', { class: 'row between notebar' }, search, count),
+    grid);
+}
+
+/* ---------- Планировщик сообщений ---------- */
+function toLocalInput(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+function inText(sec) {
+  if (sec < 60) return 'меньше минуты';
+  const m = Math.floor(sec / 60);
+  if (m < 60) return m + ' мин';
+  const hh = Math.floor(m / 60);
+  if (hh < 24) return hh + ' ч ' + (m % 60) + ' мин';
+  return Math.floor(hh / 24) + ' д ' + (hh % 24) + ' ч';
+}
+const REPEAT_RU = { daily: 'каждый день', weekly: 'каждую неделю' };
+
+async function pagePlan() {
+  const cq = h('input', { type: 'search', placeholder: 'Имя канала…' });
+  const chBox = h('div', { class: 'picks' });
+  const chLine = h('div', { class: 'pickline' });
+  let channelId = '', chanRows = [];
+  function sayChannel() {
+    const c = chanRows.find((x) => x.id === channelId);
+    chLine.replaceChildren(h('span', null, c ? 'Отправим в ' : 'Канал не выбран — нажми на строчку.'));
+    if (c) chLine.append(h('b', null, chanLabel(c)));
+    if (c && c.can_write === false) chLine.append(chip('нет прав писать', 'err'));
+  }
+  async function loadChannels() {
+    const d = await api('/api/channels?q=' + encodeURIComponent(cq.value.trim()));
+    chanRows = d.rows;
+    chBox.replaceChildren(...d.rows.map((c) => h('label', null,
+      h('input', { type: 'radio', name: 'pchan', value: c.id, checked: c.id === channelId, onchange: () => { channelId = c.id; sayChannel(); } }),
+      h('span', { class: 'grow' }, h('b', null, chanLabel(c)), h('small', null, chanSub(c))),
+      c.can_write === false ? chip('нет прав', 'err') : null)));
+    if (!d.rows.length) chBox.append(h('div', { class: 'none' }, 'Не нашлось ни одного канала.'));
+    sayChannel();
+  }
+  cq.addEventListener('input', () => { clearTimeout(cq._t); cq._t = setTimeout(loadChannels, 300); });
+
+  const f = msgForm(true);
+  const when = h('input', { type: 'datetime-local', 'aria-label': 'Когда отправить' });
+  when.value = toLocalInput(new Date(Date.now() + 3600 * 1000));
+  const repeat = h('select', { 'aria-label': 'Повторять' },
+    h('option', { value: '' }, 'Один раз'), h('option', { value: 'daily' }, 'Каждый день'), h('option', { value: 'weekly' }, 'Каждую неделю'));
+  const setIn = (sec) => { when.value = toLocalInput(new Date(Date.now() + sec * 1000)); };
+  const quick = h('div', { class: 'row' },
+    h('button', { type: 'button', class: 'btn', onclick: () => setIn(600) }, '+10 мин'),
+    h('button', { type: 'button', class: 'btn', onclick: () => setIn(3600) }, '+1 час'),
+    h('button', { type: 'button', class: 'btn', onclick: () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(12, 0, 0, 0); when.value = toLocalInput(d); } }, 'Завтра в 12:00'));
+  const res = h('div');
+  const submit = h('button', { class: 'btn primary', onclick: async () => {
+    const at = Date.parse(when.value) / 1000;
+    if (!channelId) { toast('Сначала выбери канал в списке', 'err'); return; }
+    if (!(at > 0)) { toast('Укажи дату и время', 'err'); return; }
+    const c = chanRows.find((x) => x.id === channelId);
+    submit.disabled = true;
+    try {
+      await api('/api/schedule/add', { method: 'POST', body: {
+        channel: channelId, channel_name: c ? c.name : '', text: f.text.value, title: f.title.value, color: f.color.value,
+        ping: f.ping.checked, at, repeat: repeat.value } });
+      toast('Запланировано');
+      f.text.value = '';
+      await load();
+    } catch (e) { res.replaceChildren(h('p', { class: 'err' }, e.message)); }
+    finally { submit.disabled = false; }
+  } }, 'Запланировать');
+
+  const queue = h('div', { class: 'plist' });
+  const hist = h('div', { class: 'plist' });
+  const hhead = h('div', { class: 'section-title' }, 'Уже отправлено');
+  let skew = 0;
+  function item(i) {
+    const left = i.at - (Date.now() / 1000 + skew);
+    const snip = (i.title ? i.title + ' — ' : '') + i.text;
+    const el = h('div', { class: 'card plitem ' + i.status },
+      h('div', { class: 'plwhen' }, h('b', null, fmtWhen(i.at)),
+        i.status === 'wait' ? h('small', { class: 'muted' }, left > 0 ? 'через ' + inText(left) : 'вот-вот') : null),
+      h('div', { class: 'plmain' },
+        h('div', { class: 'row small' }, chip('#' + (i.channel_name || i.channel)),
+          i.repeat ? chip(REPEAT_RU[i.repeat] || i.repeat) : null,
+          i.ping ? chip('@everyone', 'err') : null,
+          i.status === 'sent' ? chip('отправлено', 'ok') : null,
+          i.status === 'fail' ? chip('не вышло', 'err') : null),
+        h('p', { class: 'plsnip' }, snip.length > 220 ? snip.slice(0, 220) + '…' : snip),
+        i.last_error ? h('p', { class: 'warnline small' }, i.last_error) : null,
+        i.status === 'sent' && i.last_link ? linkRow(i.last_link, 'Сообщение в Discord') : null),
+      h('button', { class: 'btn' + (i.status === 'wait' ? ' danger' : ''), onclick: async () => {
+        if (i.status === 'wait' && !(await confirmBox('Отменить отправку?', 'Сообщение не уйдёт.', 'Отменить', true))) return;
+        try { await api('/api/schedule/cancel', { method: 'POST', body: { id: i.id } }); await load(); }
+        catch (e) { toast(e.message, 'err'); }
+      } }, i.status === 'wait' ? 'Отменить' : 'Убрать'));
+    return el;
+  }
+  async function load() {
+    const d = await api('/api/schedule');
+    skew = d.now - Date.now() / 1000;
+    const wait = d.items.filter((i) => i.status === 'wait'), done = d.items.filter((i) => i.status !== 'wait');
+    queue.replaceChildren(...wait.map(item));
+    if (!wait.length) queue.append(h('div', { class: 'card empty' }, 'Очередь пуста. Составь сообщение слева и выбери время.'));
+    hist.replaceChildren(...done.map(item));
+    hhead.style.display = done.length ? '' : 'none';
+  }
+  await Promise.all([loadChannels(), load()]);
+  state.timer = setInterval(() => { load().then(() => markLive(true), () => markLive(false)); }, 15000);
+  return h('div', null,
+    pageHead('Планировщик', 'Бот сам отправит сообщение в нужный час, даже если вы оффлайн. Проверка очереди раз в 20 секунд.'),
+    h('div', { class: 'grid2' },
+      h('div', { class: 'card form' }, h('h2', null, '⏰ Новое сообщение'),
+        h('label', null, 'Поиск канала', cq), chBox, chLine, f.box,
+        h('label', null, 'Когда', when), quick,
+        h('label', null, 'Повторять', repeat), res, submit),
+      h('div', null, h('div', { class: 'section-title' }, 'В очереди'), queue, hhead, hist)));
 }
 
 /* ---------- Модули ---------- */

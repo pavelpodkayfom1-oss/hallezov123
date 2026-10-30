@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from typing import Dict, Any, Optional
 import disnake
 
@@ -26,6 +27,21 @@ def get_text(key: str, default: str = "") -> str:
     config = load_config()
     texts = config.get("texts", {})
     return texts.get(key, default)
+
+_PH_RE = re.compile(r"\{(\w+)\}")
+
+def fmt_text(key: str, default: str = "", **values: Any) -> str:
+    """Как get_text, но подставляет {имя} из values.
+
+    Подстановка за один проход: значение не перепроверяется на «скобки», а незнакомое
+    {слово}, которое человек вписал в панели, остаётся как есть и бота не роняет.
+    Ключ и дефолт должны быть простыми строками: каталог «Тексты» в веб-панели находит
+    надписи по этим вызовам и берёт имена подстановок из values.
+    """
+    text = get_text(key, default)
+    if not values:
+        return text
+    return _PH_RE.sub(lambda m: str(values[m.group(1)]) if m.group(1) in values else m.group(0), text)
 
 # Названия рангов, которые важнее config.json (деплой из git не откатит их снимком).
 RANK_NAME_OVERRIDES: Dict[int, str] = {4: "Recruit"}
