@@ -600,19 +600,21 @@ T_STATE_QUIET = "○ тишина"
 T_ORDER_HEAD = ":hz_megaphone:  КАК ЗАКАЗАТЬ"
 T_ORDER_TEXT = (
     "> :hz_megaphone:  **«Заказать»** — имя из библиотеки или ссылка\n"
-    "> :hz_house:  Набрал имя здесь, стоя в голосовом, — тоже заказ"
+    "> :hz_house:  Набрал имя в канале, стоя в голосе — тоже заказ"
 )
-T_ORDER_SITE_BTN = "> :hz_shareicon:  **«Сайт»** вверху — то же из браузера, без пароля"
-T_ORDER_SITE_MENU = "> :hz_shareicon:  **«Сайт»** в списке «Ещё» — заказ из браузера"
+T_ORDER_SITE_BTN = ("> :hz_shareicon:  **«Сайт»** вверху: открывай в **Chrome**, "
+                    "в Яндексе не грузится")
+T_ORDER_SITE_MENU = ("> :hz_shareicon:  **«Сайт»** в «Ещё»: открывай в **Chrome**, "
+                     "в Яндексе не грузится")
 T_FILES_HEAD = ":hz_gifticon:  ОТКУДА ТРЕКИ"
 T_FILES_TEXT = (
     "> :hz_gifticon:  «Закинуть трек» берёт mp3 из сообщения — до {n} штук по {mb} МБ\n"
-    "> :hz_book:  Файл во вкладке Files рядом с `main.py` тоже играется"
+    "> :hz_book:  Файл из вкладки Files тоже играется"
 )
 T_CTRL_HEAD = ":hz_trainicon:  ПУЛЬТ"
 T_CTRL_TEXT = (
     "> :hz_pcicon:  Пауза, скип, очередь, громкость — вторым рядом\n"
-    "> :hz_moderator:  Стоп, плейлисты, авто-диджей, настройки — в **«Ещё»**"
+    "> :hz_moderator:  Стоп, плейлисты, диджей, настройки — в **«Ещё»**"
 )
 T_BIND_HEAD = ":hz_house:  КАНАЛ МУЗЫКИ"
 T_BIND_HERE = ("> {ch}\n"
@@ -768,7 +770,7 @@ class MusicPanelView(disnake.ui.View):
         if url:
             # style=link: Discord открывает ссылку сам, нажатие = сайт в браузере.
             # Сообщение со ссылкой, которое надо ещё скопировать, — лишний шаг.
-            self.add_item(disnake.ui.Button(label="Сайт  ↗", emoji="🌐",
+            self.add_item(disnake.ui.Button(label="Сайт · в Chrome  ↗", emoji="🌐",
                                             style=disnake.ButtonStyle.link, url=url, row=0))
         self.add_item(MoreMenu())
         self.add_item(PanelChannelSelect(on_panel=True))
@@ -1870,6 +1872,9 @@ class Music(commands.Cog):
         if url:
             emb = _ok(self.bot, "САЙТ МУЗЫКИ",
                       f"### {_e(self.bot, 'hz_pcicon', '🎧')}  {url}\n\n"
+                      f"{_e(self.bot, 'hz_warn', '⚠️')}  Открывай в **Chrome**: в Яндексе "
+                      "и во встроенном окне Дискорда адрес не грузится. Скопируй ссылку "
+                      "и вставь в Chrome.\n\n"
                       f"{_e(self.bot, 'hz_megaphone', '📢')}  Открыт без пароля: вставил "
                       "ссылку или имя — трек в общей очереди.")
         else:
