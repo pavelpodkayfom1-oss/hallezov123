@@ -1883,18 +1883,14 @@ class Music(commands.Cog):
         await inter.response.send_message(embed=emb, ephemeral=True)
 
     # ---------- команды ----------
+    # У команды нет аргумента-канала: человек ошибается в списке, а панель потом лежит
+    # неизвестно где. Канал выбирается списком на самой панели — там же, где видно итог.
     @commands.slash_command(name="music_panel",
-                            description="Панель музыки в этот канал (или в настроенный)",
-                            default_member_permissions=disnake.Permissions(manage_guild=True),
-                            options=[disnake.Option(
-                                name="канал", type=disnake.OptionType.channel,
-                                channel_types=[disnake.ChannelType.text],
-                                description="Куда положить панель; канал запомнится для анонсов "
-                                            "и заказов текстом")])
-    async def music_panel(self, inter: disnake.ApplicationCommandInteraction,
-                          канал: disnake.TextChannel = None):
+                            description="Панель музыки: в настроенный канал или в этот",
+                            default_member_permissions=disnake.Permissions(manage_guild=True))
+    async def music_panel(self, inter: disnake.ApplicationCommandInteraction):
         cfg = _cfg(inter.guild.id)
-        ch = канал or self.panel_channel(inter.guild) or inter.channel
+        ch = self.panel_channel(inter.guild) or inter.channel
         await self._drop_old_panel(inter.guild, cfg)
         err = _cfg_save(inter.guild.id, {"panel": ch.id})
         if err:
