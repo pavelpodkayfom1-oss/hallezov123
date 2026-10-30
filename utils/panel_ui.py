@@ -1218,6 +1218,48 @@ html[data-style=stark] .hud h1{font-family:var(--mono)}
 .sw6{background:linear-gradient(135deg,#02060b 55%,#7fd8ff 55%)}
 @media (max-width:1000px){html[data-style=stark] .side{background:#02060b}html[data-style=stark] .mbar{background:rgba(2,6,11,.96)}html[data-style=stark] .head h1{font-size:1.2rem}}
 @media (prefers-reduced-motion:reduce){html[data-style=stark]::before,html[data-style=stark] #content>*,html[data-style=stark] .stats>.stat,html[data-style=stark] .logo::after,html[data-style=stark] .head::after,html[data-style=stark] .head h1::before{animation:none!important}}
+
+/* «Старк», спокойнее: без мигания, колец и капса — остаются чёрный фон, сетка и тонкие уголки */
+html[data-style=stark]::before{display:none}
+html[data-style=stark] .head h1{font-family:inherit;font-size:1.7rem;letter-spacing:-.01em;text-transform:none;text-shadow:none}
+html[data-style=stark] .head h1::before{display:none}
+html[data-style=stark] .head::after{animation:none;width:64px;height:2px;background:var(--accent);opacity:1}
+html[data-style=stark] .head{border-bottom-color:var(--line)}
+html[data-style=stark] .section-title,html[data-style=stark] .cfield>label,html[data-style=stark] .cfield .row>label,
+html[data-style=stark] .stat small,html[data-style=stark] .navgroup,html[data-style=stark] .brand span{
+  font-family:inherit;text-transform:none;letter-spacing:0;font-size:.82rem;font-weight:600;color:var(--muted)}
+html[data-style=stark] .navgroup{font-size:.75rem;color:var(--faint);font-weight:600}
+html[data-style=stark] .brand b{font-family:inherit;text-transform:none;letter-spacing:0;font-size:1rem}
+html[data-style=stark] .nav button{font-family:inherit;text-transform:none;letter-spacing:0;font-size:.92rem}
+html[data-style=stark] .btn,html[data-style=stark] .seg button,html[data-style=stark] .chip,html[data-style=stark] .status{
+  font-family:inherit;text-transform:none;letter-spacing:0;font-size:.88rem;font-weight:600}
+html[data-style=stark] .chip{font-size:.7rem}
+html[data-style=stark] .btn{overflow:visible;border-radius:6px}
+html[data-style=stark] .btn::after{display:none}
+html[data-style=stark] .btn:hover{box-shadow:none}
+html[data-style=stark] .btn.primary,html[data-style=stark] .btn.primary:hover{box-shadow:none}
+html[data-style=stark] input,html[data-style=stark] select,html[data-style=stark] textarea,
+html[data-style=stark] .seg,html[data-style=stark] .picks,html[data-style=stark] .avlist{border-radius:6px}
+html[data-style=stark] .seg button{border-radius:4px}
+html[data-style=stark] .seg button.on{box-shadow:none}
+html[data-style=stark] .stat b{font-family:inherit;font-size:1.9rem;font-weight:650;text-shadow:none;color:var(--text)}
+html[data-style=stark] .stat.ok b,html[data-style=stark] .stat.warn b{text-shadow:none}
+html[data-style=stark] .card{border-radius:8px;--brk:rgba(127,216,255,.35);
+  background-size:10px 1px,1px 10px,10px 1px,1px 10px,10px 1px,1px 10px,10px 1px,1px 10px}
+html[data-style=stark] .card:hover{box-shadow:none}
+html[data-style=stark] .pickline.target,html[data-style=stark] .picks label,html[data-style=stark] .avrow,
+html[data-style=stark] .nav button,html[data-style=stark] .searchbtn,html[data-style=stark] .status{border-radius:6px}
+/* значок вверху: простой квадрат с буквой, без вращающегося кольца */
+html[data-style=stark] .logo{border-radius:9px;border:1px solid var(--accent-line);background:var(--accent-soft);color:var(--accent2);
+  font-family:inherit;font-weight:700;box-shadow:none}
+html[data-style=stark] .logo::after{display:none}
+/* появление страницы — быстрое и без вспышек */
+@keyframes calmin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+html[data-style=stark] #content>*{animation:calmin .18s ease-out both}
+html[data-style=stark] .stats>.stat,html[data-style=stark] .guilds>.card{animation:none}
+html[data-style=stark] .nav button.active .ico{filter:none}
+html[data-style=stark] .nav button.active::before{box-shadow:none}
+html[data-style=stark] .dot{box-shadow:none}
 </style>
 </head>
 <body>
