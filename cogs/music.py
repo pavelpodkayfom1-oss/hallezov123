@@ -22,7 +22,7 @@ import disnake
 from disnake.ext import commands
 
 from utils import brand, cdn_assets
-from utils.checks import is_admin, load_config
+from utils.checks import get_text, is_admin, load_config
 from utils.embeds import card, list_embed, note_embed, panel_embed
 
 # Кулдаун на заказ музыки (секунд на одного пользователя)
@@ -370,9 +370,10 @@ def _fmt_duration(sec) -> str:
 
 
 # ---------- настройки панели ----------
-# Один файл на все серверы: {id: {громкость, кулдаун, очередь, диджей, авто-выход}}.
+# Один файл на все серверы: {id: {громкость, кулдаун, очередь, диджей, авто-выход,
+# канал панели и id самой панели — по нему старая карточка убирается перед новой}}.
 DEFAULT_SETTINGS = {"volume": 50, "cooldown": PLAY_COOLDOWN, "queue": MAX_QUEUE,
-                    "dj": False, "leave": True}
+                    "dj": False, "leave": True, "panel": 0, "panel_msg": 0}
 COOLDOWNS = (0, 5, 10, 20, 40, 60)
 QUEUES = (10, 25, 40, 60)
 
@@ -397,6 +398,8 @@ def _cfg(guild_id) -> dict:
     out["queue"] = _int(out["queue"], MAX_QUEUE)
     out["dj"] = bool(out["dj"])
     out["leave"] = bool(out["leave"])
+    out["panel"] = _int(out["panel"], 0)
+    out["panel_msg"] = _int(out["panel_msg"], 0)
     return out
 
 
@@ -554,6 +557,63 @@ def _e(bot, name: str, fallback: str) -> str:
     return brand.emoji(bot, name, fallback)
 
 
+def _T(bot, key: str, default: str, **subs) -> str:
+    """Текст музыки: сохранённая в панели правка → эмодзи пака → подстановки {имя}.
+
+    `{скобки}` подставляются после brand.E, чтобы правка из веб-панели не могла уронить
+    экран: не та подстановка просто останется текстом.
+    """
+    text = brand.E(bot, get_text(key, default))
+    for name, value in subs.items():
+        text = text.replace("{" + name + "}", str(value))
+    return text
+
+
+# Тексты панели — константами: так редактор «Тексты» в веб-панели видит настоящий дефолт,
+# и «Как в коде» возвращает именно эту надпись, а не пустоту.
+T_PANEL_TITLE = ":hz_pcicon:  МУЗЫКА СЕМЬИ"
+T_PANEL_INTRO = "*:red_crown:  Один голос на всю семью  :red_crown:*"
+T_NOW_HEAD = ":hz_pcicon:  СЕЙЧАС"
+T_NOW_IDLE = "Бот не в голосовом — жми **«В войс»**"
+T_NOW_EMPTY = "очередь пуста"
+T_NOW_LINE = ":hz_trainicon:  очередь {q}  ·  :pinkghost:  диджей {dj}  ·  :hz_bluemodroleicon:  звук {vol}%"
+T_STATE_PLAY = "играет"
+T_STATE_PAUSE = "пауза"
+T_STATE_QUIET = "тишина"
+T_ORDER_HEAD = ":hz_megaphone:  КАК ЗАКАЗАТЬ"
+T_ORDER_TEXT = (
+    "Кнопка **«Заказать»** — имя из библиотеки или ссылка.\n"
+    "Написал имя в этом канале, стоя в том же голосовом, — считается так же.\n"
+    ":hz_shareicon:  «Сайт музыки» в списке «Ещё» — то же самое из браузера, без пароля."
+)
+T_FILES_HEAD = ":hz_gifticon:  ОТКУДА ТРЕКИ"
+T_FILES_TEXT = (
+    "«Закинуть трек» берёт mp3 прямо из сообщения — до {n} штук по {mb} МБ.\n"
+    "Файл, положенный во вкладку Files рядом с `main.py`, тоже играется."
+)
+T_CTRL_HEAD = ":hz_trainicon:  ПУЛЬТ"
+T_CTRL_TEXT = (
+    "Второй ряд — пауза, скип, громкость и очередь.\n"
+    "Стоп, плейлисты, авто-диджей и настройки — в списке «Ещё»."
+)
+T_PANEL_DONE = (
+    "{ch}\n\n"
+    ":hz_house:  Панель, анонсы и заказы текстом — теперь только тут.\n"
+    ":hz_trainicon:  Старая панель удалена: два экрана с кнопками в одном чате — не порядок."
+)
+T_PANEL_MOVED = (
+    ":hz_house:  Канал для панели и анонсов — {ch}.\n"
+    ":hz_trainicon:  Выбрать другой — список «Ещё» → «Настройки»."
+)
+T_CFG_CHANNEL_HEAD = ":hz_house:  КАНАЛ ПАНЕЛИ"
+T_CFG_CHANNEL_SET = "{ch}\n:hz_trainicon:  Панель, анонсы и заказы текстом — только тут"
+T_CFG_CHANNEL_NONE = ":hz_warn:  Не выбран — где вызвали `/music_panel`, там панель и лежит"
+T_ANN_HEAD = ":hz_pcicon:  СЕЙЧАС ИГРАЕТ"
+T_ANN_LINE = ":hz_trainicon:  {dur}  ·  :hz_bluemodroleicon:  звук {vol}%"
+T_ANN_WHO = ":hz_megaphone:  Заказал(а) {who}"
+T_DJ_OFF = ":pinkghost:  Библиотека кончилась — авто-диджей выключен."
+
+
 def _ok(bot, head: str, text: str, guild=None) -> disnake.Embed:
     like = _e(bot, "hz_likeicon", "✅")
     return note_embed(text, "success", title=f"{like}  {head}", guild=guild)
@@ -576,6 +636,14 @@ def _cfg_text(cfg: dict) -> dict:
     }
 
 
+def _chan_line(bot, guild, cid: int) -> str:
+    """Строка «канал панели» на экране настроек: упоминание, если канал жив."""
+    ch = guild.get_channel(cid) if (guild is not None and cid) else None
+    if ch is None:
+        return _T(bot, "music_cfg_channel_none", T_CFG_CHANNEL_NONE)
+    return _T(bot, "music_cfg_channel_set", T_CFG_CHANNEL_SET, ch=ch.mention)
+
+
 def _cycle(values, current):
     """Следующее значение из списка: настройки шагают кнопкой, без модалок и опечаток."""
     try:
@@ -585,19 +653,19 @@ def _cycle(values, current):
     return values[(i + 1) % len(values)]
 
 
-PANEL_BANNER = os.path.join(BASE_DIR, "assets", "media_banner.jpg")
+PANEL_BANNER = os.path.join(BASE_DIR, "assets", "music_panel.jpg")
 
 
 def _panel_banner(embed: disnake.Embed):
     """Баннер под панелью — как у казны: ссылка на CDN, а если её нет — вложение."""
     if not os.path.isfile(PANEL_BANNER):
         return None
-    url = cdn_assets.cached_url("media_banner.jpg", PANEL_BANNER)
+    url = cdn_assets.cached_url("music_panel.jpg", PANEL_BANNER)
     if url:
         embed.set_image(url=url)
         return None
-    embed.set_image(url="attachment://media_banner.jpg")
-    return disnake.File(PANEL_BANNER, filename="media_banner.jpg")
+    embed.set_image(url="attachment://music_panel.jpg")
+    return disnake.File(PANEL_BANNER, filename="music_panel.jpg")
 
 
 MORE_ITEMS = [
@@ -649,8 +717,7 @@ class MoreMenu(disnake.ui.StringSelect):
         elif what == "site":
             await cog.say_site(inter)
         elif what == "refresh":
-            await inter.response.edit_message(embed=cog._panel_embed(inter.guild),
-                                              view=MusicPanelView())
+            await cog.refresh_panel(inter)
         else:
             await inter.response.defer(ephemeral=True)
 
@@ -689,7 +756,7 @@ class MusicPanelView(disnake.ui.View):
         vc = await cog.ensure_voice(inter)
         if not vc:
             return
-        cog.get_player(inter.guild).text_channel = inter.channel
+        cog.bind_channel(inter.guild, inter.channel)
         pc = _e(inter.bot, "hz_pcicon", "🎧")
         meg = _e(inter.bot, "hz_megaphone", "📢")
         await inter.edit_original_response(
@@ -770,12 +837,34 @@ class MusicPanelView(disnake.ui.View):
     async def vol_up(self, button, inter: disnake.MessageInteraction):
         await inter.bot.get_cog("Music").change_volume(inter, +0.1)
 
+class PanelChannelSelect(disnake.ui.ChannelSelect):
+    """Куда бот пишет про музыку: выбор живёт в настройках сервера, а не в памяти."""
+
+    def __init__(self, guild, current: int):
+        ch = guild.get_channel(current) if current else None
+        super().__init__(
+            custom_id="music:cfg:channel",
+            placeholder="Канал панели и анонсов",
+            channel_types=[disnake.ChannelType.text],
+            min_values=1, max_values=1,
+            default_values=[ch] if ch else None,
+            row=2,
+        )
+
+    async def callback(self, inter: disnake.MessageInteraction):
+        view = self.view
+        if isinstance(view, MusicSettingsView):
+            await view.channel_pick(self, inter)
+
+
 class MusicSettingsView(disnake.ui.View):
     """Экран настроек: каждая кнопка шагает значение и сразу перерисовывает экран."""
 
-    def __init__(self, guild_id: int):
+    def __init__(self, guild_id: int, guild=None):
         super().__init__(timeout=600)
         self.guild_id = int(guild_id)
+        if guild is not None:
+            self.add_item(PanelChannelSelect(guild, _cfg(guild_id)["panel"]))
 
     def embed(self, bot, guild=None) -> disnake.Embed:
         cfg = _cfg(self.guild_id)
@@ -793,6 +882,7 @@ class MusicSettingsView(disnake.ui.View):
             p = cog.players.get(int(guild.id))
         live = (f"**{int(round(p.volume * 100))}%**  сейчас в голосе" if p else
                 f"**{t['volume']}**  для новых заказов")
+        panel = _chan_line(bot, guild, cfg["panel"])
         sections = [
             (f"{pc}  ГРОМКОСТЬ",
              f"{live}\n{meg}  Шаг по 5% — «Тише» и «Громче» на панели крутят этот же звук"),
@@ -801,13 +891,31 @@ class MusicSettingsView(disnake.ui.View):
              f"**{t['cooldown']}**\n{bot_i}  Чтобы один человек не перекрывал всех подряд"),
             (f"{ghost}  АВТО-ДИДЖЕЙ",
              f"**{t['dj']}**\n{pc}  Кончится очередь — возьмёт случайный трек из библиотеки"),
-            ("🚪  АВТО-ВЫХОД",
+            (f"{_e(bot, 'hz_warn', '⚠️')}  АВТО-ВЫХОД",
              f"**{t['leave']}**\n{book}  Если в канале не осталось никого, кроме бота"),
+            (_T(bot, "music_cfg_channel_head", T_CFG_CHANNEL_HEAD), panel),
         ]
         return panel_embed(
-            f"{pc}  НАСТРОЙКИ МУЗЫКИ", sections, guild=guild,
+            f"{pc}  НАСТРОЙКИ МУЗЫКИ", sections, color_key="music_color", guild=guild,
             intro=(f"*{crown}  Один голос на всю семью  {crown}*\n"
                    f"{bot_i}  Значения помнятся после рестарта бота."))
+
+    async def channel_pick(self, sel, inter) -> None:
+        """Выбор канала панели: сразу в конфиг, чтобы пережить рестарт бота."""
+        ch = sel.values[0] if sel.values else None
+        if ch is None:
+            return
+        err = _cfg_save(inter.guild.id, {"panel": int(ch.id)})
+        if err:
+            return await inter.response.send_message(
+                embed=_err(inter.bot, "НЕ СОХРАНИЛОСЬ", err), ephemeral=True)
+        cog = inter.bot.get_cog("Music")
+        if cog is not None:
+            cog.get_player(inter.guild).text_channel = ch
+        await inter.response.send_message(
+            embed=_ok(inter.bot, "КАНАЛ ВЫБРАН",
+                      _T(inter.bot, "music_panel_moved", T_PANEL_MOVED, ch=ch.mention)),
+            ephemeral=True)
 
     async def _apply(self, inter, patch: dict) -> None:
         err = _cfg_save(self.guild_id, patch)
@@ -933,7 +1041,7 @@ class Music(commands.Cog):
                            f"{_e(self.bot, 'red_crown', '👑')}  Настройки музыки крутит "
                            "руководство семьи — у тебя не тех прав."),
                 ephemeral=True)
-        view = MusicSettingsView(inter.guild.id)
+        view = MusicSettingsView(inter.guild.id, inter.guild)
         await inter.response.send_message(embed=view.embed(self.bot, inter.guild),
                                           view=view, ephemeral=True)
 
@@ -1038,7 +1146,7 @@ class Music(commands.Cog):
                            f"{_e(self.bot, 'hz_pcicon', '🎧')}  Из плейлиста «{name}» в библиотеке "
                            "ничего не осталось."),
                 ephemeral=True)
-        p.text_channel = inter.channel
+        self.bind_channel(inter.guild, inter.channel)
         warn = _e(self.bot, "hz_warn", "⚠️")
         answer = (f"### 📌  {name}\n\n"
                   f"{_e(self.bot, 'hz_trainicon', '📜')}  {len(added)} треков встало в очередь")
@@ -1136,7 +1244,7 @@ class Music(commands.Cog):
         if text.startswith(("/", "@", "!")):
             return ""
         p = self.players.get(guild.id)
-        ch = getattr(p, "text_channel", None) if p else None
+        ch = self.panel_channel(guild) or (getattr(p, "text_channel", None) if p else None)
         if ch is None or ch.id != message.channel.id:
             return ""
         vc = guild.voice_client
@@ -1228,7 +1336,21 @@ class Music(commands.Cog):
     def get_player(self, guild: disnake.Guild) -> GuildPlayer:
         if guild.id not in self.players:
             self.players[guild.id] = GuildPlayer(guild.id)
-        return self.players[guild.id]
+        p = self.players[guild.id]
+        if p.text_channel is None:
+            p.text_channel = self.panel_channel(guild)
+        return p
+
+    def panel_channel(self, guild: disnake.Guild):
+        """Канал, который выбран в настройках: панель, анонсы и заказы текстом идут туда."""
+        cid = _cfg(guild.id)["panel"] if guild else 0
+        return guild.get_channel(cid) if cid else None
+
+    def bind_channel(self, guild, channel) -> None:
+        """Куда бот пишет про трек. Настроенный канал важнее того, где человек нажал
+        кнопку, — иначе анонсы уезжают в случайный чат и засоряют его."""
+        p = self.get_player(guild)
+        p.text_channel = self.panel_channel(guild) or channel
 
     async def cleanup(self, guild: disnake.Guild):
         p = self.players.pop(guild.id, None)
@@ -1519,7 +1641,7 @@ class Music(commands.Cog):
         vc = await self.ensure_voice(inter)
         if not vc:
             return
-        p.text_channel = inter.channel
+        self.bind_channel(inter.guild, inter.channel)
         try:
             track = await self._extract(query)
         except Exception as e:
@@ -1598,7 +1720,9 @@ class Music(commands.Cog):
                 if picked is None:
                     p.dj = False
                     if p.text_channel:
-                        await p.text_channel.send("🔁 Библиотека кончилась — авто-диджей выключен.")
+                        await p.text_channel.send(
+                            embed=note_embed(_T(self.bot, "music_dj_off", T_DJ_OFF),
+                                             guild=guild))
                     return
                 p.queue.append(picked)
             else:
@@ -1650,13 +1774,14 @@ class Music(commands.Cog):
         if p.text_channel:
             link = track["webpage_url"]
             shown = f"[{track['title']}]({link})" if link.startswith("http") else f"**{track['title']}**"
-            pc = _e(self.bot, "hz_pcicon", "🎧")
-            emb = card(f"{pc}  СЕЙЧАС ИГРАЕТ", guild=guild)
-            emb.description = (f"### {shown}\n\n"
-                               f"⏱  {_fmt_duration(track['duration'])} · "
-                               f"🔊 {int(round(p.volume * 100))}%")
+            body = _T(self.bot, "music_ann_line", T_ANN_LINE,
+                      dur=_fmt_duration(track["duration"]), vol=int(round(p.volume * 100)))
             if track.get("requester"):
-                emb.add_field(name="Заказал", value=track["requester"], inline=False)
+                body += "\n" + _T(self.bot, "music_ann_who", T_ANN_WHO,
+                                  who=track["requester"])
+            emb = card(_T(self.bot, "music_ann_head", T_ANN_HEAD),
+                       color_key="music_color", guild=guild)
+            emb.description = f"### {shown}\n\n{body}"
             if track.get("thumbnail"):
                 emb.set_thumbnail(url=track["thumbnail"])
             try:
@@ -1699,71 +1824,97 @@ class Music(commands.Cog):
         await inter.response.send_message(embed=emb, ephemeral=True)
 
     # ---------- команды ----------
-    @commands.slash_command(name="music_panel", description="Отправить панель музыки в этот канал",
-                            default_member_permissions=disnake.Permissions(manage_guild=True))
-    async def music_panel(self, inter: disnake.ApplicationCommandInteraction):
-        self.get_player(inter.guild).text_channel = inter.channel
+    @commands.slash_command(name="music_panel",
+                            description="Панель музыки в этот канал (или в настроенный)",
+                            default_member_permissions=disnake.Permissions(manage_guild=True),
+                            options=[disnake.Option(
+                                name="канал", type=disnake.OptionType.channel,
+                                channel_types=[disnake.ChannelType.text],
+                                description="Куда положить панель; канал запомнится для анонсов "
+                                            "и заказов текстом")])
+    async def music_panel(self, inter: disnake.ApplicationCommandInteraction,
+                          канал: disnake.TextChannel = None):
+        cfg = _cfg(inter.guild.id)
+        ch = канал or self.panel_channel(inter.guild) or inter.channel
+        await self._drop_old_panel(inter.guild, cfg)
+        err = _cfg_save(inter.guild.id, {"panel": ch.id})
+        if err:
+            return await inter.response.send_message(
+                embed=_err(self.bot, "НЕ СОХРАНИЛОСЬ", err), ephemeral=True)
         emb = self._panel_embed(inter.guild)
-        await inter.channel.send(embed=emb, view=MusicPanelView(self.bot),
-                                 file=_panel_banner(emb))
+        msg = await ch.send(embed=emb, view=MusicPanelView(self.bot),
+                            file=_panel_banner(emb))
+        _cfg_save(inter.guild.id, {"panel_msg": msg.id})
+        self.get_player(inter.guild).text_channel = ch
         await inter.response.send_message(
-            embed=_ok(self.bot, "ПАНЕЛЬ ЗДЕСЬ",
-                      f"{_e(self.bot, 'hz_megaphone', '📢')}  Кнопки живут в канале и после "
-                      "рестарта бота."),
+            embed=_ok(self.bot, "ПАНЕЛЬ ЛЕГЛА",
+                      _T(self.bot, "music_panel_done", T_PANEL_DONE, ch=ch.mention)),
             ephemeral=True)
+
+    async def refresh_panel(self, inter) -> None:
+        """«Обновить панель»: перерисовать экран, а заодно признать его настоящей панелью.
+
+        Экраны, выложенные до настройки канала, в конфиге не значатся — без этого шага
+        такой старый клон висел бы в чате вторым и путал людей.
+        """
+        emb = self._panel_embed(inter.guild)
+        file = _panel_banner(emb)
+        await inter.response.edit_message(embed=emb, view=MusicPanelView(inter.bot),
+                                          file=file)
+        cfg = _cfg(inter.guild.id)
+        if cfg["panel"] in (0, inter.channel.id):
+            _cfg_save(inter.guild.id, {"panel": inter.channel.id,
+                                       "panel_msg": inter.message.id})
+            self.get_player(inter.guild).text_channel = inter.channel
+
+    async def _drop_old_panel(self, guild, cfg: dict) -> None:
+        """Убрать свою прошлую панель: два экрана с кнопками в чате — люди жмут не туда."""
+        if not (cfg["panel_msg"] and cfg["panel"]):
+            return
+        old = guild.get_channel(cfg["panel"])
+        if old is None:
+            return
+        try:
+            msg = await old.fetch_message(cfg["panel_msg"])
+        except Exception:
+            return
+        ids = {c.custom_id for row in msg.components for c in row.children}
+        if msg.author == self.bot.user and "music:play" in ids:
+            try:
+                await msg.delete()
+            except Exception:
+                pass
 
     def _now_line(self, guild) -> str:
         """Живая строка панели: что играет сейчас. Обновляется кнопкой, а не циклом."""
-        pc = _e(self.bot, "hz_pcicon", "🎧")
-        train = _e(self.bot, "hz_trainicon", "📜")
-        ghost = _e(self.bot, "pinkghost", "🔁")
         vc = guild.voice_client if guild else None
         if not vc or not vc.is_connected():
-            return f"{pc}  Бот не в голосовом — нажмите «В войс»"
+            return _T(self.bot, "music_now_idle", T_NOW_IDLE)
         p = self.players.get(guild.id)
         cur = (p.current if p else None) or {}
         vol = int(round((p.volume if p else _cfg(guild.id)["volume"] / 100.0) * 100))
-        state = "⏸ пауза" if vc.is_paused() else ("▶ играет" if vc.is_playing() else "🔇 тишина")
-        title = str(cur.get("title") or "очередь пуста")[:70]
-        dj = "вкл" if (p and p.dj) else "выкл"
-        return (f"{state}  **{title}**\n"
-                f"{train}  очередь {len(p.queue) if p else 0}  ·  {ghost}  диджей {dj}  ·  "
-                f"🎚  {vol}%")
+        state = (_T(self.bot, "music_state_pause", T_STATE_PAUSE) if vc.is_paused() else
+                 _T(self.bot, "music_state_play", T_STATE_PLAY) if vc.is_playing() else
+                 _T(self.bot, "music_state_quiet", T_STATE_QUIET))
+        title = str(cur.get("title") or _T(self.bot, "music_now_empty", T_NOW_EMPTY))[:70]
+        line = _T(self.bot, "music_now_line", T_NOW_LINE,
+                  q=len(p.queue) if p else 0, dj="вкл" if (p and p.dj) else "выкл", vol=vol)
+        return f"**{state}**  {title}\n{line}"
 
     def _panel_embed(self, guild) -> disnake.Embed:
-        pc = _e(self.bot, "hz_pcicon", "🎧")
-        meg = _e(self.bot, "hz_megaphone", "📢")
-        gift = _e(self.bot, "hz_gifticon", "📥")
-        train = _e(self.bot, "hz_trainicon", "📜")
-        book = _e(self.bot, "hz_book", "📖")
-        ghost = _e(self.bot, "pinkghost", "🔁")
-        bot_i = _e(self.bot, "hz_botv2", "🤖")
-        crown = _e(self.bot, "red_crown", "👑")
         sections = [
-            (f"{pc}  СЕЙЧАС", self._now_line(guild)),
-            (f"{meg}  ЗАКАЗ",
-             f"{pc}  «Заказать» — имя из библиотеки, ссылка на YouTube или на звук. "
-             "Можно и просто написать имя трека или ссылку в этом канале, стоя в голосе. "
-             "🌐  «Сайт музыки» в списке «Ещё» — то же самое из браузера, без пароля"),
-            (f"{gift}  БИБЛИОТЕКА",
-             f"«Закинуть трек» в списке «Ещё» принимает mp3 из сообщения (до "
-             f"{MAX_FILES_IN_MSG} за раз, до {MAX_TRACK_MB} МБ). Файл, положенный во "
-             "вкладку Files рядом с `main.py`, тоже играется сразу"),
-            (f"{train}  ПУЛЬТ",
-             "пауза · скип · тише · громче · очередь — вторым рядом. Стоп, «Скип "
-             "голосом», плейлисты, авто-диджей и настройки — в списке «Ещё», чтобы "
-             "не искать нужную кнопку среди шестнадцати"),
-            (f"{book}  ПЛЕЙЛИСТЫ",
-             f"«Очередь в плейлист» сохраняет собранное, «Плейлисты» включает её "
-             "одним нажатием"),
-            (f"{ghost}  АВТО-ДИДЖЕЙ И НАСТРОЙКИ",
-             f"кончилась очередь — диджей сам берёт случайный трек; {bot_i} «Настройки» "
-             "хранят громкость, кулдаун, размер очереди и авто-выход"),
+            (_T(self.bot, "music_now_head", T_NOW_HEAD), self._now_line(guild)),
+            (_T(self.bot, "music_order_head", T_ORDER_HEAD),
+             _T(self.bot, "music_order_text", T_ORDER_TEXT)),
+            (_T(self.bot, "music_files_head", T_FILES_HEAD),
+             _T(self.bot, "music_files_text", T_FILES_TEXT,
+                n=MAX_FILES_IN_MSG, mb=MAX_TRACK_MB)),
+            (_T(self.bot, "music_ctrl_head", T_CTRL_HEAD),
+             _T(self.bot, "music_ctrl_text", T_CTRL_TEXT)),
         ]
-        return panel_embed(
-            f"{pc}  МУЗЫКА СЕМЬИ", sections, guild=guild,
-            intro=(f"*{crown}  Один голос на всю семью  {crown}*\n"
-                   f"{pc}  Имя из библиотеки, ссылка на YouTube или на звук — играет всё."))
+        return panel_embed(_T(self.bot, "music_panel_title", T_PANEL_TITLE), sections,
+                           color_key="music_color", guild=guild,
+                           intro=_T(self.bot, "music_panel_intro", T_PANEL_INTRO))
 
     @commands.slash_command(name="play", description="Включить трек: имя из библиотеки, ссылка на YouTube или на звук")
     async def play_cmd(self, inter: disnake.ApplicationCommandInteraction, запрос: str):
