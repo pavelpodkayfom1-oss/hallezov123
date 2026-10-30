@@ -137,6 +137,7 @@ def sched_add(body: Dict[str, Any]) -> Dict[str, Any]:
     item = {"id": uuid.uuid4().hex[:10], "channel": channel,
             "channel_name": str(body.get("channel_name") or "")[:100],
             "text": text, "title": str(body.get("title") or "")[:256],
+            "author": str(body.get("author") or "")[:100],
             "color": str(body.get("color") or "")[:16], "ping": bool(body.get("ping")),
             "at": at, "repeat": repeat, "status": "wait", "created": int(now)}
     with _lock:

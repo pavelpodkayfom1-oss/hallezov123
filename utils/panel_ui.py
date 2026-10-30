@@ -318,7 +318,7 @@ textarea.msg{min-height:132px;width:100%;resize:vertical;font-family:inherit;lin
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:1.1rem}
 .picks{max-height:260px;overflow:auto;border:1px solid var(--line);border-radius:var(--radius-s);padding:.35rem;
   display:flex;flex-direction:column;gap:.15rem;background:var(--field)}
-.picks label{display:flex;gap:.6rem;align-items:center;text-align:left;padding:.45rem .55rem;border-radius:9px;
+.picks label{display:flex;flex-direction:row;gap:.6rem;align-items:center;text-align:left;padding:.45rem .55rem;border-radius:9px;
   border:1px solid transparent;cursor:pointer;transition:background .12s,border-color .12s;color:var(--text)}
 .picks label:hover{background:var(--hover)}
 .picks label:has(input:checked){background:linear-gradient(90deg,var(--accent-soft),rgba(255,90,100,.02));border-color:var(--accent-line)}
@@ -738,7 +738,12 @@ img.emo{width:1.3em;height:1.3em;vertical-align:-.3em;object-fit:contain;display
 .tsplit{grid-template-columns:minmax(290px,370px) 1fr!important;align-items:start}
 .tside{position:sticky;top:1.2rem;display:flex;flex-direction:column;gap:.7rem;max-height:calc(100vh - 2.4rem)}
 .tsearch input{width:100%}
-.tside .pager{margin:0;max-height:5.6rem;overflow:auto}
+.tfilters{display:grid;grid-template-columns:1fr 1fr;gap:.45rem}
+.tfilters select{width:100%;min-width:0;font-size:.82rem;padding-top:.45em;padding-bottom:.45em}
+.chipbtn{grid-column:1/-1;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:.4em .9em;font-size:.8rem;cursor:pointer}
+.chipbtn:hover{color:var(--text)} .chipbtn.on{background:var(--accent);color:var(--on-accent,#000);border-color:var(--accent)}
+.tcount{margin-top:-.2rem}
+.tscroll{flex:1}
 .tscroll{overflow:auto;min-height:0;padding-right:.2rem}
 .tlist{display:flex;flex-direction:column;gap:.4rem}
 .tlist .section-title{margin:.9rem 0 .2rem}
@@ -871,6 +876,98 @@ html[data-theme=light] .hudmeter i.on{box-shadow:none}
 .reactor{transform:translate3d(calc(var(--px,0)*9px),calc(var(--py,0)*7px),0);transition:transform .25s ease-out,filter .2s}
 .hudgrid{inset:-40px;transform:translate3d(calc(var(--px,0)*-16px),calc(var(--py,0)*-12px),0);transition:transform .3s ease-out}
 @media (hover:none),(prefers-reduced-motion:reduce){.reactor,.hudgrid{transform:none}}
+
+/* ---------- стили оформления: переключаются кнопкой 🎨, хранятся в браузере ---------- */
+html[data-style=ruby]{
+  --bg:#0a0607; --bg2:#100a0b; --panel:#140d0f; --panel2:#1b1114; --panel3:#25181c;
+  --line:rgba(255,255,255,.08); --line2:rgba(255,120,130,.2);
+  --text:#f6eeef; --muted:#a08c90; --faint:#6d5b5f;
+  --accent:#e5384a; --accent2:#ff6b78; --accent-d:#a8121f; --on-accent:#fff;
+  --accent-soft:rgba(229,56,74,.14); --accent-line:rgba(255,107,120,.45);
+  --field:#0d0809; --code:#080506; --hover:rgba(255,120,130,.08); --radius:14px; --radius-s:10px}
+html[data-style=ruby] body::before{background:
+  radial-gradient(900px 520px at 12% -10%, rgba(229,56,74,.28), transparent 70%),
+  radial-gradient(700px 520px at 105% 110%, rgba(229,56,74,.12), transparent 70%), var(--bg)}
+html[data-style=ice]{
+  --bg:#060a11; --bg2:#0a111b; --panel:#0d1522; --panel2:#121c2d; --panel3:#192740;
+  --line:rgba(150,200,255,.09); --line2:rgba(120,190,255,.22);
+  --text:#eaf3ff; --muted:#8aa0ba; --faint:#566a84;
+  --accent:#5cc8ff; --accent2:#9ae0ff; --accent-d:#2a9ed6; --on-accent:#031420;
+  --accent-soft:rgba(92,200,255,.13); --accent-line:rgba(92,200,255,.45);
+  --field:#08101a; --code:#050a12; --hover:rgba(120,190,255,.08); --radius:18px; --radius-s:12px}
+html[data-style=ice] body::before{background:
+  radial-gradient(900px 560px at 50% -16%, rgba(92,200,255,.22), transparent 70%),
+  radial-gradient(700px 520px at 100% 110%, rgba(110,120,255,.14), transparent 70%), var(--bg)}
+html[data-style=neon]{
+  --bg:#050605; --bg2:#080a08; --panel:#0a0d0a; --panel2:#0f130f; --panel3:#161c16;
+  --line:rgba(170,255,70,.12); --line2:rgba(170,255,70,.28);
+  --text:#ecffe0; --muted:#8fa383; --faint:#5b6b52;
+  --accent:#b6ff3b; --accent2:#d4ff80; --accent-d:#8bd11f; --on-accent:#0a1200;
+  --accent-soft:rgba(182,255,59,.1); --accent-line:rgba(182,255,59,.5);
+  --field:#060806; --code:#040504; --hover:rgba(182,255,59,.07); --radius:4px; --radius-s:3px}
+html[data-style=neon] body{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:14px}
+html[data-style=neon] h1,html[data-style=neon] h2,html[data-style=neon] .section-title{text-transform:uppercase;letter-spacing:.08em}
+html[data-style=neon] body::before{background:
+  radial-gradient(800px 480px at 50% -14%, rgba(182,255,59,.16), transparent 70%), var(--bg)}
+html[data-style=paper]{
+  --bg:#f3eee4; --bg2:#f8f4ec; --panel:#fffdf8; --panel2:#f6f0e4; --panel3:#ece4d3;
+  --line:rgba(40,30,10,.12); --line2:rgba(40,30,10,.26);
+  --text:#1f1a12; --muted:#6f6552; --faint:#a29780;
+  --accent:#1f1a12; --accent2:#3a3225; --accent-d:#0f0c07; --on-accent:#fbf7ee;
+  --accent-soft:rgba(31,26,18,.07); --accent-line:rgba(31,26,18,.45);
+  --field:#fffdf8; --code:#1f1a12; --hover:rgba(31,26,18,.05); --radius:10px; --radius-s:7px; color-scheme:light}
+html[data-style=paper] body{font-family:"Georgia","Iowan Old Style","Times New Roman",serif}
+html[data-style=paper] h1,html[data-style=paper] h2,html[data-style=paper] h3{font-weight:700;letter-spacing:-.01em}
+html[data-style=paper] body::before{background:linear-gradient(180deg,var(--bg2),var(--bg))}
+html[data-style=paper] body::after{opacity:0}
+html[data-style=paper] .side{background:#fbf7ee}
+html[data-style=paper] .mbar{background:rgba(251,247,238,.96)}
+html[data-style=paper] .btn.primary{color:var(--on-accent)}
+/* светлая тема внутри цветных стилей: берём их акцент, остальное — обычная светлая палитра */
+html[data-style=ruby][data-theme=light]{--accent:#c4202e;--accent2:#e5434f;--on-accent:#fff;--accent-soft:rgba(196,32,46,.09);--accent-line:rgba(196,32,46,.4)}
+html[data-style=ice][data-theme=light]{--accent:#0b78b8;--accent2:#2596d8;--on-accent:#fff;--accent-soft:rgba(11,120,184,.09);--accent-line:rgba(11,120,184,.4)}
+html[data-style=neon][data-theme=light]{--accent:#3d7a00;--accent2:#5aa00a;--on-accent:#fff;--accent-soft:rgba(61,122,0,.09);--accent-line:rgba(61,122,0,.4)}
+html[data-style=ruby][data-theme=light] body::before,html[data-style=ice][data-theme=light] body::before,html[data-style=neon][data-theme=light] body::before{background:linear-gradient(180deg,var(--bg2),var(--bg))}
+.stylegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:.7rem;margin:.9rem 0}
+.stylecard{display:flex;flex-direction:column;gap:.5rem;padding:.6rem;border:2px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);cursor:pointer;text-align:left;font:inherit}
+.stylecard:hover{border-color:var(--line2)}
+.stylecard.on{border-color:var(--accent)}
+.stylecard i{display:block;height:54px;border-radius:8px;border:1px solid rgba(128,128,128,.3)}
+.stylecard b{font-size:.88rem}
+.sw1{background:linear-gradient(135deg,#000 55%,#fff 55%)}
+.sw2{background:linear-gradient(135deg,#140d0f 55%,#e5384a 55%)}
+.sw3{background:linear-gradient(135deg,#0d1522 55%,#5cc8ff 55%)}
+.sw4{background:linear-gradient(135deg,#0a0d0a 55%,#b6ff3b 55%)}
+.sw5{background:linear-gradient(135deg,#f3eee4 55%,#1f1a12 55%)}
+
+/* сообщения: списки, редактор, вкладки */
+.seg{display:inline-flex;gap:.2rem;padding:.25rem;background:var(--panel);border:1px solid var(--line);border-radius:999px;margin-bottom:1rem}
+.seg button{border:0;background:none;color:var(--muted);padding:.55em 1.3em;border-radius:999px;cursor:pointer;font:inherit;font-weight:560}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:var(--accent);color:var(--on-accent)}
+.sendgrid{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:1rem;align-items:start}
+.sendgrid>*{min-width:0}
+.pickcard{position:sticky;top:1rem}
+.pickcard h2,.compose-card h2{margin:0}
+.compose-card{display:flex;flex-direction:column;gap:1.1rem;padding:1.2rem}
+.compose-card .pickline.target{margin-bottom:0}
+.picks.tall{max-height:min(62vh,560px)}
+.pickline.target{padding:.7rem .9rem;margin-bottom:1rem;background:var(--accent-soft);border:1px solid var(--accent-line);border-radius:var(--radius-s)}
+.compose{display:flex;flex-direction:column;gap:1.1rem}
+.cfield{display:flex;flex-direction:column;gap:.4rem}
+.cfield>label,.cfield .row>label{font-size:.74rem;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cfield>small{color:var(--faint);font-size:.76rem}
+.compose textarea.msg{min-height:200px;font-size:1rem;line-height:1.5}
+.swatches{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap}
+.sw{width:26px;height:26px;border-radius:50%;border:2px solid var(--line2);cursor:pointer;padding:0}
+.sw:hover{transform:scale(1.12)}
+.hash{color:var(--muted);margin-left:.5rem}
+.hexin{max-width:110px}
+.tick{gap:.6rem;align-items:center}
+.btn.big{padding:.85em 1.5em;font-size:1rem}
+.dctext{white-space:pre-wrap;word-break:break-word;color:#dbdee1}
+.dcping{display:inline-block;margin-top:.3rem;color:#c9cdfb;background:rgba(88,101,242,.3);border-radius:4px;padding:0 .3em}
+@media (max-width:900px){.sendgrid{grid-template-columns:1fr}.pickcard{position:static}}
 </style>
 </head>
 <body>
@@ -1114,14 +1211,40 @@ function showLogin(msg) {
 function applyTheme() {
   let t = '';
   try { t = localStorage.getItem('hz_theme') || ''; } catch (e) { /* приватный режим */ }
-  document.documentElement.dataset.theme = t === 'light' ? 'light' : 'dark';
+  const st = getStyle();
+  document.documentElement.dataset.style = st;
+  document.documentElement.dataset.theme = (t === 'light' || st === 'paper') ? 'light' : 'dark';
+}
+const STYLES = [['mono', 'Моно', 'sw1'], ['ruby', 'Алый', 'sw2'], ['ice', 'Лёд', 'sw3'], ['neon', 'Неон', 'sw4'], ['paper', 'Бумага', 'sw5']];
+function getStyle() {
+  let v = '';
+  try { v = localStorage.getItem('hz_style') || ''; } catch (e) { /* приватный режим */ }
+  return STYLES.some(([k]) => k === v) ? v : 'mono';
+}
+function openStyles() {
+  const dlg = document.getElementById('dlg');
+  const draw = () => {
+    const cur = getStyle();
+    dlg.replaceChildren(h('h3', null, 'Стиль оформления'),
+      h('p', { class: 'muted' }, 'Меняется сразу и запоминается в этом браузере. «Бумага» всегда светлая.'),
+      h('div', { class: 'stylegrid' }, STYLES.map(([k, label, cls]) => h('button', {
+        class: 'stylecard' + (k === cur ? ' on' : ''), onclick: () => {
+          try { localStorage.setItem('hz_style', k); } catch (e) { /* приватный режим */ }
+          applyTheme(); draw();
+          document.querySelectorAll('.footbtns .btn.icon').forEach((b) => { if (b.dataset.role === 'theme') b.replaceChildren(themeIcon()); });
+        } }, h('i', { class: cls }), h('b', null, label)))),
+      h('div', { class: 'row end' }, h('button', { class: 'btn primary', onclick: () => dlg.close() }, 'Готово')));
+  };
+  draw();
+  dlg.showModal();
 }
 function themeIcon() { return document.documentElement.dataset.theme === 'light' ? '☀️' : '🌙'; }
 function toggleTheme() {
+  if (getStyle() === 'paper') { toast('Стиль «Бумага» всегда светлый. Другой стиль — кнопка 🎨.'); return; }
   const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   try { localStorage.setItem('hz_theme', next); } catch (e) { /* приватный режим */ }
   applyTheme();
-  document.querySelectorAll('.footbtns .btn.icon').forEach((b) => { b.replaceChildren(themeIcon()); });
+  document.querySelectorAll('.footbtns .btn.icon[data-role=theme]').forEach((b) => { b.replaceChildren(themeIcon()); });
 }
 
 const FAV_KEY = 'hz_fav';
@@ -1201,6 +1324,7 @@ function openPalette() {
   const items = PAGES.map(([id, label, ico, g]) => ({ label, hint: g, ico, run: () => go(id) })).concat([
     { label: 'Обновить страницу', hint: 'Действие', ico: 'pulse', run: () => go(state.page) },
     { label: 'Сменить тему', hint: 'Действие', ico: 'screen', run: toggleTheme },
+    { label: 'Стиль оформления', hint: 'Действие', ico: 'screen', run: openStyles },
     { label: 'Выйти', hint: 'Действие', ico: 'out', run: logout },
   ]);
   let shown = [], sel = 0;
@@ -1259,7 +1383,8 @@ function renderShell() {
       h('div', { class: 'status' }, h('span', { class: 'dot', id: 'live', title: 'Бот на связи' }),
         h('span', { id: 'livetxt' }, 'Бот ', h('b', null, 'на связи'))),
       h('div', { class: 'footbtns' },
-        h('button', { class: 'btn icon', title: 'Светлая или тёмная тема', onclick: toggleTheme }, themeIcon()),
+        h('button', { class: 'btn icon', title: 'Светлая или тёмная тема', 'data-role': 'theme', onclick: toggleTheme }, themeIcon()),
+        h('button', { class: 'btn icon', title: 'Стиль оформления', 'aria-label': 'Стиль оформления', onclick: openStyles }, '🎨'),
         h('button', { class: 'btn', onclick: logout }, icon('out'), 'Выйти'))));
   const mbar = h('header', { class: 'mbar' },
     h('button', { class: 'btn icon', 'aria-label': 'Открыть меню', onclick: () => setMenu(true) }, icon('menu')),
@@ -1656,7 +1781,7 @@ async function pagePlan() {
     submit.disabled = true;
     try {
       await api('/api/schedule/add', { method: 'POST', body: {
-        channel: channelId, channel_name: c ? c.name : '', text: f.text.value, title: f.title.value, color: f.color.value,
+        channel: channelId, channel_name: c ? c.name : '', text: f.text.value, title: f.title.value, color: f.color.value, author: f.author.value,
         ping: f.ping.checked, at, repeat: repeat.value } });
       toast('Запланировано');
       f.text.value = '';
@@ -2164,14 +2289,14 @@ async function pageTexts() {
   getEmojis().catch(() => { /* без каталога эмодзи просто остаются кодом */ });
 
   const items = d.items;
-  const search = h('input', { type: 'search', placeholder: 'Найти по словам из текста, названию, ключу или разделу…', 'aria-label': 'Поиск надписи' });
+  const search = h('input', { type: 'search', placeholder: 'Поиск: слово из текста, название или раздел (казна, выплаты…)', 'aria-label': 'Поиск надписи' });
   const kindSel = h('select', { 'aria-label': 'Тип надписи' },
     [['', 'Все типы'], ['text', 'Тексты'], ['title', 'Заголовки'], ['button', 'Кнопки'],
      ['field', 'Поля форм'], ['hint', 'Подсказки полей'], ['topic', 'Описания каналов']]
       .map(([v, l]) => h('option', { value: v }, l)));
-  const found = h('div', { class: 'stats' });
+  const found = h('small', { class: 'muted tcount' });
   const list = h('div', { class: 'tlist' });
-  const filters = h('div', { class: 'pager' });
+  const filters = h('div', { class: 'tfilters' });
   const edBox = h('div', { class: 'card ted' }, h('p', { class: 'muted' }, 'Выберите надпись слева.'));
   let current = null, onlyChanged = false, groupFilter = '', kindFilter = '';
 
@@ -2179,19 +2304,15 @@ async function pageTexts() {
   const KIND_LABEL = { title: 'заголовок', text: 'текст', button: 'кнопка', field: 'поле формы',
     hint: 'подсказка поля', topic: 'описание канала' };
 
-  function pill(label, on, fn) {
-    return h('button', { class: on ? 'active' : '', onclick: () => { fn(); drawFilters(); renderList(); } }, label);
-  }
   function drawFilters() {
-    filters.replaceChildren(
-      pill('Все · ' + d.total, !onlyChanged && !groupFilter, () => { onlyChanged = false; groupFilter = ''; }),
-      pill('Мои правки · ' + d.items.filter((x) => x.changed).length, onlyChanged,
-        () => { onlyChanged = true; groupFilter = ''; }),
-      ...d.groups.map((g) => {
-        const ch = g.items.filter((x) => x.changed).length;
-        return pill(g.title + ' · ' + g.items.length + (ch ? ' (правлено ' + ch + ')' : ''),
-          groupFilter === g.title, () => { onlyChanged = false; groupFilter = g.title; });
-      }));
+    const sel = h('select', { 'aria-label': 'Раздел', onchange: () => { groupFilter = sel.value; renderList(); } },
+      h('option', { value: '' }, 'Все разделы · ' + d.total),
+      ...d.groups.map((g) => h('option', { value: g.title }, g.title + ' · ' + g.items.length)));
+    sel.value = groupFilter;
+    const mine = d.items.filter((x) => x.changed).length;
+    const tog = h('button', { class: 'chipbtn' + (onlyChanged ? ' on' : ''), title: 'Показать только то, что вы меняли',
+      onclick: () => { onlyChanged = !onlyChanged; drawFilters(); renderList(); } }, 'Мои правки · ' + mine);
+    filters.replaceChildren(sel, kindSel, tog);
   }
 
   function matches(it, words, gTitle) {
@@ -2220,8 +2341,7 @@ async function pageTexts() {
             h('small', { class: 'src' }, (KIND_LABEL[it.kind] || it.kind) + ' · ' + it.src)),
           it.changed ? chip('свой', 'ok') : null)));
     });
-    found.replaceChildren(h('div', { class: 'card stat' }, h('small', null, 'Найдено надписей'),
-      h('b', null, String(shown))));
+    found.textContent = 'Найдено надписей: ' + shown;
     list.replaceChildren(...(cards.length ? cards : [h('p', { class: 'muted' },
       words.length || kindFilter ? 'Ничего не нашлось — попробуй другое слово или сними фильтр типа.'
         : 'Список пуст: бот не нашёл надписей в своём коде.')]));
@@ -2339,12 +2459,12 @@ async function pageTexts() {
   if (first) await open(first);
 
   return h('div', null,
-    pageHead('Тексты бота', 'Все надписи, которые бот показывает людям: тексты каналов казны, заголовки панелей, заявки, повышения, сборы, кнопки и поля форм. Правьте и сразу смотрите, как это будет выглядеть в Discord. Ctrl+S сохраняет. Правка без кнопки в шапке видна новым сообщениям, старые перекладываются «🔄 Обновить в Discord».',
+    pageHead('Тексты бота', 'Все надписи бота. Слева выбирай, справа правь — рядом сразу видно, как это будет в Discord. Ctrl+S сохраняет.',
       h('button', { class: 'btn ghost', title: 'Перечитать список надписей с бота', onclick: () => go('texts') }, 'Свежий список')),
     h('div', { class: 'split tsplit' },
       h('div', { class: 'tside' },
-        h('div', { class: 'tsearch' }, search, h('div', { class: 'row small muted' }, 'Ищи словом, которое видишь в Discord — найдётся по всему тексту.', kindSel)),
-        found, filters, h('div', { class: 'tscroll' }, list)),
+        h('div', { class: 'tsearch' }, search),
+        filters, found, h('div', { class: 'tscroll' }, list)),
       edBox));
 }
 
@@ -2745,14 +2865,49 @@ async function pageApps() {
 }
 
 /* ---------- Сообщения ---------- */
+const COLOR_PRESETS = ['ffffff', '990000', 'e11d48', 'f59e0b', '22c55e', '3b82f6', '8b5cf6', '111111'];
+function hexOf(v) {
+  const x = String(v || '').replace('#', '').trim();
+  return /^([0-9a-f]{3}|[0-9a-f]{6})$/i.test(x) ? '#' + x : '#ffffff';
+}
+
+/* Редактор сообщения: поля слева направо по смыслу + живой предпросмотр «как в Discord» */
 function msgForm(needPing) {
-  const title = h('input', { type: 'text', maxlength: '256', placeholder: 'Заголовок (пусто — обычный текст)' });
-  const color = h('input', { type: 'text', maxlength: '9', placeholder: 'Цвет, например 990000', value: '990000' });
-  const text = h('textarea', { class: 'msg', placeholder: 'Текст сообщения…' });
+  const author = h('input', { type: 'text', maxlength: '100', placeholder: 'Например: Штаб семьи', 'aria-label': 'От кого' });
+  const title = h('input', { type: 'text', maxlength: '256', placeholder: 'Заголовок (можно оставить пустым)', 'aria-label': 'Заголовок' });
+  const text = h('textarea', { class: 'msg', placeholder: 'Напиши сообщение здесь…', 'aria-label': 'Текст сообщения' });
+  const color = h('input', { type: 'text', maxlength: '9', class: 'hexin', value: 'ffffff', 'aria-label': 'Цвет полоски, например 990000' });
   const ping = h('input', { type: 'checkbox' });
-  const box = h('div', { class: 'form' }, title, color, h('div', { class: 'row' }, emojiButton(text)), text);
-  if (needPing) box.append(h('label', { class: 'row small' }, ping, 'Отметить @everyone'));
-  return { box, title, color, text, ping };
+  const count = h('small', { class: 'muted' }, '0 / 4000');
+  const prev = h('div', { class: 'dcprev' });
+  const swatches = h('div', { class: 'swatches' }, COLOR_PRESETS.map((c) => h('button', {
+    type: 'button', class: 'sw', title: '#' + c, 'aria-label': 'Цвет ' + c, style: 'background:#' + c,
+    onclick: () => { color.value = c; upd(); } })));
+  function upd() {
+    const t = text.value, ti = title.value.trim(), au = author.value.trim();
+    count.textContent = t.length + ' / 4000';
+    count.className = t.length > 4000 ? 'err-text' : 'muted';
+    const body = (ti || au)
+      ? embedNode({ author: au, title: ti, text: t || 'Здесь будет текст сообщения', color: hexOf(color.value) })
+      : h('div', { class: 'dctext' }, richNode(t || 'Здесь будет текст сообщения'));
+    prev.replaceChildren(h('div', { class: 'dcava' }, (state.botName || 'B').slice(0, 1).toUpperCase()),
+      h('div', { class: 'dcbody' }, h('div', { class: 'dchead' }, h('b', null, state.botName), h('span', { class: 'dctag' }, 'БОТ')), body,
+        needPing && ping.checked ? h('div', { class: 'dcping' }, '@everyone') : null));
+  }
+  [author, title, text, color].forEach((el) => el.addEventListener('input', upd));
+  ping.addEventListener('change', upd);
+  upd();
+  const box = h('div', { class: 'compose' },
+    h('div', { class: 'cfield' }, h('label', null, 'От кого'), author,
+      h('small', null, 'Подпись над сообщением, например «Штаб семьи». Пусто — сообщение придёт просто от бота.')),
+    h('div', { class: 'cfield' }, h('label', null, 'Заголовок'), title),
+    h('div', { class: 'cfield' },
+      h('div', { class: 'row between' }, h('label', null, 'Текст'), h('span', { class: 'row' }, emojiButton(text), count)), text),
+    h('div', { class: 'cfield' }, h('label', null, 'Цвет полоски (работает, если есть заголовок или подпись)'),
+      h('div', { class: 'row' }, swatches, h('span', { class: 'hash' }, '#'), color)),
+    needPing ? h('label', { class: 'row small tick' }, ping, 'Отметить @everyone (все получат уведомление)') : null,
+    h('div', { class: 'cfield' }, h('label', null, 'Так это увидят в Discord'), prev));
+  return { box, author, title, color, text, ping };
 }
 
 function resultBox() {
@@ -2769,21 +2924,58 @@ function resultBox() {
   return box;
 }
 
-async function pageSend() {
-  const cq = h('input', { type: 'search', placeholder: 'Имя канала…' });
-  const chBox = h('div', { class: 'picks' });
-  const chLine = h('div', { class: 'pickline' });
-  let channelId = '';
-  let chanRows = [];
+function memberPicker(multi) {
+  const q = h('input', { type: 'search', placeholder: 'Ник или ID…', 'aria-label': 'Поиск участника' });
+  const box = h('div', { class: 'picks tall' });
+  const line = h('div', { class: 'pickline' });
+  const chosen = new Set(), names = new Map();
+  let rows = [];
+  const uid = 'mp' + Math.random().toString(36).slice(2, 7);
+  function say() {
+    const one = [...chosen][0];
+    line.replaceChildren(h('span', null, multi ? 'Выбрано: ' : 'Кому: '),
+      h('b', null, multi ? chosen.size + ' чел.' : (one ? (names.get(one) || one) : 'пока никто')));
+  }
+  function draw() {
+    box.replaceChildren(...rows.map((m) => {
+      const props = { type: multi ? 'checkbox' : 'radio', checked: chosen.has(m.id), value: m.id,
+        onchange: (e) => {
+          if (multi) { e.target.checked ? chosen.add(m.id) : chosen.delete(m.id); }
+          else { chosen.clear(); chosen.add(m.id); }
+          say();
+        } };
+      if (!multi) props.name = uid;
+      return h('label', null, h('input', props),
+        h('span', { class: 'grow' }, h('b', null, m.name), h('small', null, memSub(m))),
+        chip(m.top || 'без роли', m.top ? 'ok' : 'off'));
+    }));
+    if (!rows.length) box.append(h('div', { class: 'none' }, 'Никого не нашлось.'));
+    say();
+  }
+  async function load() {
+    const d = await api('/api/members?q=' + encodeURIComponent(q.value.trim()) + '&limit=120');
+    rows = d.rows; rows.forEach((m) => names.set(m.id, m.name)); draw();
+  }
+  q.addEventListener('input', () => { clearTimeout(q._t); q._t = setTimeout(load, 300); });
+  const node = h('div', { class: 'card form pickcard' }, h('h2', null, multi ? 'Кого включить' : 'Кому написать'), q, box, line,
+    multi ? h('div', { class: 'row' },
+      h('button', { class: 'btn', onclick: () => { rows.forEach((m) => chosen.add(m.id)); draw(); } }, 'Выбрать всех в списке'),
+      h('button', { class: 'btn', onclick: () => { chosen.clear(); draw(); } }, 'Снять всех')) : null);
+  return { node, load, ids: () => [...chosen], first: () => [...chosen][0] || '' };
+}
 
+async function pageSend() {
+  /* ---- в канал ---- */
+  const cq = h('input', { type: 'search', placeholder: 'Найти канал…', 'aria-label': 'Поиск канала' });
+  const chBox = h('div', { class: 'picks tall' });
+  const chLine = h('div', { class: 'pickline target' });
+  let channelId = '', chanRows = [];
   function sayChannel() {
     const c = chanRows.find((x) => x.id === channelId);
-    chLine.replaceChildren(h('span', null, c ? 'Пишем в ' : 'Канал не выбран — нажми на строчку.'));
-    if (c) chLine.append(h('b', null, chanLabel(c)));
+    chLine.replaceChildren(h('span', null, 'Куда: '), h('b', null, c ? chanLabel(c) : 'канал не выбран — нажми на строчку слева'));
     if (c && c.can_write === false) chLine.append(chip('нет прав писать', 'err'));
     if (c && c.is_review) chLine.append(chip('канал заявок: только про набор', 'err'));
   }
-
   async function loadChannels() {
     const d = await api('/api/channels?q=' + encodeURIComponent(cq.value.trim()));
     chanRows = d.rows;
@@ -2791,101 +2983,73 @@ async function pageSend() {
       h('input', { type: 'radio', name: 'chan', value: c.id, checked: c.id === channelId,
         onchange: () => { channelId = c.id; sayChannel(); } }),
       h('span', { class: 'grow' }, h('b', null, chanLabel(c)), h('small', null, chanSub(c))),
-      c.can_write === false ? chip('нет прав', 'err') : (c.is_review ? chip('заявки', 'err') : null)
-    )));
+      c.can_write === false ? chip('нет прав', 'err') : (c.is_review ? chip('заявки', 'err') : null))));
     if (!d.rows.length) chBox.append(h('div', { class: 'none' }, 'Не нашлось ни одного канала.'));
     sayChannel();
   }
-
-  const mq = h('input', { type: 'search', placeholder: 'Ник или ID…' });
-  const mBox = h('div', { class: 'picks' });
-  const mLine = h('div', { class: 'pickline' });
-  let dmUser = '';
-  let memRows = [];
-  const chosen = new Set();
-
-  function sayMembers() {
-    const m = memRows.find((x) => x.id === dmUser);
-    mLine.replaceChildren(h('span', null, 'В ЛС одному: '), h('b', null, m ? m.name : 'не выбран'),
-      h('span', null, '· в рассылку попало '), h('b', null, chosen.size + ' чел.'));
-  }
-
-  async function loadMembers() {
-    const d = await api('/api/members?q=' + encodeURIComponent(mq.value.trim()) + '&limit=120');
-    memRows = d.rows;
-    mBox.replaceChildren(...d.rows.map((m) => {
-      const check = h('input', { type: 'checkbox', checked: chosen.has(m.id), value: m.id,
-        onchange: (e) => { e.target.checked ? chosen.add(m.id) : chosen.delete(m.id); sayMembers(); } });
-      const one = h('label', null,
-        h('input', { type: 'radio', name: 'dmuser', value: m.id, checked: m.id === dmUser,
-          onchange: () => { dmUser = m.id; sayMembers(); } }),
-        check,
-        h('span', { class: 'grow' }, h('b', null, m.name), h('small', null, memSub(m))),
-        chip(m.top || 'без роли', m.top ? 'ok' : 'off'));
-      return one;
-    }));
-    if (!d.rows.length) mBox.append(h('div', { class: 'none' }, 'Никого не нашлось.'));
-    sayMembers();
-  }
-
-  const mark = h('small', { class: 'muted' }, '');
-  const upd = () => { mark.textContent = 'Отмечено: ' + chosen.size; sayMembers(); };
-  const allBtn = h('button', { class: 'btn', onclick: () => {
-    memRows.forEach((m) => chosen.add(m.id));
-    loadMembers(); upd();
-  } }, 'Отметить всех в списке');
-  const noBtn = h('button', { class: 'btn', onclick: () => {
-    chosen.clear();
-    loadMembers(); upd();
-  } }, 'Снять всех');
-
-  const f1 = msgForm(true), r1 = resultBox();
-  f1.box.append(h('button', { class: 'btn primary', onclick: async () => {
-    r1.busy();
-    try { r1.show(await api('/api/send', { method: 'POST', body: { channel: channelId, text: f1.text.value, title: f1.title.value, color: f1.color.value, ping: f1.ping.checked } })); }
-    catch (e) { r1.err(e); }
-  } }, 'Отправить в канал'), h('p', { class: 'muted small' }, 'Сначала выбери канал кружком в списке.'));
-
-  const f2 = msgForm(false), r2 = resultBox();
-  f2.box.append(h('button', { class: 'btn primary', onclick: async () => {
-    r2.busy();
-    try { r2.show(await api('/api/dm', { method: 'POST', body: { user: dmUser, text: f2.text.value, title: f2.title.value, color: f2.color.value } })); }
-    catch (e) { r2.err(e); }
-  } }, 'Отправить в ЛС'));
-
-  const f3 = msgForm(false), r3 = resultBox();
-  f3.box.append(h('div', { class: 'row' }, h('button', { class: 'btn', onclick: async () => {
-    upd();
-    r3.busy();
-    try { r3.show(await api('/api/broadcast', { method: 'POST', body: { users: [...chosen], text: f3.text.value, title: f3.title.value, color: f3.color.value, dry: true } })); }
-    catch (e) { r3.err(e); }
-  } }, 'Проверить без отправки'),
-  h('button', { class: 'btn danger', onclick: async () => {
-    if (!(await confirmBox('Рассылка в ЛС?', 'Сообщение уйдёт ' + chosen.size + ' людям. Отменить отправку нельзя.', 'Разослать', true))) return;
-    r3.busy();
-    try { r3.show(await api('/api/broadcast', { method: 'POST', body: { users: [...chosen], text: f3.text.value, title: f3.title.value, color: f3.color.value, dry: false } })); }
-    catch (e) { r3.err(e); }
-  } }, 'Разослать'), mark));
-
   cq.addEventListener('input', () => { clearTimeout(cq._t); cq._t = setTimeout(loadChannels, 300); });
-  mq.addEventListener('input', () => { clearTimeout(mq._t); mq._t = setTimeout(loadMembers, 300); });
-  await Promise.all([loadChannels(), loadMembers()]);
+  const f1 = msgForm(true), r1 = resultBox();
+  const sendCh = h('button', { class: 'btn primary big', onclick: async () => {
+    if (!channelId) { r1.err(new Error('Сначала выбери канал в списке слева')); return; }
+    r1.busy();
+    try {
+      r1.show(await api('/api/send', { method: 'POST', body: { channel: channelId, text: f1.text.value, title: f1.title.value,
+        color: f1.color.value, ping: f1.ping.checked, author: f1.author.value } }));
+      toast('Отправлено', 'ok');
+    } catch (e) { r1.err(e); }
+  } }, 'Отправить в канал');
+  const paneChan = h('div', { class: 'sendgrid' },
+    h('div', { class: 'card form pickcard' }, h('h2', null, 'Выбери канал'), cq, chBox),
+    h('div', { class: 'card compose-card' }, chLine, f1.box,
+      h('div', { class: 'row' }, sendCh, h('button', { class: 'btn', onclick: () => go('plan') }, 'Отправить позже…')), r1));
+
+  /* ---- в личку ---- */
+  const dm = memberPicker(false);
+  const f2 = msgForm(false), r2 = resultBox();
+  const sendDm = h('button', { class: 'btn primary big', onclick: async () => {
+    if (!dm.first()) { r2.err(new Error('Сначала выбери человека в списке слева')); return; }
+    r2.busy();
+    try {
+      r2.show(await api('/api/dm', { method: 'POST', body: { user: dm.first(), text: f2.text.value, title: f2.title.value,
+        color: f2.color.value, author: f2.author.value } }));
+      toast('Отправлено', 'ok');
+    } catch (e) { r2.err(e); }
+  } }, 'Отправить в личку');
+  const paneDm = h('div', { class: 'sendgrid' }, dm.node, h('div', { class: 'card compose-card' }, f2.box, sendDm, r2));
+
+  /* ---- рассылка ---- */
+  const bc = memberPicker(true);
+  const f3 = msgForm(false), r3 = resultBox();
+  const bcBody = (dry) => ({ users: bc.ids(), text: f3.text.value, title: f3.title.value, color: f3.color.value,
+    author: f3.author.value, dry });
+  const paneBc = h('div', { class: 'sendgrid' }, bc.node, h('div', { class: 'card compose-card' }, f3.box,
+    h('div', { class: 'row' },
+      h('button', { class: 'btn big', onclick: async () => {
+        r3.busy();
+        try { r3.show(await api('/api/broadcast', { method: 'POST', body: bcBody(true) })); } catch (e) { r3.err(e); }
+      } }, 'Проверить без отправки'),
+      h('button', { class: 'btn danger big', onclick: async () => {
+        if (!(await confirmBox('Рассылка в ЛС?', 'Сообщение уйдёт ' + bc.ids().length + ' людям. Отменить отправку нельзя.', 'Разослать', true))) return;
+        r3.busy();
+        try { r3.show(await api('/api/broadcast', { method: 'POST', body: bcBody(false) })); toast('Рассылка ушла', 'ok'); } catch (e) { r3.err(e); }
+      } }, 'Разослать')), r3));
+
+  const panes = { chan: paneChan, dm: paneDm, bc: paneBc };
+  const body = h('div');
+  const tabs = h('div', { class: 'seg', role: 'tablist' });
+  function show(m) {
+    state.sendMode = m;
+    tabs.replaceChildren(...[['chan', 'В канал'], ['dm', 'В личку'], ['bc', 'Рассылка']].map(([k, l]) => h('button', {
+      class: k === m ? 'on' : '', role: 'tab', 'aria-selected': k === m ? 'true' : 'false', onclick: () => show(k) }, l)));
+    body.replaceChildren(panes[m]);
+  }
+  show(panes[state.sendMode] ? state.sendMode : 'chan');
+  await Promise.all([loadChannels(), dm.load(), bc.load()]);
 
   return h('div', null,
-    pageHead('Сообщения', 'Панель пишет от имени бота: в канал, в ЛС и рассылкой по составу.',
+    pageHead('Сообщения', 'Бот напишет от своего имени: в канал, одному человеку или группе людей.',
       h('button', { class: 'btn', onclick: () => go('send') }, 'Обновить')),
-    h('div', { class: 'grid2' },
-      h('div', { class: 'card form' }, h('h2', null, '✉️ В канал'),
-        h('p', { class: 'muted small' }, 'Кружок слева — какой канал выбран. Серым помечено, куда бот писать не может.'),
-        h('label', null, 'Поиск канала', cq), chBox, chLine, f1.box, r1),
-      h('div', { class: 'card form' }, h('h2', null, '👤 В ЛС и рассылкой'),
-        h('p', { class: 'muted small' }, 'Кружок — написать одному. Галочка — взять в рассылку. Можно и то, и другое.'),
-        h('label', null, 'Кого', mq), mBox, mLine,
-        h('div', { class: 'row' }, allBtn, noBtn),
-        h('div', { class: 'section-title' }, 'Одному'), f2.box, r2,
-        h('div', { class: 'section-title' }, 'Рассылка по галочкам'), f3.box, r3)
-    )
-  );
+    tabs, body);
 }
 
 

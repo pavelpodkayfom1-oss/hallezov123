@@ -719,7 +719,8 @@ class WebPanel(commands.Cog):
         body = await _body(request)
         res = await tools.post_channel(self.bot, body.get("channel"),
                                       str(body.get("text") or ""), str(body.get("title") or ""),
-                                      str(body.get("color") or ""), bool(body.get("ping")))
+                                      str(body.get("color") or ""), bool(body.get("ping")),
+                                      author=str(body.get("author") or ""))
         print(f"✉️ Панель: в {res.get('where', '?')}: {str(res.get('error') or res.get('link'))[:120]}",
               flush=True)
         return _json(res, 400 if self._fail(res) else 200)
@@ -730,7 +731,8 @@ class WebPanel(commands.Cog):
             return _json({"error": err}, 503)
         body = await _body(request)
         res = await tools.post_dm(self.bot, body.get("user"), str(body.get("text") or ""),
-                                 str(body.get("title") or ""), str(body.get("color") or ""))
+                                 str(body.get("title") or ""), str(body.get("color") or ""),
+                                 author=str(body.get("author") or ""))
         print(f"✉️ Панель: ЛС {res.get('where', '?')}: {str(res.get('error') or res.get('link'))[:120]}",
               flush=True)
         return _json(res, 400 if self._fail(res) else 200)
@@ -742,7 +744,8 @@ class WebPanel(commands.Cog):
         body = await _body(request)
         res = await tools.broadcast(self.bot, body.get("users"), str(body.get("text") or ""),
                                    str(body.get("title") or ""), str(body.get("color") or ""),
-                                   dry=bool(body.get("dry", True)))
+                                   dry=bool(body.get("dry", True)),
+                                   author=str(body.get("author") or ""))
         print(f"📣 Панель: рассылка {'накидка' if res.get('dry') else 'отправлена'}: "
               f"{str(res.get('error') or res.get('sent') or res.get('would'))[:120]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
@@ -794,7 +797,8 @@ class WebPanel(commands.Cog):
                         for it in due:
                             res = await tools.post_channel(
                                 self.bot, it.get("channel"), it.get("text", ""), it.get("title", ""),
-                                it.get("color", ""), bool(it.get("ping")))
+                                it.get("color", ""), bool(it.get("ping")),
+                                author=it.get("author", ""))
                             extras.sched_mark(it["id"], res)
                             print(f"⏰ Планировщик: в {res.get('where', it.get('channel'))}: "
                                   f"{str(res.get('error') or 'отправлено')[:120]}", flush=True)

@@ -615,8 +615,20 @@ def member_rows(bot, q: str = "", limit: int = 50) -> Dict[str, Any]:
     return {"rows": out, "total": len(out)}
 
 
+def _compose_embed(title: Any, text: str, color: Any, author: Any):
+    """Рамка нужна, если есть заголовок или подпись «от кого»; иначе текст идёт просто сообщением."""
+    title, author = str(title or "").strip(), str(author or "").strip()
+    if not title and not author:
+        return None
+    emb = disnake.Embed(title=title[:256] or None, description=text[:4000],
+                        color=disnake.Color(_hex_color(color)))
+    if author:
+        emb.set_author(name=author[:256])
+    return emb
+
+
 async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "",
-                       ping: bool = False) -> Dict[str, Any]:
+                       ping: bool = False, author: str = "") -> Dict[str, Any]:
     text = (text or "").strip()
     if not text:
         return {"error": "Пустое сообщение — писать нечего"}
@@ -625,10 +637,7 @@ async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "
     ch, err = await _resolve_channel(bot, cid)
     if err:
         return {"error": err}
-    emb = None
-    if title:
-        emb = disnake.Embed(title=str(title)[:256], description=text[:4000],
-                            color=disnake.Color(_hex_color(color)))
+    emb = _compose_embed(title, text, color, author)
     need = ["view_channel", "send_messages"] + (["embed_links"] if emb else []) \
         + (["mention_everyone"] if ping else [])
     miss = _missing_perms(bot, ch, need)
@@ -653,7 +662,8 @@ async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "
     return out
 
 
-async def post_dm(bot, user_id: Any, text: str, title: str = "", color: str = "") -> Dict[str, Any]:
+async def post_dm(bot, user_id: Any, text: str, title: str = "", color: str = "",
+                  author: str = "") -> Dict[str, Any]:
     text = (text or "").strip()
     if not text:
         return {"error": "Пустое сообщение"}
@@ -662,10 +672,7 @@ async def post_dm(bot, user_id: Any, text: str, title: str = "", color: str = ""
     chan, member, err = await _dm_channel(bot, user_id)
     if err:
         return {"error": err}
-    emb = None
-    if title:
-        emb = disnake.Embed(title=str(title)[:256], description=text[:4000],
-                            color=disnake.Color(_hex_color(color)))
+    emb = _compose_embed(title, text, color, author)
     try:
         msg = await chan.send(embed=emb, content=None if emb else text)
     except Exception as e:
@@ -693,7 +700,7 @@ async def _dm_channel(bot, user_id: Any):
 
 
 async def broadcast(bot, ids: Any, text: str, title: str = "", color: str = "",
-                    dry: bool = True) -> Dict[str, Any]:
+                    dry: bool = True, author: str = "") -> Dict[str, Any]:
     """Рассылка в ЛС. dry=True считает получателей и ничего не отправляет."""
     ids = [i for i in (ids or []) if str(i).isdigit()]
     if not ids:
@@ -705,10 +712,7 @@ async def broadcast(bot, ids: Any, text: str, title: str = "", color: str = "",
         return {"error": "Пустое сообщение"}
     if len(text) > MAX_TEXT:
         return {"error": f"Слишком длинно: {len(text)} знаков, максимум {MAX_TEXT}"}
-    emb = None
-    if title:
-        emb = disnake.Embed(title=str(title)[:256], description=text[:4000],
-                            color=disnake.Color(_hex_color(color)))
+    emb = _compose_embed(title, text, color, author)
     if dry:
         return {"dry": True, "would": len(ids),
                 "hint": f"Это проверка: сообщения не отправлены. {len(ids)} ЛС уйдёт примерно "
