@@ -1079,6 +1079,145 @@ html[data-style=house] .hudgrid{background-image:url("data:image/svg+xml,%3Csvg 
 html[data-style=house] .stylecard.on{border-color:var(--accent)}
 .sw0{background:linear-gradient(135deg,#13090f 55%,#c9a45c 55%)}
 @media (max-width:1000px){html[data-style=house] .side{background:#10070c}html[data-style=house] .mbar{background:rgba(16,7,12,.96)}}
+
+/* ======================================================================
+   Стиль «Старк» — по умолчанию. Вся панель в духе экрана входа: чёрный фон,
+   сетка из крестиков, бегущая линия сканера, уголки на карточках,
+   кнопки с блеском, включение блоков как у экрана в мастерской.
+   ====================================================================== */
+html[data-style=stark]{
+  --bg:#02060b; --bg2:#050c14; --panel:#060e16; --panel2:#0a1620; --panel3:#102030;
+  --line:rgba(130,210,255,.14); --line2:rgba(130,210,255,.32);
+  --text:#e9f6ff; --muted:#8fb0c4; --faint:#56707f;
+  --accent:#7fd8ff; --accent2:#bdeaff; --accent-d:#3aa6d8; --on-accent:#02121c;
+  --accent-soft:rgba(127,216,255,.1); --accent-line:rgba(127,216,255,.5);
+  --ok:#5df2b0; --warn:#ffc15a; --err:#ff6b6b;
+  --field:#030a10; --code:#02070c; --hover:rgba(127,216,255,.07);
+  --radius:0; --radius-s:0; --glow:none; --edge:none; color-scheme:dark;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --brk:rgba(127,216,255,.85);
+}
+html[data-style=stark] body::before{background:
+  radial-gradient(1100px 600px at 50% -18%, rgba(127,216,255,.16), transparent 70%),
+  radial-gradient(800px 520px at 100% 112%, rgba(127,216,255,.07), transparent 70%), var(--bg)}
+html[data-style=stark] body::after{opacity:1;background-size:48px 48px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M24 20v8M20 24h8' stroke='%237fd8ff' stroke-opacity='.2' fill='none'/%3E%3C/svg%3E");
+  -webkit-mask-image:radial-gradient(ellipse 85% 75% at 55% 30%,#000,transparent 85%);mask-image:radial-gradient(ellipse 85% 75% at 55% 30%,#000,transparent 85%)}
+/* линия сканера бежит по всему экрану */
+html[data-style=stark]::before{content:"";position:fixed;left:0;right:0;top:-160px;height:160px;z-index:40;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(127,216,255,.05),transparent);animation:scan 11s linear infinite}
+
+/* заголовки страницы */
+html[data-style=stark] h1,html[data-style=stark] h2,html[data-style=stark] h3{font-weight:600}
+html[data-style=stark] .head{position:relative;padding-bottom:1.1rem;border-bottom:1px solid var(--line)}
+html[data-style=stark] .head::after{content:"";position:absolute;left:0;bottom:-1px;width:190px;height:6px;
+  background:repeating-linear-gradient(90deg,var(--accent) 0 1px,transparent 1px 10px);opacity:.8;animation:ticks 1.1s steps(19) both}
+@keyframes ticks{from{width:0}}
+html[data-style=stark] .head h1{font-family:var(--mono);font-size:1.5rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+  text-shadow:0 0 18px rgba(127,216,255,.35)}
+html[data-style=stark] .head h1::before{content:"▍";color:var(--accent);margin-right:.5rem;animation:blink 1.2s steps(1) infinite}
+html[data-style=stark] .head p{font-size:.92rem}
+html[data-style=stark] .section-title{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.24em;color:var(--accent2)}
+html[data-style=stark] .section-title::after{background:linear-gradient(90deg,var(--line2),transparent)}
+html[data-style=stark] .cfield>label,html[data-style=stark] .cfield .row>label{font-family:var(--mono);font-size:.72rem;text-transform:uppercase;letter-spacing:.16em;color:var(--accent2)}
+
+/* меню слева */
+html[data-style=stark] .side{background:rgba(2,6,11,.94);border-right:1px solid var(--line2)}
+html[data-style=stark] .brand b{font-family:var(--mono);letter-spacing:.12em;text-transform:uppercase;font-size:.9rem}
+html[data-style=stark] .brand span{font-family:var(--mono);letter-spacing:.24em;font-size:.6rem;color:var(--accent)}
+html[data-style=stark] .logo{position:relative;background:transparent;border:1px solid var(--accent);border-radius:50%;color:var(--accent2);
+  font-family:var(--mono);font-weight:700;box-shadow:0 0 14px rgba(127,216,255,.35),inset 0 0 10px rgba(127,216,255,.2)}
+html[data-style=stark] .logo::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:1px dashed var(--accent);opacity:.6;animation:spin 16s linear infinite}
+html[data-style=stark] .navgroup{font-family:var(--mono);letter-spacing:.26em;font-size:.6rem;color:var(--accent)}
+html[data-style=stark] .nav button{border-radius:0;font-family:var(--mono);font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+html[data-style=stark] .nav button .ico{background:none;border:0;border-radius:0;color:var(--faint)}
+html[data-style=stark] .nav button:hover{color:var(--accent2);background:var(--hover)}
+html[data-style=stark] .nav button:hover .ico{color:var(--accent)}
+html[data-style=stark] .nav button.active{color:#fff;background:linear-gradient(90deg,rgba(127,216,255,.16),transparent)}
+html[data-style=stark] .nav button.active .ico{color:var(--accent);background:none;box-shadow:none;filter:drop-shadow(0 0 6px var(--accent))}
+html[data-style=stark] .nav button.active::before{left:0;top:0;bottom:0;width:2px;border-radius:0;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+html[data-style=stark] .searchbtn,html[data-style=stark] .status{border-radius:0}
+html[data-style=stark] .status{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase}
+
+/* карточки: уголки по краям, как рамка прицела */
+html[data-style=stark] .card{border-radius:0;border:1px solid var(--line);box-shadow:none;background-color:var(--panel);
+  background-image:
+    linear-gradient(var(--brk),var(--brk)),linear-gradient(var(--brk),var(--brk)),
+    linear-gradient(var(--brk),var(--brk)),linear-gradient(var(--brk),var(--brk)),
+    linear-gradient(var(--brk),var(--brk)),linear-gradient(var(--brk),var(--brk)),
+    linear-gradient(var(--brk),var(--brk)),linear-gradient(var(--brk),var(--brk));
+  background-repeat:no-repeat;
+  background-size:14px 1px,1px 14px,14px 1px,1px 14px,14px 1px,1px 14px,14px 1px,1px 14px;
+  background-position:0 0,0 0,100% 0,100% 0,0 100%,0 100%,100% 100%,100% 100%}
+html[data-style=stark] .card:hover{border-color:var(--line2);box-shadow:0 0 22px rgba(127,216,255,.07)}
+html[data-style=stark] .stat{padding:1.1rem 1.2rem}
+html[data-style=stark] .stat::before,html[data-style=stark] .stat::after{display:none}
+html[data-style=stark] .stat:hover{transform:none}
+html[data-style=stark] .stat small{font-family:var(--mono);font-size:.64rem;text-transform:uppercase;letter-spacing:.2em;color:var(--muted)}
+html[data-style=stark] .stat b{font-family:var(--mono);font-size:1.9rem;font-weight:500;letter-spacing:-.02em;color:#fff;text-shadow:0 0 16px rgba(127,216,255,.55)}
+html[data-style=stark] .stat.ok b{color:var(--ok);text-shadow:0 0 16px rgba(93,242,176,.5)}
+html[data-style=stark] .stat.warn b{color:var(--warn);text-shadow:0 0 16px rgba(255,193,90,.5)}
+
+/* включение блоков при открытии страницы */
+@keyframes poweron{0%{opacity:0;transform:translateY(5px);filter:brightness(2.4)}30%{opacity:.85;filter:brightness(1.7)}48%{opacity:.35}66%{opacity:1;filter:brightness(1.35)}100%{opacity:1;transform:none;filter:none}}
+html[data-style=stark] #content>*{animation:poweron .5s ease-out both}
+html[data-style=stark] .stats>.stat,html[data-style=stark] .guilds>.card{animation:poweron .5s ease-out both}
+html[data-style=stark] .stats>:nth-child(2){animation-delay:.07s}html[data-style=stark] .stats>:nth-child(3){animation-delay:.14s}
+html[data-style=stark] .stats>:nth-child(4){animation-delay:.21s}html[data-style=stark] .stats>:nth-child(5){animation-delay:.28s}
+html[data-style=stark] .stats>:nth-child(n+6){animation-delay:.35s}
+
+/* кнопки: рамка светится, по наведению пробегает блик */
+html[data-style=stark] .btn{border-radius:0;background:transparent;border:1px solid var(--line2);color:var(--text);overflow:hidden;
+  font-family:var(--mono);font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;font-weight:600;transform:none}
+html[data-style=stark] .btn::after{content:"";position:absolute;top:0;bottom:0;width:38%;left:-60%;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(189,234,255,.3),transparent);transform:skewX(-20deg)}
+html[data-style=stark] .btn:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent2);
+  box-shadow:0 0 16px rgba(127,216,255,.25),inset 0 0 14px rgba(127,216,255,.08);transform:none}
+html[data-style=stark] .btn:hover::after{animation:sweepbtn .65s ease-out}
+html[data-style=stark] .btn:active{transform:scale(.98)}
+html[data-style=stark] .btn.primary,html[data-style=stark] .btn.primary:hover{background:var(--accent);color:var(--on-accent);border-color:var(--accent);
+  box-shadow:0 0 18px rgba(127,216,255,.4)}
+html[data-style=stark] .btn.primary:hover{background:var(--accent2)}
+html[data-style=stark] .btn.danger{border-color:rgba(255,107,107,.55);color:var(--err)}
+html[data-style=stark] .btn.danger:hover{background:rgba(255,107,107,.1);box-shadow:0 0 16px rgba(255,107,107,.3)}
+html[data-style=stark] .btn.big{font-size:.82rem}
+html[data-style=stark] .btn.icon{font-family:inherit}
+html[data-style=stark] input,html[data-style=stark] select,html[data-style=stark] textarea{border-radius:0;background:var(--field);border-color:var(--line2)}
+html[data-style=stark] input:focus,html[data-style=stark] select:focus,html[data-style=stark] textarea:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 16px rgba(127,216,255,.2)}
+html[data-style=stark] .chip{border-radius:0;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;font-size:.62rem}
+html[data-style=stark] .seg{border-radius:0;border-color:var(--line2)}
+html[data-style=stark] .seg button{border-radius:0;font-family:var(--mono);font-size:.76rem;letter-spacing:.1em;text-transform:uppercase}
+html[data-style=stark] .seg button.on{background:var(--accent);color:var(--on-accent);box-shadow:0 0 14px rgba(127,216,255,.4)}
+html[data-style=stark] input[type=radio]{border-radius:50%}
+html[data-style=stark] input[type=checkbox]:checked,html[data-style=stark] input[type=radio]:checked{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+html[data-style=stark] input[type=checkbox]:checked::after{border-color:var(--on-accent)}
+html[data-style=stark] input[type=radio]:checked::after{background:var(--on-accent)}
+html[data-style=stark] .picks,html[data-style=stark] .avlist,html[data-style=stark] .framebox{border-radius:0}
+html[data-style=stark] .picks label,html[data-style=stark] .avrow,html[data-style=stark] .nav button{border-radius:0}
+html[data-style=stark] .picks label:has(input:checked),html[data-style=stark] .avrow.on{background:var(--accent-soft);border-color:var(--accent-line)}
+html[data-style=stark] .pickline.target{border-radius:0;box-shadow:inset 2px 0 0 var(--accent)}
+html[data-style=stark] .pulsecap,html[data-style=stark] .pulsehead h2{font-family:var(--mono)}
+html[data-style=stark] .dot{box-shadow:0 0 10px var(--ok)}
+html[data-style=stark] ::selection{background:var(--accent);color:var(--on-accent)}
+html[data-style=stark] dialog{border-radius:0;border:1px solid var(--accent-line);box-shadow:0 0 40px rgba(127,216,255,.15)}
+html[data-style=stark] .toast{border-radius:0;border-left:2px solid var(--accent);font-family:var(--mono);font-size:.8rem}
+
+/* вход в этом стиле — голубой реактор */
+html[data-style=stark] .reactor{color:var(--accent2);filter:drop-shadow(0 0 18px rgba(127,216,255,.55))}
+html[data-style=stark] .hud.typing .reactor{filter:drop-shadow(0 0 34px rgba(189,234,255,.9))}
+html[data-style=stark] .hud{border-color:var(--line2);background:rgba(2,8,14,.7)}
+html[data-style=stark] .hud .c{border-color:var(--accent)}
+html[data-style=stark] .hudmeter i.on{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+html[data-style=stark] .hudbtn{border-color:var(--accent);color:var(--accent2)}
+html[data-style=stark] .hudbtn:hover:not(:disabled){background:var(--accent);color:var(--on-accent)}
+html[data-style=stark] .hudwrap::before{background:radial-gradient(closest-side at 50% 40%,rgba(127,216,255,.16),transparent 72%)}
+html[data-style=stark] .hudwrap::after{background:linear-gradient(180deg,transparent,rgba(127,216,255,.07),transparent)}
+html[data-style=stark] .hudsay,html[data-style=stark] .hudlog b{color:var(--accent2)}
+html[data-style=stark] .hudgrid{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M24 20v8M20 24h8' stroke='%237fd8ff' stroke-opacity='.3' fill='none'/%3E%3C/svg%3E")}
+html[data-style=stark] .hud h1{font-family:var(--mono)}
+.sw6{background:linear-gradient(135deg,#02060b 55%,#7fd8ff 55%)}
+@media (max-width:1000px){html[data-style=stark] .side{background:#02060b}html[data-style=stark] .mbar{background:rgba(2,6,11,.96)}html[data-style=stark] .head h1{font-size:1.2rem}}
+@media (prefers-reduced-motion:reduce){html[data-style=stark]::before,html[data-style=stark] #content>*,html[data-style=stark] .stats>.stat,html[data-style=stark] .logo::after,html[data-style=stark] .head::after,html[data-style=stark] .head h1::before{animation:none!important}}
 </style>
 </head>
 <body>
@@ -1324,20 +1463,20 @@ function applyTheme() {
   try { t = localStorage.getItem('hz_theme') || ''; } catch (e) { /* приватный режим */ }
   const st = getStyle();
   document.documentElement.dataset.style = st;
-  document.documentElement.dataset.theme = st === 'paper' ? 'light' : st === 'house' ? 'dark' : (t === 'light' ? 'light' : 'dark');
+  document.documentElement.dataset.theme = st === 'paper' ? 'light' : (st === 'house' || st === 'stark') ? 'dark' : (t === 'light' ? 'light' : 'dark');
 }
-const STYLES = [['house', 'Дом', 'sw0'], ['mono', 'Моно', 'sw1'], ['ruby', 'Алый', 'sw2'], ['ice', 'Лёд', 'sw3'], ['neon', 'Неон', 'sw4'], ['paper', 'Бумага', 'sw5']];
+const STYLES = [['stark', 'Старк', 'sw6'], ['house', 'Дом', 'sw0'], ['mono', 'Моно', 'sw1'], ['ruby', 'Алый', 'sw2'], ['ice', 'Лёд', 'sw3'], ['neon', 'Неон', 'sw4'], ['paper', 'Бумага', 'sw5']];
 function getStyle() {
   let v = '';
   try { v = localStorage.getItem('hz_style') || ''; } catch (e) { /* приватный режим */ }
-  return STYLES.some(([k]) => k === v) ? v : 'house';
+  return STYLES.some(([k]) => k === v) ? v : 'stark';
 }
 function openStyles() {
   const dlg = document.getElementById('dlg');
   const draw = () => {
     const cur = getStyle();
     dlg.replaceChildren(h('h3', null, 'Стиль оформления'),
-      h('p', { class: 'muted' }, 'Меняется сразу и запоминается в этом браузере. «Дом» всегда тёмный, «Бумага» всегда светлая.'),
+      h('p', { class: 'muted' }, 'Меняется сразу и запоминается в этом браузере. «Старк» и «Дом» всегда тёмные, «Бумага» всегда светлая.'),
       h('div', { class: 'stylegrid' }, STYLES.map(([k, label, cls]) => h('button', {
         class: 'stylecard' + (k === cur ? ' on' : ''), onclick: () => {
           try { localStorage.setItem('hz_style', k); } catch (e) { /* приватный режим */ }
@@ -1351,7 +1490,7 @@ function openStyles() {
 }
 function themeIcon() { return document.documentElement.dataset.theme === 'light' ? '☀️' : '🌙'; }
 function toggleTheme() {
-  if (getStyle() === 'paper' || getStyle() === 'house') { toast('Этот стиль не меняет тему: он всегда ' + (getStyle() === 'paper' ? 'светлый' : 'тёмный') + '. Другой стиль — кнопка 🎨.'); return; }
+  if (getStyle() !== 'mono' && ['paper', 'house', 'stark'].includes(getStyle())) { toast('Этот стиль не меняет тему: он всегда ' + (getStyle() === 'paper' ? 'светлый' : 'тёмный') + '. Другой стиль — кнопка 🎨.'); return; }
   const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   try { localStorage.setItem('hz_theme', next); } catch (e) { /* приватный режим */ }
   applyTheme();
