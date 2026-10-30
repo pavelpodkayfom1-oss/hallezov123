@@ -585,8 +585,21 @@ def channel_rows(bot, q: str = "") -> Dict[str, Any]:
     return {"rows": rows[:250], "total": len(rows)}
 
 
+def _member_keys(m, shown: str) -> List[str]:
+    """Всё, по чему человек узнаёт себя в списке: ник на сервере, юзернейм, имя в профиле, ID.
+
+    Ищут не по нику, а по тому, как зовут в жизни или как набран логин: «antoly» — это
+    юзернейм, а на сервере человек подписан «Leader | Antony Hallez | 30867».
+    """
+    return [str(n).lower() for n in (shown, m.name, getattr(m, "global_name", None), m.id) if n]
+
+
 def member_rows(bot, q: str = "", limit: int = 50) -> Dict[str, Any]:
     guild = guild_of(bot)
+    if guild is None and bot.guilds:
+        # id сервера из config.json может указывать туда, где бота уже нет —
+        # список людей это только чтение, поэтому ищем на самом большом сервере
+        guild = max(bot.guilds, key=lambda g: getattr(g, "member_count", 0) or 0)
     if guild is None:
         return {"error": "Бот ни на одном сервере"}
     needle = (q or "").strip().lower()
@@ -606,7 +619,7 @@ def member_rows(bot, q: str = "", limit: int = 50) -> Dict[str, Any]:
         if m.bot:
             continue
         shown = m.nick or str(m)
-        if needle and needle not in shown.lower() and needle != str(m.id):
+        if needle and not any(needle in k for k in _member_keys(m, shown)):
             continue
         if len(out) >= cap:
             break
@@ -627,7 +640,40 @@ def member_rows(bot, q: str = "", limit: int = 50) -> Dict[str, Any]:
             avatar = ""
         out.append({"id": str(m.id), "name": shown, "top": top, "voice": voice, "avatar": avatar,
                     "joined": m.joined_at.strftime("%d.%m.%Y") if m.joined_at else ""})
-    return {"rows": out, "total": len(out)}
+    return {"rows": out, "total": len(out), "guild": guild.name,
+            "cached": sum(1 for x in members if not x.bot),
+            "member_count": int(getattr(guild, "member_count", 0) or 0)}
+
+
+_chunk_at: Dict[int, float] = {}
+CHUNK_TTL = 120.0
+
+
+async def members_fetch(bot, q: str = "", limit: Any = 50) -> Dict[str, Any]:
+    """Список людей для панели — с догрузкой состава, если бот его не держит.
+
+    main.py грузит участников на старте, но на тесном хостинге это главный потребитель
+    памяти, и там состав могут не грузить (BOT_NO_CHUNK) или не успеть за 60 секунд.
+    Тогда guild.members пуст, и панель показывала «Никого не нашлось» не потому, что
+    не нашла человека, а потому что бот о нём ещё ничего не знает.
+    """
+    data = member_rows(bot, q, limit)
+    if data.get("cached") and not data.get("error"):
+        return data
+    guild = guild_of(bot)
+    if guild is None and getattr(bot, "guilds", None):
+        guild = max(bot.guilds, key=lambda g: getattr(g, "member_count", 0) or 0)
+    if guild is None:
+        return data
+    now = time.time()
+    if now - _chunk_at.get(guild.id, 0.0) > CHUNK_TTL:
+        _chunk_at[guild.id] = now
+        try:
+            await asyncio.wait_for(guild.chunk(), timeout=45)
+        except Exception:
+            # честный ответ: cached=0 при member_count=N означает «состав не поднят»
+            return member_rows(bot, q, limit)
+    return member_rows(bot, q, limit)
 
 
 def _compose_embed(title: Any, text: str, color: Any, author: Any):

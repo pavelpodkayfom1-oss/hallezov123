@@ -703,8 +703,8 @@ class WebPanel(commands.Cog):
         tools, err = self._tools()
         if err:
             return _json({"error": err}, 503)
-        return _json(tools.member_rows(self.bot, request.query.get("q", ""),
-                                      request.query.get("limit") or 50))
+        return _json(await tools.members_fetch(self.bot, request.query.get("q", ""),
+                                               request.query.get("limit") or 50))
 
     async def h_voices(self, request: web.Request) -> web.Response:
         tools, err = self._tools()

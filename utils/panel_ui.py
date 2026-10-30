@@ -3177,22 +3177,23 @@ function msgForm(needPing) {
   const spSeg = h('div', { class: 'seg small', role: 'tablist' });
   const spName = h('input', { type: 'text', maxlength: '80', placeholder: 'Имя, например: Глава семьи', 'aria-label': 'Имя отправителя' });
   const spAva = h('input', { type: 'text', maxlength: '500', placeholder: 'Ссылка на аватарку https://… (необязательно)', 'aria-label': 'Аватарка' });
-  const spQ = h('input', { type: 'search', placeholder: 'Найти участника по нику…', 'aria-label': 'Поиск участника' });
+  const spQ = h('input', { type: 'search', placeholder: 'Ник на сервере, логин или ID…', 'aria-label': 'Поиск участника' });
   const spList = h('div', { class: 'avlist', role: 'listbox', 'aria-label': 'Участники сервера' });
   let spId = '', spWho = '', spPic = '';
   const spBox = h('div', { class: 'spbox' });
   let spLoaded = false;
   const avOk = (u) => typeof u === 'string' && u.startsWith('https://cdn.discordapp.com/');
-  function drawList(rows) {
+  function drawList(rows, info) {
     spList.replaceChildren(...(rows.length ? rows.map((m) => h('button', {
       type: 'button', role: 'option', class: 'avrow' + (m.id === spId ? ' on' : ''), 'aria-selected': m.id === spId ? 'true' : 'false',
       onclick: () => { spId = m.id; spWho = m.name; spPic = avOk(m.avatar) ? m.avatar : ''; drawList(rows); upd(); } },
       avOk(m.avatar) ? h('img', { src: m.avatar, alt: '', referrerpolicy: 'no-referrer' }) : h('span', { class: 'avph' }, (m.name || '?').slice(0, 1).toUpperCase()),
-      h('span', { class: 'grow' }, h('b', null, m.name), h('small', null, m.top || 'без роли')))) : [h('div', { class: 'none' }, 'Никого не нашлось.')]));
+      h('span', { class: 'grow' }, h('b', null, m.name), h('small', null, m.top || 'без роли')))) : [h('div', { class: 'none' }, noneNote(info))]));
   }
   async function spLoad() {
     spLoaded = true;
-    try { drawList((await api('/api/members?q=' + encodeURIComponent(spQ.value.trim()) + '&limit=60')).rows); }
+    try { const d = await api('/api/members?q=' + encodeURIComponent(spQ.value.trim()) + '&limit=60');
+      drawList(d.rows, d); }
     catch (e) { toast(e.message, 'err'); }
   }
   spQ.addEventListener('input', () => { clearTimeout(spQ._t); spQ._t = setTimeout(spLoad, 300); });
@@ -3272,12 +3273,25 @@ function resultBox() {
   return box;
 }
 
+/* «Никого не нашлось» без объяснения выглядит как сломанная функция:
+   бот на нескольких серверах, и пустой список может означать «искали не там».
+   API отдаёт guild + cached, поэтому показываем, где именно искали и сколько людей видим. */
+function noneNote(info) {
+  const g = (info && info.guild) ? ' в «' + info.guild + '»' : '';
+  if (info && info.cached === 0) {
+    const n = info.member_count ? ' на сервере ' + info.member_count + ' чел.' : '';
+    return 'Бот не держит состав в памяти' + g + n + ' · подожди пару секунд и обнови список';
+  }
+  const c = (info && typeof info.cached === 'number') ? ' · бот видит ' + info.cached + ' чел.' : '';
+  return 'Никого не нашлось' + g + c + ' · ищи по нику на сервере, логину или ID';
+}
+
 function memberPicker(multi) {
   const q = h('input', { type: 'search', placeholder: 'Ник или ID…', 'aria-label': 'Поиск участника' });
   const box = h('div', { class: 'picks tall' });
   const line = h('div', { class: 'pickline' });
   const chosen = new Set(), names = new Map();
-  let rows = [];
+  let rows = [], info = null;
   const uid = 'mp' + Math.random().toString(36).slice(2, 7);
   function say() {
     const one = [...chosen][0];
@@ -3297,12 +3311,16 @@ function memberPicker(multi) {
         h('span', { class: 'grow' }, h('b', null, m.name), h('small', null, memSub(m))),
         chip(m.top || 'без роли', m.top ? 'ok' : 'off'));
     }));
-    if (!rows.length) box.append(h('div', { class: 'none' }, 'Никого не нашлось.'));
+    if (!rows.length) box.append(h('div', { class: 'none' }, noneNote(info)));
     say();
   }
   async function load() {
-    const d = await api('/api/members?q=' + encodeURIComponent(q.value.trim()) + '&limit=120');
-    rows = d.rows; rows.forEach((m) => names.set(m.id, m.name)); draw();
+    /* Пустой список без объяснения выглядит как сломанная функция — поэтому ошибку тоже показываем в рамке. */
+    try {
+      const d = await api('/api/members?q=' + encodeURIComponent(q.value.trim()) + '&limit=120');
+      info = d; rows = d.rows || [];
+    } catch (e) { info = null; rows = []; box.replaceChildren(h('div', { class: 'none' }, e.message)); say(); return; }
+    rows.forEach((m) => names.set(m.id, m.name)); draw();
   }
   q.addEventListener('input', () => { clearTimeout(q._t); q._t = setTimeout(load, 300); });
   const node = h('div', { class: 'card form pickcard' }, h('h2', null, multi ? 'Кого включить' : 'Кому написать'), q, box, line,
