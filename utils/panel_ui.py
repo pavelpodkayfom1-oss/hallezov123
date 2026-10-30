@@ -965,6 +965,7 @@ html[data-style=ruby][data-theme=light] body::before,html[data-style=ice][data-t
 .hexin{max-width:110px}
 .seg.small{margin:0;align-self:flex-start}
 .seg.small button{padding:.4em 1em;font-size:.85rem}
+.framebox{display:flex;flex-direction:column;gap:1rem;padding:1rem;border:1px dashed var(--line2);border-radius:var(--radius-s)}
 .spbox{display:flex;flex-direction:column;gap:.5rem}
 .avlist{display:flex;flex-direction:column;gap:.2rem;max-height:260px;overflow:auto;padding:.3rem;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--field)}
 .avrow{display:flex;align-items:center;gap:.7rem;padding:.4rem .5rem;border:1px solid transparent;border-radius:9px;background:none;color:var(--text);cursor:pointer;text-align:left;font:inherit}
@@ -2920,7 +2921,7 @@ function msgForm(needPing) {
     spSeg.replaceChildren(...[['bot', 'Бот'], ['member', 'От человека'], ['custom', 'Своё имя']].map(([k, l]) => h('button', {
       type: 'button', class: k === spMode ? 'on' : '', onclick: () => { spMode = k; drawSp(); upd(); } }, l)));
     const note = h('small', null, spMode === 'bot' ? 'Сообщение придёт от самого бота.'
-      : 'Боту нужно право «Управлять вебхуками» в канале. Discord всё равно ставит на такие сообщения значок БОТ.');
+      : 'Боту нужно право «Управлять вебхуками» в канале. Значок БОТ рядом с ником убрать нельзя: его ставит сам Discord на все сообщения не от живого человека.');
     spBox.replaceChildren(...(spMode === 'member' ? [spQ, spList, note] : spMode === 'custom' ? [spName, spAva, note] : [note]));
     if (spMode === 'member' && !spLoaded) spLoad();
   }
@@ -2955,15 +2956,24 @@ function msgForm(needPing) {
   drawSp();
   ping.addEventListener('change', upd);
   upd();
+  // по умолчанию сообщение уходит обычным текстом; рамка (embed) включается только по желанию
+  const frameBox = h('div', { class: 'framebox' },
+    h('div', { class: 'cfield' }, h('label', null, 'Заголовок'), title),
+    h('div', { class: 'cfield' }, h('label', null, 'Подпись над текстом'), author),
+    h('div', { class: 'cfield' }, h('label', null, 'Цвет полоски'),
+      h('div', { class: 'row' }, swatches, h('span', { class: 'hash' }, '#'), color)));
+  frameBox.style.display = 'none';
+  const frame = h('input', { type: 'checkbox', onchange: () => {
+    frameBox.style.display = frame.checked ? '' : 'none';
+    if (!frame.checked) { title.value = ''; author.value = ''; }
+    upd();
+  } });
   const box = h('div', { class: 'compose' },
     needPing ? h('div', { class: 'cfield' }, h('label', null, 'Писать от имени'), spSeg, spBox) : null,
-    h('div', { class: 'cfield' }, h('label', null, 'Подпись над текстом (необязательно)'), author,
-      h('small', null, 'Маленькая строчка над сообщением, например «Штаб семьи».')),
-    h('div', { class: 'cfield' }, h('label', null, 'Заголовок'), title),
     h('div', { class: 'cfield' },
       h('div', { class: 'row between' }, h('label', null, 'Текст'), h('span', { class: 'row' }, emojiButton(text), count)), text),
-    h('div', { class: 'cfield' }, h('label', null, 'Цвет полоски (работает, если есть заголовок или подпись)'),
-      h('div', { class: 'row' }, swatches, h('span', { class: 'hash' }, '#'), color)),
+    h('label', { class: 'row small tick' }, frame, 'Оформить в рамку: заголовок, подпись и цвет (без галочки — обычное сообщение)'),
+    frameBox,
     needPing ? h('label', { class: 'row small tick' }, ping, 'Отметить @everyone (все получат уведомление)') : null,
     h('div', { class: 'cfield' }, h('label', null, 'Так это увидят в Discord'), prev));
   return { box, author, title, color, text, ping, speaker };
