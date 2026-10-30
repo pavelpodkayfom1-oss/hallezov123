@@ -981,6 +981,104 @@ html[data-style=ruby][data-theme=light] body::before,html[data-style=ice][data-t
 .dctext{white-space:pre-wrap;word-break:break-word;color:#dbdee1}
 .dcping{display:inline-block;margin-top:.3rem;color:#c9cdfb;background:rgba(88,101,242,.3);border-radius:4px;padding:0 .3em}
 @media (max-width:900px){.sendgrid{grid-template-columns:1fr}.pickcard{position:static}}
+
+/* ======================================================================
+   Стиль «Дом» — по умолчанию. Семейная бухгалтерия: винный фон, латунь,
+   тонкая полоска как на костюме, крупные цифры с засечками.
+   ====================================================================== */
+html[data-style=house]{
+  --bg:#13090f; --bg2:#1a0c14; --panel:#1f111a; --panel2:#291722; --panel3:#35202c;
+  --line:rgba(226,196,130,.11); --line2:rgba(226,196,130,.26);
+  --text:#f3ead9; --muted:#b4a08f; --faint:#7f6d66;
+  --accent:#c9a45c; --accent2:#e3c481; --accent-d:#9a7a3b; --on-accent:#1b0e13;
+  --accent-soft:rgba(201,164,92,.12); --accent-line:rgba(201,164,92,.5);
+  --ok:#86c996; --warn:#e3a84f; --err:#f0736f;
+  --field:#12080d; --code:#0d0509; --hover:rgba(226,196,130,.07);
+  --radius:8px; --radius-s:5px; --glow:none; --edge:none; color-scheme:dark;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+}
+html[data-style=house] body::before{background:
+  radial-gradient(900px 480px at 8% -8%, rgba(120,28,52,.42), transparent 70%),
+  radial-gradient(700px 520px at 104% 108%, rgba(201,164,92,.09), transparent 70%), var(--bg)}
+/* полоска как на костюме: тонкие вертикальные линии, гаснут к низу */
+html[data-style=house] body::after{opacity:1;background-image:repeating-linear-gradient(90deg,rgba(226,196,130,.05) 0 1px,transparent 1px 15px);
+  background-size:auto;-webkit-mask-image:linear-gradient(180deg,#000,transparent 72%);mask-image:linear-gradient(180deg,#000,transparent 72%)}
+html[data-style=house] h1,html[data-style=house] h2,html[data-style=house] h3{font-family:var(--serif);font-weight:600;letter-spacing:-.005em}
+html[data-style=house] .head h1{font-size:2.15rem;line-height:1.1;letter-spacing:-.015em}
+html[data-style=house] .head h1::after{content:"";display:block;width:46px;height:2px;margin-top:.7rem;background:var(--accent)}
+html[data-style=house] .head p{font-size:.97rem;max-width:58ch}
+
+/* боковая колонка — «корешок» книги */
+html[data-style=house] .side{background:#10070c;border-right:1px solid var(--line2);box-shadow:inset -1px 0 0 rgba(0,0,0,.5)}
+html[data-style=house] .brand b{font-family:var(--serif);font-size:1.08rem;font-weight:600}
+html[data-style=house] .brand span{text-transform:none;letter-spacing:.02em;font-size:.76rem;font-style:italic}
+html[data-style=house] .logo{background:radial-gradient(circle at 35% 30%,var(--accent2),var(--accent) 55%,var(--accent-d));color:var(--on-accent);
+  border-radius:50%;font-family:var(--serif);font-weight:700;box-shadow:0 0 0 2px #10070c,0 0 0 3px var(--accent-d),0 6px 16px rgba(0,0,0,.5)}
+html[data-style=house] .navgroup{text-transform:none;letter-spacing:.02em;font-family:var(--serif);font-style:italic;font-size:.85rem;font-weight:500;color:var(--muted)}
+html[data-style=house] .nav button{border-radius:var(--radius-s);color:var(--muted)}
+html[data-style=house] .nav button .ico{background:none;border:0;border-radius:0;color:var(--faint)}
+html[data-style=house] .nav button:hover{color:var(--text);background:var(--hover)}
+html[data-style=house] .nav button:hover .ico{color:var(--accent2)}
+html[data-style=house] .nav button.active{color:var(--accent2);background:var(--accent-soft)}
+html[data-style=house] .nav button.active .ico{color:var(--accent2);background:none;box-shadow:none}
+html[data-style=house] .nav button.active::before{left:0;top:0;bottom:0;width:3px;border-radius:0;background:var(--accent);box-shadow:none}
+html[data-style=house] .searchbtn{border-radius:var(--radius-s)}
+html[data-style=house] .status{border-radius:var(--radius-s)}
+
+/* карточки: строгие, как листы учётной книги; цифры — главный акцент страницы */
+html[data-style=house] .card{background:var(--panel);border-radius:var(--radius);border:1px solid var(--line);box-shadow:none}
+html[data-style=house] .card:hover{border-color:var(--line2)}
+html[data-style=house] .stat{border-radius:var(--radius-s);padding:1.1rem 1.2rem 1rem;border-top:2px solid var(--accent-d)}
+html[data-style=house] .stat::before,html[data-style=house] .stat::after{display:none}
+html[data-style=house] .stat:hover{transform:none}
+html[data-style=house] .stat small{font-size:.8rem;color:var(--muted);letter-spacing:0}
+html[data-style=house] .stat b{font-family:var(--serif);font-size:2.2rem;font-weight:500;letter-spacing:-.02em;color:var(--accent2);line-height:1.05}
+html[data-style=house] .stat.ok{border-top-color:var(--ok)} html[data-style=house] .stat.warn{border-top-color:var(--warn)}
+html[data-style=house] .stat.ok b{color:var(--ok)} html[data-style=house] .stat.warn b{color:var(--warn)}
+html[data-style=house] .section-title{text-transform:none;letter-spacing:0;font-family:var(--serif);font-style:italic;font-size:1.12rem;font-weight:500;color:var(--text)}
+html[data-style=house] .section-title::after{background:linear-gradient(90deg,var(--line2),transparent)}
+html[data-style=house] .cfield>label,html[data-style=house] .cfield .row>label{text-transform:none;letter-spacing:0;font-size:.86rem;font-weight:600;color:var(--text)}
+
+/* кнопки и поля */
+html[data-style=house] .btn{border-radius:var(--radius-s);background:transparent;border:1px solid var(--line2);color:var(--text)}
+html[data-style=house] .btn:hover{background:var(--hover);border-color:var(--accent-line)}
+html[data-style=house] .btn.primary,html[data-style=house] .btn.primary:hover{background:var(--accent);color:var(--on-accent);border-color:var(--accent);box-shadow:none;font-weight:650}
+html[data-style=house] .btn.primary:hover{background:var(--accent2)}
+html[data-style=house] .btn.danger{border-color:rgba(240,115,111,.5);color:var(--err)}
+html[data-style=house] input,html[data-style=house] select,html[data-style=house] textarea{border-radius:var(--radius-s);background:var(--field)}
+html[data-style=house] input:focus,html[data-style=house] select:focus,html[data-style=house] textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+html[data-style=house] input[type=radio]{border-radius:50%}
+html[data-style=house] input[type=checkbox]{border-radius:4px}
+html[data-style=house] .chip{border-radius:3px}
+html[data-style=house] .seg{border-radius:var(--radius-s)}
+html[data-style=house] .seg button{border-radius:3px}
+html[data-style=house] .seg button.on{background:var(--accent);color:var(--on-accent)}
+html[data-style=house] .pickline.target{border-radius:var(--radius-s)}
+html[data-style=house] .picks label:has(input:checked){background:var(--accent-soft);border-color:var(--accent-line)}
+html[data-style=house] input[type=checkbox]:checked,html[data-style=house] input[type=radio]:checked{background:var(--accent)}
+html[data-style=house] input[type=checkbox]:checked::after{border-color:var(--on-accent)}
+html[data-style=house] input[type=radio]:checked::after{background:var(--on-accent)}
+html[data-style=house] .pulsecap b,html[data-style=house] .pulsehead h2{font-family:var(--serif)}
+html[data-style=house] .note-c{border-radius:var(--radius-s)}
+html[data-style=house] .dcprev{border-radius:var(--radius-s)}
+html[data-style=house] ::selection{background:var(--accent);color:var(--on-accent)}
+
+/* вход: тот же реактор, но латунный */
+html[data-style=house] .hud{background:rgba(16,7,12,.72);border-color:var(--line2)}
+html[data-style=house] .hud .c{border-color:var(--accent)}
+html[data-style=house] .hud h1{font-family:var(--serif);letter-spacing:.14em}
+html[data-style=house] .reactor{color:var(--accent2);filter:drop-shadow(0 0 16px rgba(201,164,92,.4))}
+html[data-style=house] .hud.typing .reactor{filter:drop-shadow(0 0 30px rgba(227,196,129,.75))}
+html[data-style=house] .hudmeter i.on{background:var(--accent);box-shadow:0 0 6px rgba(201,164,92,.6)}
+html[data-style=house] .hudbtn{border-color:var(--accent);color:var(--accent2)}
+html[data-style=house] .hudbtn:hover:not(:disabled){background:var(--accent);color:var(--on-accent)}
+html[data-style=house] .hudwrap::before{background:radial-gradient(closest-side at 50% 40%,rgba(201,164,92,.16),transparent 72%)}
+html[data-style=house] .hudwrap::after{background:linear-gradient(180deg,transparent,rgba(201,164,92,.06),transparent)}
+html[data-style=house] .hudsay,html[data-style=house] .hudlog b{color:var(--accent2)}
+html[data-style=house] .hudgrid{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M24 20v8M20 24h8' stroke='%23c9a45c' stroke-opacity='.28' fill='none'/%3E%3C/svg%3E")}
+html[data-style=house] .stylecard.on{border-color:var(--accent)}
+.sw0{background:linear-gradient(135deg,#13090f 55%,#c9a45c 55%)}
+@media (max-width:1000px){html[data-style=house] .side{background:#10070c}html[data-style=house] .mbar{background:rgba(16,7,12,.96)}}
 </style>
 </head>
 <body>
@@ -1226,20 +1324,20 @@ function applyTheme() {
   try { t = localStorage.getItem('hz_theme') || ''; } catch (e) { /* приватный режим */ }
   const st = getStyle();
   document.documentElement.dataset.style = st;
-  document.documentElement.dataset.theme = (t === 'light' || st === 'paper') ? 'light' : 'dark';
+  document.documentElement.dataset.theme = st === 'paper' ? 'light' : st === 'house' ? 'dark' : (t === 'light' ? 'light' : 'dark');
 }
-const STYLES = [['mono', 'Моно', 'sw1'], ['ruby', 'Алый', 'sw2'], ['ice', 'Лёд', 'sw3'], ['neon', 'Неон', 'sw4'], ['paper', 'Бумага', 'sw5']];
+const STYLES = [['house', 'Дом', 'sw0'], ['mono', 'Моно', 'sw1'], ['ruby', 'Алый', 'sw2'], ['ice', 'Лёд', 'sw3'], ['neon', 'Неон', 'sw4'], ['paper', 'Бумага', 'sw5']];
 function getStyle() {
   let v = '';
   try { v = localStorage.getItem('hz_style') || ''; } catch (e) { /* приватный режим */ }
-  return STYLES.some(([k]) => k === v) ? v : 'mono';
+  return STYLES.some(([k]) => k === v) ? v : 'house';
 }
 function openStyles() {
   const dlg = document.getElementById('dlg');
   const draw = () => {
     const cur = getStyle();
     dlg.replaceChildren(h('h3', null, 'Стиль оформления'),
-      h('p', { class: 'muted' }, 'Меняется сразу и запоминается в этом браузере. «Бумага» всегда светлая.'),
+      h('p', { class: 'muted' }, 'Меняется сразу и запоминается в этом браузере. «Дом» всегда тёмный, «Бумага» всегда светлая.'),
       h('div', { class: 'stylegrid' }, STYLES.map(([k, label, cls]) => h('button', {
         class: 'stylecard' + (k === cur ? ' on' : ''), onclick: () => {
           try { localStorage.setItem('hz_style', k); } catch (e) { /* приватный режим */ }
@@ -1253,7 +1351,7 @@ function openStyles() {
 }
 function themeIcon() { return document.documentElement.dataset.theme === 'light' ? '☀️' : '🌙'; }
 function toggleTheme() {
-  if (getStyle() === 'paper') { toast('Стиль «Бумага» всегда светлый. Другой стиль — кнопка 🎨.'); return; }
+  if (getStyle() === 'paper' || getStyle() === 'house') { toast('Этот стиль не меняет тему: он всегда ' + (getStyle() === 'paper' ? 'светлый' : 'тёмный') + '. Другой стиль — кнопка 🎨.'); return; }
   const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   try { localStorage.setItem('hz_theme', next); } catch (e) { /* приватный режим */ }
   applyTheme();
@@ -1604,7 +1702,7 @@ function pulseChart(first) {
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     c.clearRect(0, 0, w, H);
     const cs = getComputedStyle(document.documentElement);
-    const fg = cs.getPropertyValue('--text').trim() || '#fff';
+    const fg = cs.getPropertyValue('--accent2').trim() || cs.getPropertyValue('--text').trim() || '#fff';
     const grid = cs.getPropertyValue('--line2').trim() || 'rgba(255,255,255,.2)';
     c.lineWidth = 1; c.strokeStyle = grid; c.globalAlpha = .5;
     for (let i = 1; i < 4; i++) { const y = Math.round(H * i / 4) + .5; c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke(); }
