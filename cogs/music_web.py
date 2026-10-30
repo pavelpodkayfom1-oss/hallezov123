@@ -277,439 +277,495 @@ PAGE_HTML = r"""<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
-<title>HALLEZ · музыка семьи</title>
-<style nonce="__NONCE__">
-:root{
- --bg:#0a0910;--bg2:#120f1a;--surface:#161320;--surface2:#1d1929;
- --surface3:#272234;--line:#332c44;--text:#f0e7d8;--text2:#c6b9a6;--text3:#8b7f70;
- --cream:#f0e7d8;--amber:#e8b477;--teal:#7fd6c1;--violet:#b39cff;--red:#ef6a6a;--gold:#d9b56d;
- --r-big:22px;--r-card:16px;--r-box:12px;--r-in:10px;--pill:999px}
+<title>HALLEZ | DJ Studio</title>
+<style nonce="NONCE">
+:root{--bg:#000;--surface:#0a0a0a;--surface2:#141414;--surface3:#1f1f1f;--text:#fff;--text2:#999;
+ --text3:#666;--border:#222;--accent:#00ff88;--accent2:#00cc6a;--vinyl:#1a1a1a;--glow:rgba(0,255,136,.3)}
 *{box-sizing:border-box;margin:0;padding:0}
-html{-webkit-text-size-adjust:100%}
-body{background:radial-gradient(120% 80% at 50% -10%,var(--bg2),var(--bg) 60%) fixed,var(--bg);
- color:var(--text);min-height:100vh;overflow-x:hidden;position:relative;
- font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
-/* звёзды: три слоя точек, каждый уходит со своей скоростью — параллакс без картинок и скриптов */
-body::before,body::after{content:"";position:fixed;inset:-60vh -20vw;z-index:0;pointer-events:none}
-body::before{background-image:radial-gradient(1.4px 1.4px at 25% 35%,rgba(240,231,216,.9),transparent 60%),
- radial-gradient(1.2px 1.2px at 70% 15%,rgba(179,156,255,.85),transparent 60%),
- radial-gradient(1px 1px at 45% 80%,rgba(232,180,119,.8),transparent 60%),
- radial-gradient(1px 1px at 88% 62%,rgba(240,231,216,.7),transparent 60%);
- background-size:340px 340px;animation:drift 190s linear infinite,twinkle 7s ease-in-out infinite}
-body::after{background-image:radial-gradient(.8px .8px at 15% 70%,rgba(240,231,216,.55),transparent 60%),
- radial-gradient(.8px .8px at 60% 40%,rgba(127,214,193,.5),transparent 60%),
- radial-gradient(.7px .7px at 92% 22%,rgba(240,231,216,.45),transparent 60%);
- background-size:170px 170px;animation:drift 120s linear infinite reverse}
-@keyframes drift{to{transform:translate3d(-340px,-240px,0)}}
-@keyframes twinkle{0%,100%{opacity:.55}50%{opacity:1}}
-.glow{position:fixed;left:50%;top:-30vh;width:120vw;height:80vh;transform:translateX(-50%);z-index:0;
- pointer-events:none;background:radial-gradient(50% 50% at 50% 50%,rgba(217,181,109,.13),transparent 70%)}
-.container{max-width:1240px;margin:0 auto;padding:0 20px;position:relative;z-index:1}
-
-.header{padding:26px 0 18px;position:relative;margin-bottom:26px}
-/* линия шапки не упирается в края — иначе страница выглядит как таблица */
-.header::after{content:"";position:absolute;left:4%;right:4%;bottom:0;height:1px;
- background:linear-gradient(90deg,transparent,var(--line) 20%,var(--line) 80%,transparent)}
-.header-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.brand{font-size:1.55rem;font-weight:700;letter-spacing:-.5px;color:var(--cream)}
-.brand span{color:var(--text3);font-weight:400;letter-spacing:.14em;font-size:.78rem;
- text-transform:uppercase;margin-left:.55rem}
-.status{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;background:var(--surface2);
- border:1px solid var(--line);border-radius:var(--pill);font-size:.72rem;text-transform:uppercase;
- letter-spacing:.1em;color:var(--text2)}
-.status-dot{width:6px;height:6px;border-radius:50%;background:var(--text3)}
-.status.active{color:var(--gold);border-color:rgba(217,181,109,.45)}
-.status.active .status-dot{background:var(--amber);animation:pulse 1.8s infinite}
-@keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(232,180,119,.55)}50%{opacity:.5;box-shadow:0 0 0 6px rgba(232,180,119,0)}}
-.subtitle{color:var(--text3);font-size:.86rem;margin-top:8px}
-
-.main-grid{display:grid;grid-template-columns:1fr 360px;gap:22px;margin-bottom:22px}
-.card{background:linear-gradient(180deg,rgba(39,34,52,.55),rgba(22,19,32,.9));
- border:1px solid var(--line);border-radius:var(--r-big);
- box-shadow:0 18px 40px -28px rgba(0,0,0,.9)}
-.player-section{padding:26px}
-.track-display{display:grid;grid-template-columns:170px 1fr;gap:24px}
-.artwork{width:170px;height:170px;background:var(--surface2);border:1px solid var(--line);
- border-radius:var(--r-card);display:flex;align-items:center;justify-content:center;
- overflow:hidden;position:relative}
-.artwork img{width:100%;height:100%;object-fit:cover;display:block}
-.artwork.is-live{border-color:rgba(232,180,119,.5);box-shadow:0 0 34px -8px rgba(232,180,119,.45)}
-.artwork-placeholder{font-size:3.2rem;color:var(--text3)}
-.track-info{display:flex;flex-direction:column;min-width:0}
-.track-title{font-size:1.3rem;font-weight:600;line-height:1.3;color:var(--cream);word-break:break-word}
-.track-meta{color:var(--text2);font-size:.86rem;margin-top:6px}
-.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
-.chip{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);
- border:1px solid var(--line);border-radius:var(--pill);padding:5px 11px;background:rgba(29,25,41,.6)}
-.chip b{color:var(--cream);font-weight:600;letter-spacing:0}
-.progress-section{margin-top:auto;padding-top:22px}
-.progress-time{display:flex;justify-content:space-between;font-size:.74rem;color:var(--text3);
- margin-bottom:7px;font-variant-numeric:tabular-nums}
-.progress-bar{height:6px;background:var(--surface3);position:relative;overflow:hidden;
- border-radius:var(--pill)}
-.progress-fill{height:100%;width:0;border-radius:var(--pill);
- background:linear-gradient(90deg,var(--gold),var(--cream));transition:width .9s linear}
-.progress-fill::after{content:"";position:absolute;top:0;right:0;width:6px;height:100%;
- border-radius:var(--pill);background:var(--cream);box-shadow:0 0 10px 2px rgba(240,231,216,.55)}
-.waveform{display:flex;align-items:flex-end;gap:3px;height:44px;margin-top:20px;opacity:.42;transition:opacity .4s}
-.waveform.on{opacity:.9}
-.wave-bar{flex:1;height:12%;background:linear-gradient(180deg,var(--text3),#3a3348);
- transform-origin:bottom;border-radius:3px 3px 1px 1px}
-.waveform.on .wave-bar{background:linear-gradient(180deg,var(--cream),var(--amber));
- animation:wv 1.15s ease-in-out infinite alternate;animation-play-state:paused}
-.waveform.playing .wave-bar{animation-play-state:running}
-@keyframes wv{from{height:12%}to{height:var(--h,70%)}}
-
-.controls-panel{background:rgba(29,25,41,.6);border:1px solid var(--line);
- border-radius:var(--r-card);padding:18px;margin-top:22px}
-.controls-row{display:flex;gap:10px;flex-wrap:wrap}
-.ctrl-btn{position:relative;overflow:hidden;flex:1;min-width:110px;padding:13px 10px;
- background:var(--surface);border:1px solid var(--line);border-radius:var(--r-box);
- color:var(--c,var(--text));cursor:pointer;
- font:inherit;font-size:.78rem;text-transform:uppercase;letter-spacing:.09em;
- transition:border-color .2s,color .2s,background .2s,box-shadow .25s,transform .12s}
-.ctrl-btn::after{content:"";position:absolute;top:0;left:-60%;width:40%;height:100%;transform:skewX(-18deg);
- background:linear-gradient(90deg,transparent,rgba(240,231,216,.16),transparent);transition:left .5s ease}
-.ctrl-btn:hover::after{left:130%}
-.ctrl-btn:hover{border-color:var(--c,var(--cream));box-shadow:0 0 22px -10px var(--c,rgba(240,231,216,.8))}
-.ctrl-btn:active{transform:translateY(1px)}
-.ctrl-btn.primary{background:linear-gradient(180deg,var(--c,var(--cream)),var(--c2,var(--c,var(--cream))));
- color:#15121c;border-color:transparent;font-weight:700}
-.ctrl-btn.primary:hover{color:#15121c;box-shadow:0 0 26px -8px var(--c,var(--cream))}
-.ctrl-btn.on{background:var(--cbg,var(--surface3));border-color:var(--c);color:var(--c);
- box-shadow:inset 0 0 20px -12px var(--c)}
-.ctrl-btn:disabled{opacity:.32;cursor:default;transform:none;box-shadow:none}
-[data-action=pause]{--c:var(--amber);--c2:#d79a55;--cbg:rgba(232,180,119,.12)}
-[data-action=skip]{--c:var(--teal);--cbg:rgba(127,214,193,.12)}
-[data-action=dj]{--c:var(--violet);--cbg:rgba(179,156,255,.14)}
-[data-action=stop]{--c:var(--red);--cbg:rgba(239,106,106,.12);flex:.6 1 84px;min-width:84px}
-#addBtn{--c:var(--cream);--c2:#d8ccb6}
-.hint{color:var(--text3);font-size:.76rem;margin-top:12px;padding:8px 11px;
- border:1px dashed var(--line);border-radius:var(--r-box);background:rgba(29,25,41,.45)}
-.btn-wide{display:block;width:100%;min-width:0;border-radius:var(--pill)}
-.queue-more{padding:6px 10px;font-size:.74rem;color:var(--text3)}
-
-.sidebar{display:flex;flex-direction:column;gap:18px}
-.panel{padding:18px;border-radius:var(--r-card)}
-.panel-title{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);
- margin-bottom:14px;padding-bottom:9px;position:relative;display:flex;justify-content:space-between}
-.panel-title::after{content:"";position:absolute;left:0;right:16%;bottom:0;height:1px;
- background:linear-gradient(90deg,var(--line),transparent)}
-.panel-title b{color:var(--cream);letter-spacing:0}
-.input-group{margin-bottom:11px}
-.input-label{display:block;font-size:.72rem;color:var(--text2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em}
-.text-input{width:100%;padding:11px 13px;background:var(--surface2);border:1px solid var(--line);
- border-radius:var(--r-in);color:var(--text);
- font:inherit;font-size:.9rem;transition:border-color .18s,box-shadow .18s,background .18s}
-.text-input:focus{outline:none;border-color:var(--gold);background:var(--surface3);
- border-radius:var(--r-in);box-shadow:0 0 0 3px rgba(217,181,109,.12)}
-.text-input::placeholder{color:var(--text3)}
-.slider-row{display:flex;align-items:center;gap:12px;margin-top:14px}
-.slider{-webkit-appearance:none;appearance:none;flex:1;height:5px;border-radius:var(--pill);
- background:linear-gradient(90deg,var(--gold),var(--surface3));border:none;outline:none}
-.slider::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;background:var(--cream);
- border:2px solid #15121c;cursor:pointer;border-radius:50%;box-shadow:0 0 10px rgba(232,180,119,.7)}
-.slider::-moz-range-thumb{width:16px;height:16px;background:var(--cream);border:2px solid #15121c;
- cursor:pointer;border-radius:50%}
-.slider-value{font-size:.78rem;color:var(--cream);min-width:38px;text-align:right;font-variant-numeric:tabular-nums}
-.queue-panel{max-height:340px;overflow-y:auto;margin:0 -4px}
-.queue-panel::-webkit-scrollbar{width:6px}
-.queue-panel::-webkit-scrollbar-track{background:transparent}
-.queue-panel::-webkit-scrollbar-thumb{background:var(--line);border-radius:var(--pill)}
-.queue-item{display:flex;align-items:center;gap:11px;padding:9px 11px;background:rgba(29,25,41,.7);
- border:1px solid transparent;border-radius:var(--r-box);margin-bottom:7px;
- transition:background .18s,border-color .18s,transform .18s}
-.queue-item:hover{background:var(--surface3);border-color:rgba(232,180,119,.38);transform:translateX(2px)}
-.queue-number{display:flex;align-items:center;justify-content:center;width:24px;height:24px;flex:none;
- border-radius:50%;background:var(--surface3);color:var(--text2);font-size:.7rem;font-weight:600;
+body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+ min-height:100vh;overflow-x:hidden;position:relative}
+body::before{content:"";position:fixed;inset:0;background:
+ radial-gradient(circle at 30% 40%,rgba(0,255,136,.04),transparent 50%),
+ radial-gradient(circle at 70% 60%,rgba(0,100,200,.03),transparent 40%);pointer-events:none;z-index:0}
+.container{max-width:1600px;margin:0 auto;padding:20px;position:relative;z-index:1}
+.header{padding:20px 0;border-bottom:1px solid var(--border);margin-bottom:25px;display:flex;
+ align-items:center;justify-content:space-between}
+.brand{font-size:2rem;font-weight:800;letter-spacing:-1.5px;background:linear-gradient(135deg,var(--accent),#00aaff);
+ -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.status-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;background:var(--surface2);
+ border:1px solid var(--border);font-size:.75rem;text-transform:uppercase;letter-spacing:1.2px}
+.status-dot{width:7px;height:7px;background:var(--text3);border-radius:50%;transition:all .3s}
+.status-badge.live .status-dot{background:var(--accent);box-shadow:0 0 10px var(--glow);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.main-grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:25px;margin-bottom:25px}
+.deck-section{background:var(--surface);border:1px solid var(--border);padding:35px;position:relative}
+.vinyl-display{display:grid;grid-template-columns:220px minmax(0,1fr);gap:30px;margin-bottom:30px;align-items:center}
+.vinyl-container{width:220px;height:220px;position:relative;display:flex;align-items:center;justify-content:center}
+.vinyl-disc{width:100%;height:100%;background:radial-gradient(circle,#0a0a0a 0%,#1a1a1a 30%,#0f0f0f 70%,#050505 100%);
+ border-radius:50%;position:relative;box-shadow:0 8px 30px rgba(0,0,0,.7),inset 0 0 40px rgba(255,255,255,.03);
+ transition:transform .8s cubic-bezier(.4,0,.2,1)}
+.vinyl-disc.spinning{animation:spin 3s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.vinyl-disc::before{content:"";position:absolute;inset:20%;background:var(--bg);border-radius:50%;
+ box-shadow:0 0 20px rgba(0,0,0,.8)}
+.vinyl-disc::after{content:"";position:absolute;inset:45%;background:var(--surface3);border-radius:50%}
+.vinyl-label{position:absolute;inset:25%;border-radius:50%;background:linear-gradient(135deg,var(--surface2),var(--surface));
+ display:flex;align-items:center;justify-content:center;border:1px solid var(--border)}
+.vinyl-label img{width:80%;height:80%;border-radius:50%;object-fit:cover}
+.vinyl-icon{font-size:2rem;opacity:.4}
+.track-info{display:flex;flex-direction:column;justify-content:center;min-width:0}
+.track-title{font-size:1.5rem;font-weight:700;margin-bottom:10px;line-height:1.3;white-space:nowrap;
+ overflow:hidden;text-overflow:ellipsis}
+.track-meta{color:var(--text2);font-size:.9rem;margin-bottom:20px}
+.progress-section{margin-top:auto}
+.progress-time{display:flex;justify-content:space-between;font-size:.75rem;color:var(--text3);margin-bottom:8px;
  font-variant-numeric:tabular-nums}
-.queue-item:hover .queue-number{background:rgba(232,180,119,.2);color:var(--amber)}
-.queue-body{min-width:0}
-.queue-title{font-size:.86rem;color:var(--cream);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.queue-author{font-size:.74rem;color:var(--text3);margin-top:2px}
-.empty-state{margin:6px 0;padding:24px 14px;text-align:center;color:var(--text3);font-size:.85rem;
- line-height:1.5;border:1px dashed var(--line);border-radius:var(--r-box)}
-.empty-state span{display:block;font-size:1.5rem;margin-bottom:8px;opacity:.5}
-.message{padding:0;font-size:.8rem;margin-top:10px;min-height:1.2em;color:transparent;transition:color .2s}
-.message.success{color:var(--teal);padding:9px 12px;border:1px solid rgba(127,214,193,.3);
- border-radius:var(--r-box);background:rgba(127,214,193,.08);min-height:0}
-.message.error{color:var(--red);padding:9px 12px;border:1px solid rgba(239,106,106,.3);
- border-radius:var(--r-box);background:rgba(239,106,106,.08);min-height:0}
-.footer{display:table;margin:4px auto 34px;padding:10px 20px;text-align:center;color:var(--text3);
- font-size:.75rem;letter-spacing:.04em;border:1px solid var(--line);border-radius:var(--pill);
- background:rgba(29,25,41,.45)}
-@media (max-width:1024px){
- .main-grid{grid-template-columns:1fr}
- .track-display{grid-template-columns:130px 1fr;gap:18px}
- .artwork{width:130px;height:130px}
+.progress-bar{height:5px;background:var(--surface2);position:relative;cursor:pointer;border-radius:3px;overflow:hidden}
+.progress-bar:hover{height:7px}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .3s linear;
+ box-shadow:0 0 8px var(--glow)}
+.visualizer{height:80px;background:var(--surface2);margin-top:25px;border:1px solid var(--border);position:relative;
+ overflow:hidden;display:flex;align-items:flex-end;gap:2px;padding:5px}
+.vis-bar{flex:1;background:var(--surface3);min-height:3px;transition:all .15s;border-radius:2px 2px 0 0}
+.vis-bar.active{background:linear-gradient(to top,var(--accent2),var(--accent));box-shadow:0 0 6px var(--glow)}
+.dj-panel{background:var(--surface2);padding:25px;margin-top:25px;border:1px solid var(--border);position:relative}
+.dj-panel::before{content:"DJ CONTROL";position:absolute;top:8px;left:12px;font-size:.65rem;
+ text-transform:uppercase;letter-spacing:1.5px;color:var(--text3)}
+.dj-grid{display:grid;grid-template-columns:210px minmax(0,1fr);gap:22px 26px;align-items:center;margin-top:15px}
+.transport{display:flex;gap:10px}
+.transport-btn{width:56px;height:56px;background:var(--surface);border:2px solid var(--border);color:var(--text);
+ cursor:pointer;font-size:1.3rem;transition:all .2s;display:flex;align-items:center;justify-content:center;
+ position:relative}
+.transport-btn:hover{background:var(--surface3);border-color:var(--accent);transform:translateY(-2px)}
+.transport-btn.play{border-color:var(--accent);background:var(--accent);color:var(--bg)}
+.transport-btn.play:hover{background:var(--accent2)}
+.transport-btn:disabled{opacity:.3;cursor:not-allowed;transform:none}
+.knobs{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}
+.knob-group{display:flex;flex-direction:column;align-items:center;gap:8px}
+.knob-label{font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--text3)}
+.knob{width:70px;height:70px;background:radial-gradient(circle at 30% 30%,var(--surface3),var(--surface));
+ border-radius:50%;position:relative;cursor:pointer;border:3px solid var(--border);transition:all .2s}
+.knob:hover{border-color:var(--accent);box-shadow:0 0 15px var(--glow)}
+.knob::before{content:"";position:absolute;top:8px;left:50%;width:3px;height:28px;background:var(--accent);
+ transform:translateX(-50%);border-radius:2px;box-shadow:0 0 8px var(--glow)}
+.knob-value{font-size:.75rem;color:var(--text);font-weight:600;min-width:45px;text-align:center}
+.pads{grid-column:1 / -1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:15px}
+.pad{padding:16px;background:var(--surface);border:2px solid var(--border);color:var(--text);cursor:pointer;
+ font:inherit;transition:all .2s;text-align:center;font-size:.8rem;text-transform:uppercase;letter-spacing:.8px;
+ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pad:hover{background:var(--surface3);border-color:var(--accent);box-shadow:0 0 12px var(--glow)}
+.pad.active{background:var(--surface3);border-color:var(--accent);box-shadow:inset 0 0 20px var(--glow)}
+.pad:disabled{opacity:.25;cursor:not-allowed}
+.sidebar{display:flex;flex-direction:column;gap:20px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--border);padding:22px}
+.panel-title{font-size:.7rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--text3);margin-bottom:18px;
+ padding-bottom:12px;border-bottom:1px solid var(--border)}
+.input-group{margin-bottom:14px}
+.input-group:last-of-type{margin-bottom:0}
+.input-label{font-size:.7rem;color:var(--text2);margin-bottom:7px;display:block;text-transform:uppercase;
+ letter-spacing:.8px}
+.text-input{width:100%;padding:11px 13px;background:var(--surface2);border:1px solid var(--border);color:var(--text);
+ font:inherit;font-size:.9rem;transition:all .2s}
+.text-input:focus{outline:none;border-color:var(--accent);background:var(--surface3);box-shadow:0 0 8px var(--glow)}
+.text-input::placeholder{color:var(--text3)}
+.btn-primary{width:100%;padding:14px;background:var(--accent);color:var(--bg);border:none;cursor:pointer;
+ font:inherit;font-weight:700;font-size:.85rem;text-transform:uppercase;letter-spacing:1px;transition:all .2s;
+ margin-top:14px}
+.btn-primary:hover{background:var(--accent2);box-shadow:0 0 15px var(--glow)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.volume-control{margin-bottom:20px}
+.volume-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.volume-label{font-size:.7rem;color:var(--text2);text-transform:uppercase;letter-spacing:.8px}
+.volume-value{font-size:.9rem;color:var(--accent);font-weight:700;font-variant-numeric:tabular-nums}
+.volume-slider{-webkit-appearance:none;appearance:none;width:100%;height:6px;background:var(--surface2);
+ outline:none;border:none;border-radius:3px;position:relative}
+.volume-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;
+ background:var(--accent);cursor:pointer;border-radius:50%;box-shadow:0 0 10px var(--glow);transition:all .2s}
+.volume-slider::-webkit-slider-thumb:hover{transform:scale(1.2)}
+.volume-slider::-moz-range-thumb{width:18px;height:18px;background:var(--accent);cursor:pointer;border:none;
+ border-radius:50%;box-shadow:0 0 10px var(--glow)}
+.queue-panel{max-height:380px;overflow-y:auto;margin-top:10px}
+.queue-panel::-webkit-scrollbar{width:5px}
+.queue-panel::-webkit-scrollbar-track{background:var(--surface2)}
+.queue-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.queue-panel::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+.queue-item{padding:12px;background:var(--surface2);border-left:3px solid transparent;margin-bottom:8px;
+ transition:all .2s;cursor:pointer}
+.queue-item:hover{background:var(--surface3);border-left-color:var(--accent);transform:translateX(3px)}
+.queue-number{display:inline-block;width:28px;color:var(--text3);font-size:.7rem;font-weight:700;
+ font-variant-numeric:tabular-nums}
+.queue-title{font-size:.85rem;color:var(--text);margin-bottom:5px;white-space:nowrap;overflow:hidden;
+ text-overflow:ellipsis}
+.queue-author{font-size:.7rem;color:var(--text3)}
+.empty-state{padding:35px 20px;text-align:center;color:var(--text3);font-size:.85rem}
+.message{padding:11px 13px;font-size:.8rem;margin-top:10px;border-left:3px solid transparent;background:var(--surface2);
+ transition:all .3s;opacity:0;max-height:0;overflow:hidden}
+.message.show{opacity:1;max-height:100px;margin-top:10px}
+.message.success{color:var(--accent);border-left-color:var(--accent);background:rgba(0,255,136,.08)}
+.message.error{color:#ff5555;border-left-color:#ff5555;background:rgba(255,85,85,.08)}
+.footer{padding:20px 0;text-align:center;color:var(--text3);font-size:.7rem;text-transform:uppercase;
+ letter-spacing:1.5px;border-top:1px solid var(--border);margin-top:30px}
+@media (max-width:1100px){
+ .main-grid{grid-template-columns:minmax(0,1fr)}
+ .dj-grid{grid-template-columns:1fr 1fr}
+ .knobs{grid-column:1 / -1;order:3}
 }
-@media (max-width:560px){
- .container{padding:0 14px}
- .player-section{padding:18px}
- .track-display{grid-template-columns:1fr;gap:16px}
- .artwork{width:100%;height:190px}
- .ctrl-btn{min-width:calc(50% - 5px);flex:none}
- .brand{font-size:1.3rem}
- .brand span{display:block;margin:4px 0 0}
-}
-@media (prefers-reduced-motion:reduce){
- body::before,body::after{animation:none}
- .waveform.on .wave-bar{animation:none;height:45%}
- .status.active .status-dot{animation:none}
- .ctrl-btn::after{display:none}
+@media (max-width:640px){
+ .vinyl-display{grid-template-columns:minmax(0,1fr);gap:20px}
+ .vinyl-container{width:180px;height:180px;margin:0 auto}
+ .dj-grid{grid-template-columns:minmax(0,1fr)}
+ .pads{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .transport{justify-content:center}
 }
 </style></head>
 <body>
-<div class="glow"></div>
 <div class="container">
 <header class="header">
-<div class="header-top">
-<div class="brand">HALLEZ<span>музыка семьи</span></div>
-<div class="status" id="status"><span class="status-dot"></span><span id="statusText">подключаемся…</span></div>
-</div>
-<div class="subtitle">Заказываете отсюда — трек попадает в общую очередь и играет в голосовом канале.</div>
+<div class="brand">HALLEZ DJ STUDIO</div>
+<div class="status-badge" id="statusBadge"><span class="status-dot"></span><span id="statusText">OFFLINE</span></div>
 </header>
 
 <div class="main-grid">
-<div class="card player-section">
-<div class="track-display">
-<div class="artwork" id="artwork"><div class="artwork-placeholder">♪</div></div>
-<div class="track-info">
-<div class="track-title" id="trackTitle">Сейчас ничего не играет</div>
-<div class="track-meta" id="trackMeta">Закажи трек справа — он встанет в очередь.</div>
-<div class="chips">
-<div class="chip">очередь <b id="chipQueue">0</b></div>
-<div class="chip">громкость <b id="chipVol">—</b></div>
-<div class="chip">диджей <b id="chipDj">выкл</b></div>
+<div class="deck-section">
+<div class="vinyl-display">
+<div class="vinyl-container">
+<div class="vinyl-disc" id="vinylDisc">
+<div class="vinyl-label" id="vinylLabel"><div class="vinyl-icon">♪</div></div>
 </div>
+</div>
+<div class="track-info">
+<div class="track-title" id="trackTitle">No track loaded</div>
+<div class="track-meta" id="trackMeta">Add tracks to start playing</div>
 <div class="progress-section">
 <div class="progress-time"><span id="currentTime">0:00</span><span id="totalTime">0:00</span></div>
-<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+<div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
 </div>
 </div>
 </div>
 
-<div class="waveform" id="waveform"></div>
+<div class="visualizer" id="visualizer"></div>
 
-<div class="controls-panel">
-<div class="controls-row">
-<button class="ctrl-btn primary" data-action="pause" id="pauseBtn">Пауза</button>
-<button class="ctrl-btn" data-action="skip">Пропустить</button>
-<button class="ctrl-btn" data-action="dj" id="djBtn">Авто-диджей</button>
-<button class="ctrl-btn" data-action="stop">Стоп</button>
+<div class="dj-panel">
+<div class="dj-grid">
+<div class="transport">
+<button class="transport-btn" data-action="pause" id="pauseBtn" title="Play/Pause">▶</button>
+<button class="transport-btn" data-action="skip" title="Skip">⏭</button>
+<button class="transport-btn" data-action="stop" title="Stop">⏹</button>
 </div>
-<div class="slider-row">
-<input type="range" class="slider" id="volSlider" min="5" max="100" step="5" value="50" aria-label="Громкость">
-<span class="slider-value" id="volValue">50%</span>
+<div class="knobs">
+<div class="knob-group">
+<div class="knob-label">BASS</div>
+<div class="knob" data-knob="bass" data-min="-10" data-max="10" data-value="0"></div>
+<div class="knob-value" id="bassValue">0 dB</div>
 </div>
-<div class="hint" id="hint">«Стоп» чистит всю очередь — он для своих.</div>
+<div class="knob-group">
+<div class="knob-label">TREBLE</div>
+<div class="knob" data-knob="treble" data-min="-10" data-max="10" data-value="0"></div>
+<div class="knob-value" id="trebleValue">0 dB</div>
+</div>
+<div class="knob-group">
+<div class="knob-label">SPEED</div>
+<div class="knob" data-knob="speed" data-min="0.5" data-max="2" data-value="1" data-step="0.1"></div>
+<div class="knob-value" id="speedValue">1.0x</div>
+</div>
+</div>
+<div class="pads">
+<button class="pad" data-action="dj" id="djBtn">AUTO DJ</button>
+<button class="pad" disabled>FX 1</button>
+<button class="pad" disabled>FX 2</button>
+<button class="pad" disabled>LOOP</button>
+</div>
+</div>
 </div>
 </div>
 
 <aside class="sidebar">
-<div class="card panel">
-<div class="panel-title">Заказать трек</div>
+<div class="panel">
+<div class="panel-title">ADD TRACK</div>
 <div class="input-group">
-<label class="input-label" for="trackInput">Что включить</label>
-<input type="text" class="text-input" id="trackInput" maxlength="200" autocomplete="off"
- placeholder="Имя из библиотеки или ссылка">
+<label class="input-label">YouTube URL / Search</label>
+<input type="text" class="text-input" id="trackInput" placeholder="Paste URL or track name...">
 </div>
 <div class="input-group">
-<label class="input-label" for="nickInput">Кто заказал</label>
-<input type="text" class="text-input" id="nickInput" maxlength="32" autocomplete="off" placeholder="Твоё имя">
+<label class="input-label">Your Name</label>
+<input type="text" class="text-input" id="nickInput" placeholder="DJ Name">
 </div>
-<button class="ctrl-btn primary btn-wide" id="addBtn">В очередь</button>
-<div class="message" id="message">&nbsp;</div>
+<button class="btn-primary" id="addBtn">ADD TO QUEUE</button>
+<div class="message" id="message"></div>
 </div>
 
-<div class="card panel">
-<div class="panel-title">Очередь <b id="queueCount">0</b></div>
+<div class="panel">
+<div class="panel-title">VOLUME</div>
+<div class="volume-control">
+<div class="volume-header"><span class="volume-label">Master</span><span class="volume-value" id="volValue">50%</span></div>
+<input type="range" class="volume-slider" id="volSlider" min="5" max="100" step="5" value="50">
+</div>
+</div>
+
+<div class="panel">
+<div class="panel-title">QUEUE (<span id="queueCount">0</span>)</div>
 <div class="queue-panel" id="queueList"></div>
 </div>
 </aside>
 </div>
 
-<footer class="footer">Общий плеер семьи · заказы видны всем в канале</footer>
+<footer class="footer">Hallez DJ Studio &bull; Professional Music Control</footer>
 </div>
 
-<script nonce="__NONCE__">
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+<script nonce="NONCE">
 const $ = id => document.getElementById(id);
 let refreshTimer = null;
-let clock = {elapsed:0, duration:0, at:0, running:false};
 
-// полоса из 44 столбиков: высота и задержка задаются один раз, дальше крутит CSS
-(function buildWave(){
- const box = $('waveform'), frag = document.createDocumentFragment();
- for(let i=0;i<44;i++){
-  const bar = document.createElement('div');
-  bar.className = 'wave-bar';
-  bar.style.setProperty('--h', (28 + Math.abs(Math.sin(i*1.7))*70).toFixed(0) + '%');
-  bar.style.animationDelay = (i % 11) * 0.09 + 's';
-  bar.style.animationDuration = (0.85 + (i % 5) * 0.13).toFixed(2) + 's';
-  frag.appendChild(bar);
- }
- box.appendChild(frag);
-})();
+// Visualizer bars
+for(let i=0;i<40;i++){
+const bar = document.createElement('div');
+bar.className = 'vis-bar';
+$('visualizer').appendChild(bar);
+}
+
+let animFrame = null;
+function animateVisualizer(){
+const bars = document.querySelectorAll('.vis-bar');
+const playing = $('vinylDisc').classList.contains('spinning');
+bars.forEach((bar,i)=>{
+if(playing){
+const h = 15 + Math.random()*85;
+bar.style.height = h + '%';
+bar.classList.toggle('active', Math.random()>.6);
+}else{
+bar.style.height = '5%';
+bar.classList.remove('active');
+}
+});
+animFrame = setTimeout(()=>requestAnimationFrame(animateVisualizer), 120);
+}
+animateVisualizer();
+
+// Knobs
+document.querySelectorAll('[data-knob]').forEach(knob=>{
+const name = knob.dataset.knob;
+const min = parseFloat(knob.dataset.min);
+const max = parseFloat(knob.dataset.max);
+const step = parseFloat(knob.dataset.step||'1');
+let value = parseFloat(knob.dataset.value);
+let startY = 0;
+let startValue = 0;
+
+function updateKnob(){
+const pct = (value-min)/(max-min);
+const deg = -135 + pct*270;
+knob.style.transform = `rotate(${deg}deg)`;
+}
+updateKnob();
+
+knob.addEventListener('mousedown', e=>{
+e.preventDefault();
+startY = e.clientY;
+startValue = value;
+document.addEventListener('mousemove', onMove);
+document.addEventListener('mouseup', onUp);
+});
+
+function onMove(e){
+const delta = (startY - e.clientY) * (max-min) / 200;
+value = Math.max(min, Math.min(max, startValue + delta));
+value = Math.round(value/step)*step;
+updateKnob();
+const valueEl = $(`${name}Value`);
+if(name==='speed'){
+valueEl.textContent = value.toFixed(1)+'x';
+}else{
+valueEl.textContent = (value>=0?'+':'')+value+' dB';
+}
+}
+
+function onUp(){
+document.removeEventListener('mousemove', onMove);
+document.removeEventListener('mouseup', onUp);
+}
+});
 
 function fmt(sec){
- if(!sec || sec < 0) return '0:00';
- sec = Math.round(sec);
- return Math.floor(sec/60) + ':' + String(sec%60).padStart(2,'0');
+if(!sec) return '0:00';
+sec = Math.round(sec);
+const m = Math.floor(sec/60);
+const s = sec%60;
+return m+':'+(s<10?'0':'')+s;
 }
 
-async function api(path, body){
- const init = {method: body ? 'POST' : 'GET', cache:'no-store',
-  headers:{'X-Requested-With':'hz-music'}};
- if(body){ init.headers['Content-Type']='application/json'; init.body=JSON.stringify(body); }
- const r = await fetch(path, init);
- let data = {};
- try{ data = await r.json(); }catch(e){ /* бот перезапустился — вместо json прилетела страница */ }
- if(!r.ok) throw new Error(data.error || ('Сервер ответил ' + r.status));
- return data;
+async function api(path,body){
+const init = {method:body?'POST':'GET',cache:'no-store',
+headers:{'X-Requested-With':'hz-music'}};
+if(body){init.headers['Content-Type']='application/json';init.body=JSON.stringify(body);}
+const r = await fetch(path,init);
+let data = {};
+try{data = await r.json();}catch(e){}
+if(!r.ok) throw new Error(data.error||'Error '+r.status);
+return data;
 }
 
-function showMsg(text, type){
- const msg = $('message');
- msg.textContent = text;
- msg.className = 'message ' + (type || '');
- clearTimeout(showMsg._t);
- showMsg._t = setTimeout(()=>{ msg.className='message'; msg.innerHTML='&nbsp;'; }, 3200);
+function showMsg(text,type){
+const msg = $('message');
+msg.textContent = text;
+msg.className = 'message show '+(type||'');
+setTimeout(()=>msg.className='message',3500);
 }
-
-// прогресс дорисовываем между опросами, чтобы ползунок шёл плавно, а не скачками раз в 3 сек
-function tick(){
- if(clock.running && clock.duration){
-  const sec = clock.elapsed + (Date.now() - clock.at)/1000;
-  const pct = Math.min(100, sec/clock.duration*100);
-  $('progressFill').style.width = pct + '%';
-  $('currentTime').textContent = fmt(Math.min(sec, clock.duration));
- }
-}
-setInterval(tick, 1000);
 
 function updateUI(state){
- const live = !!state.connected, playing = !!state.playing, paused = !!state.paused;
- const status = $('status');
- status.classList.toggle('active', live);
- $('statusText').textContent = live
-  ? (playing ? 'в эфире · ' + (state.channel || 'голосовой') : (paused ? 'на паузе' : 'ждёт заказов'))
-  : 'бот не в голосовом';
+const statusBadge = $('statusBadge');
+const statusText = $('statusText');
+if(state.connected){
+statusBadge.classList.add('live');
+statusText.textContent = 'LIVE: '+(state.channel||'VOICE').toUpperCase();
+}else{
+statusBadge.classList.remove('live');
+statusText.textContent = 'OFFLINE';
+}
 
- const wave = $('waveform');
- wave.classList.toggle('on', playing || paused);
- wave.classList.toggle('playing', playing);
+const cur = state.current;
+const vinyl = $('vinylDisc');
+const pauseBtn = $('pauseBtn');
+if(cur){
+$('trackTitle').textContent = cur.title||'Unknown Track';
+$('trackMeta').textContent = 'Requested by '+(cur.who||'Unknown');
+$('currentTime').textContent = fmt(cur.elapsed);
+$('totalTime').textContent = fmt(cur.duration);
+const pct = cur.duration ? (cur.elapsed/cur.duration*100):0;
+$('progressFill').style.width = pct+'%';
 
- const cur = state.current;
- if(cur){
-  $('trackTitle').textContent = cur.title || 'без названия';
-  $('trackMeta').textContent = 'заказал ' + (cur.who || 'кто-то');
-  clock = {elapsed: cur.elapsed || 0, duration: cur.duration || 0, at: Date.now(), running: playing};
-  $('totalTime').textContent = fmt(cur.duration);
-  $('currentTime').textContent = fmt(cur.elapsed);
-  $('progressFill').style.width = (cur.duration ? Math.min(100, cur.elapsed/cur.duration*100) : 0) + '%';
-  $('artwork').classList.toggle('is-live', playing);
-  $('artwork').innerHTML = cur.thumb
-   ? '<img src="' + esc(cur.thumb) + '" alt="">'
-   : '<div class="artwork-placeholder">♪</div>';
- }else{
-  clock = {elapsed:0, duration:0, at:0, running:false};
-  $('trackTitle').textContent = playing ? 'звучит' : 'Сейчас ничего не играет';
-  $('trackMeta').textContent = live ? 'Очередь пуста — закажи первым.' : 'Боту нужно зайти в голосовой канал.';
-  $('currentTime').textContent = '0:00';
-  $('totalTime').textContent = '0:00';
-  $('progressFill').style.width = '0%';
-  $('artwork').classList.remove('is-live');
-  $('artwork').innerHTML = '<div class="artwork-placeholder">♪</div>';
- }
+if(cur.thumb){
+$('vinylLabel').innerHTML = '<img src="'+cur.thumb+'" alt="">';
+}else{
+$('vinylLabel').innerHTML = '<div class="vinyl-icon">♪</div>';
+}
 
- const vol = state.volume || 0;
- $('volSlider').value = vol;
- $('volValue').textContent = vol + '%';
- $('chipVol').textContent = vol + '%';
- $('chipQueue').textContent = (state.queue || []).length;
- $('chipDj').textContent = state.dj ? 'вкл' : 'выкл';
- $('djBtn').classList.toggle('on', !!state.dj);
- $('pauseBtn').textContent = paused ? 'Продолжить' : 'Пауза';
- $('pauseBtn').disabled = !(playing || paused);
+if(state.playing && !state.paused){
+vinyl.classList.add('spinning');
+pauseBtn.innerHTML = '⏸';
+pauseBtn.classList.remove('play');
+}else{
+vinyl.classList.remove('spinning');
+pauseBtn.innerHTML = '▶';
+pauseBtn.classList.add('play');
+}
+}else{
+$('trackTitle').textContent = 'No track loaded';
+$('trackMeta').textContent = 'Queue is empty';
+$('currentTime').textContent = '0:00';
+$('totalTime').textContent = '0:00';
+$('progressFill').style.width = '0%';
+$('vinylLabel').innerHTML = '<div class="vinyl-icon">♪</div>';
+vinyl.classList.remove('spinning');
+pauseBtn.innerHTML = '▶';
+pauseBtn.classList.add('play');
+}
 
- const qlist = $('queueList'), queue = state.queue || [];
- $('queueCount').textContent = queue.length;
- qlist.innerHTML = '';
- if(queue.length){
-  queue.slice(0, 20).forEach((t, i) => {
-   const item = document.createElement('div');
-   item.className = 'queue-item';
-   item.innerHTML = '<div class="queue-number">' + (i+1) + '</div>' +
-    '<div class="queue-body"><div class="queue-title">' + esc(t.title) + '</div>' +
-    '<div class="queue-author">' + esc(t.who) + '</div></div>';
-   qlist.appendChild(item);
-  });
-  if(queue.length > 20){
-   const more = document.createElement('div');
-   more.className = 'queue-more';
-   more.textContent = 'и ещё ' + (queue.length - 20);
-   qlist.appendChild(more);
-  }
- }else{
-  qlist.innerHTML = '<div class="empty-state"><span>♪</span>Очередь пустая. ' +
-   'Напиши имя трека справа — он заиграет следом.</div>';
- }
+$('volSlider').value = state.volume||50;
+$('volValue').textContent = (state.volume||50)+'%';
+
+$('djBtn').classList.toggle('active',!!state.dj);
+
+const qlist = $('queueList');
+const queue = state.queue||[];
+$('queueCount').textContent = queue.length;
+qlist.innerHTML = '';
+if(queue.length){
+queue.slice(0,25).forEach((t,i)=>{
+const item = document.createElement('div');
+item.className = 'queue-item';
+item.innerHTML = '<span class="queue-number">'+(i+1)+'</span>'+
+'<div class="queue-title">'+(t.title||'Unknown')+'</div>'+
+'<div class="queue-author">'+(t.who||'Unknown')+'</div>';
+qlist.appendChild(item);
+});
+if(queue.length>25){
+const more = document.createElement('div');
+more.className = 'empty-state';
+more.textContent = '+ '+(queue.length-25)+' more tracks';
+qlist.appendChild(more);
+}
+}else{
+qlist.innerHTML = '<div class="empty-state">No tracks in queue</div>';
+}
 }
 
 async function refresh(){
- try{ updateUI(await api('/music/api/state')); }
- catch(e){ $('statusText').textContent = 'связь потеряна'; }
+try{
+const state = await api('/music/api/state');
+updateUI(state);
+}catch(e){
+console.error(e);
+}
 }
 
-async function act(action, value){
- try{
-  const r = await api('/music/api/action', value === undefined ? {action} : {action, value});
-  showMsg(r.did || 'Готово', 'success');
-  await refresh();
- }catch(e){ showMsg(e.message, 'error'); }
+document.querySelectorAll('[data-action]').forEach(btn=>{
+btn.addEventListener('click',async()=>{
+const action = btn.dataset.action;
+if(btn.disabled) return;
+btn.disabled = true;
+try{
+await api('/music/api/action',{action});
+await refresh();
+}catch(e){
+showMsg(e.message,'error');
 }
-
-document.querySelectorAll('[data-action]').forEach(btn => {
- btn.addEventListener('click', async () => {
-  btn.disabled = true;
-  await act(btn.dataset.action);
-  btn.disabled = false;
- });
+btn.disabled = false;
+});
 });
 
-async function order(){
- const query = $('trackInput').value.trim();
- const nick = $('nickInput').value.trim();
- if(!query){ showMsg('Напиши имя трека или вставь ссылку', 'error'); $('trackInput').focus(); return; }
- const btn = $('addBtn');
- btn.disabled = true; btn.textContent = 'Ставим…';
- try{
-  const r = await api('/music/api/order', {query, nick: nick || 'гость'});
-  $('trackInput').value = '';
-  showMsg(r.did || 'Трек в очереди', 'success');
-  if(nick) localStorage.setItem('nick', nick);
-  await refresh();
- }catch(e){ showMsg(e.message, 'error'); }
- btn.disabled = false; btn.textContent = 'В очередь';
+$('addBtn').addEventListener('click',async()=>{
+const query = $('trackInput').value.trim();
+const nick = $('nickInput').value.trim();
+if(!query){showMsg('Enter track URL or name','error');return;}
+$('addBtn').disabled = true;
+$('addBtn').textContent = 'ADDING...';
+try{
+await api('/music/api/order',{query,nick:nick||'Guest'});
+$('trackInput').value = '';
+showMsg('Track added to queue','success');
+if(nick) localStorage.setItem('nick',nick);
+await refresh();
+}catch(e){
+showMsg(e.message,'error');
 }
+$('addBtn').disabled = false;
+$('addBtn').textContent = 'ADD TO QUEUE';
+});
 
-$('addBtn').addEventListener('click', order);
-$('trackInput').addEventListener('keydown', e => { if(e.key === 'Enter') order(); });
-$('volSlider').addEventListener('change', () => act('volume', Number($('volSlider').value)));
-$('volSlider').addEventListener('input', () => { $('volValue').textContent = $('volSlider').value + '%'; });
+$('volSlider').addEventListener('input',()=>{
+const v = $('volSlider').value;
+$('volValue').textContent = v+'%';
+});
+$('volSlider').addEventListener('change',async()=>{
+try{
+await api('/music/api/action',{action:'volume',value:Number($('volSlider').value)});
+}catch(e){
+showMsg(e.message,'error');
+}
+});
 
-const saved = localStorage.getItem('nick');
-if(saved) $('nickInput').value = saved;
+const savedNick = localStorage.getItem('nick');
+if(savedNick) $('nickInput').value = savedNick;
 
 refresh();
-refreshTimer = setInterval(refresh, 3000);
-document.addEventListener('visibilitychange', () => {
- if(document.hidden){ clearInterval(refreshTimer); refreshTimer = null; }
- else if(!refreshTimer){ refresh(); refreshTimer = setInterval(refresh, 3000); }
+refreshTimer = setInterval(refresh,3000);
+document.addEventListener('visibilitychange',()=>{
+if(document.hidden){
+if(refreshTimer) clearInterval(refreshTimer);
+refreshTimer = null;
+if(animFrame) clearTimeout(animFrame);
+animFrame = null;
+}else{
+if(!refreshTimer){
+refresh();
+refreshTimer = setInterval(refresh,3000);
+}
+if(!animFrame) animateVisualizer();
+}
 });
 </script>
 </body></html>
+
 """
 
 
