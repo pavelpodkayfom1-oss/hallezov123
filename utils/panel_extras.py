@@ -113,6 +113,14 @@ def sched_list() -> List[Dict[str, Any]]:
     return wait + done
 
 
+def _clean_speaker(sp: Any) -> Dict[str, str]:
+    if not isinstance(sp, dict):
+        return {}
+    out = {"member": str(sp.get("member") or "")[:25], "name": str(sp.get("name") or "")[:80],
+           "avatar": str(sp.get("avatar") or "")[:500]}
+    return out if (out["member"].isdigit() or out["name"].strip()) else {}
+
+
 def sched_add(body: Dict[str, Any]) -> Dict[str, Any]:
     text = str(body.get("text") or "").strip()
     if not text:
@@ -138,6 +146,7 @@ def sched_add(body: Dict[str, Any]) -> Dict[str, Any]:
             "channel_name": str(body.get("channel_name") or "")[:100],
             "text": text, "title": str(body.get("title") or "")[:256],
             "author": str(body.get("author") or "")[:100],
+            "speaker": _clean_speaker(body.get("speaker")),
             "color": str(body.get("color") or "")[:16], "ping": bool(body.get("ping")),
             "at": at, "repeat": repeat, "status": "wait", "created": int(now)}
     with _lock:

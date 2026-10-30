@@ -963,6 +963,10 @@ html[data-style=ruby][data-theme=light] body::before,html[data-style=ice][data-t
 .sw:hover{transform:scale(1.12)}
 .hash{color:var(--muted);margin-left:.5rem}
 .hexin{max-width:110px}
+.seg.small{margin:0;align-self:flex-start}
+.seg.small button{padding:.4em 1em;font-size:.85rem}
+.spbox{display:flex;flex-direction:column;gap:.5rem}
+.spbox small{color:var(--faint)}
 .tick{gap:.6rem;align-items:center}
 .btn.big{padding:.85em 1.5em;font-size:1rem}
 .dctext{white-space:pre-wrap;word-break:break-word;color:#dbdee1}
@@ -1782,7 +1786,7 @@ async function pagePlan() {
     try {
       await api('/api/schedule/add', { method: 'POST', body: {
         channel: channelId, channel_name: c ? c.name : '', text: f.text.value, title: f.title.value, color: f.color.value, author: f.author.value,
-        ping: f.ping.checked, at, repeat: repeat.value } });
+        ping: f.ping.checked, speaker: f.speaker(), at, repeat: repeat.value } });
       toast('Запланировано');
       f.text.value = '';
       await load();
@@ -2880,6 +2884,43 @@ function msgForm(needPing) {
   const ping = h('input', { type: 'checkbox' });
   const count = h('small', { class: 'muted' }, '0 / 4000');
   const prev = h('div', { class: 'dcprev' });
+  /* от чьего имени писать: сам бот, подпись и аватар участника или любое своё имя (через вебхук) */
+  let spMode = 'bot';
+  const spSeg = h('div', { class: 'seg small', role: 'tablist' });
+  const spName = h('input', { type: 'text', maxlength: '80', placeholder: 'Имя, например: Глава семьи', 'aria-label': 'Имя отправителя' });
+  const spAva = h('input', { type: 'text', maxlength: '500', placeholder: 'Ссылка на аватарку https://… (необязательно)', 'aria-label': 'Аватарка' });
+  const spQ = h('input', { type: 'search', placeholder: 'Найти участника по нику…', 'aria-label': 'Поиск участника' });
+  const spSel = h('select', { 'aria-label': 'Участник' });
+  const spBox = h('div', { class: 'spbox' });
+  let spLoaded = false;
+  async function spLoad() {
+    spLoaded = true;
+    try {
+      const d = await api('/api/members?q=' + encodeURIComponent(spQ.value.trim()) + '&limit=40');
+      spSel.replaceChildren(...(d.rows.length ? d.rows.map((m) => h('option', { value: m.id }, m.name)) : [h('option', { value: '' }, 'никого не нашлось')]));
+    } catch (e) { toast(e.message, 'err'); }
+    upd();
+  }
+  spQ.addEventListener('input', () => { clearTimeout(spQ._t); spQ._t = setTimeout(spLoad, 300); });
+  function drawSp() {
+    spSeg.replaceChildren(...[['bot', 'Бот'], ['member', 'Как участник'], ['custom', 'Своё имя']].map(([k, l]) => h('button', {
+      type: 'button', class: k === spMode ? 'on' : '', onclick: () => { spMode = k; drawSp(); upd(); } }, l)));
+    const note = h('small', null, spMode === 'bot' ? 'Сообщение придёт от самого бота.'
+      : 'Боту нужно право «Управлять вебхуками» в канале. Discord всё равно ставит на такие сообщения значок БОТ.');
+    spBox.replaceChildren(...(spMode === 'member' ? [spQ, spSel, note] : spMode === 'custom' ? [spName, spAva, note] : [note]));
+    if (spMode === 'member' && !spLoaded) spLoad();
+  }
+  function speaker() {
+    if (!needPing) return null;
+    if (spMode === 'member' && spSel.value) return { member: spSel.value };
+    if (spMode === 'custom' && spName.value.trim()) return { name: spName.value.trim(), avatar: spAva.value.trim() };
+    return null;
+  }
+  function speakerName() {
+    if (spMode === 'member' && spSel.value && spSel.selectedOptions[0]) return spSel.selectedOptions[0].textContent;
+    if (spMode === 'custom' && spName.value.trim()) return spName.value.trim();
+    return state.botName;
+  }
   const swatches = h('div', { class: 'swatches' }, COLOR_PRESETS.map((c) => h('button', {
     type: 'button', class: 'sw', title: '#' + c, 'aria-label': 'Цвет ' + c, style: 'background:#' + c,
     onclick: () => { color.value = c; upd(); } })));
@@ -2890,16 +2931,20 @@ function msgForm(needPing) {
     const body = (ti || au)
       ? embedNode({ author: au, title: ti, text: t || 'Здесь будет текст сообщения', color: hexOf(color.value) })
       : h('div', { class: 'dctext' }, richNode(t || 'Здесь будет текст сообщения'));
-    prev.replaceChildren(h('div', { class: 'dcava' }, (state.botName || 'B').slice(0, 1).toUpperCase()),
-      h('div', { class: 'dcbody' }, h('div', { class: 'dchead' }, h('b', null, state.botName), h('span', { class: 'dctag' }, 'БОТ')), body,
+    const who = speakerName() || 'B';
+    prev.replaceChildren(h('div', { class: 'dcava' }, who.slice(0, 1).toUpperCase()),
+      h('div', { class: 'dcbody' }, h('div', { class: 'dchead' }, h('b', null, who), h('span', { class: 'dctag' }, 'БОТ')), body,
         needPing && ping.checked ? h('div', { class: 'dcping' }, '@everyone') : null));
   }
-  [author, title, text, color].forEach((el) => el.addEventListener('input', upd));
+  [author, title, text, color, spName].forEach((el) => el.addEventListener('input', upd));
+  spSel.addEventListener('change', upd);
+  drawSp();
   ping.addEventListener('change', upd);
   upd();
   const box = h('div', { class: 'compose' },
-    h('div', { class: 'cfield' }, h('label', null, 'От кого'), author,
-      h('small', null, 'Подпись над сообщением, например «Штаб семьи». Пусто — сообщение придёт просто от бота.')),
+    needPing ? h('div', { class: 'cfield' }, h('label', null, 'Писать от имени'), spSeg, spBox) : null,
+    h('div', { class: 'cfield' }, h('label', null, 'Подпись над текстом (необязательно)'), author,
+      h('small', null, 'Маленькая строчка над сообщением, например «Штаб семьи».')),
     h('div', { class: 'cfield' }, h('label', null, 'Заголовок'), title),
     h('div', { class: 'cfield' },
       h('div', { class: 'row between' }, h('label', null, 'Текст'), h('span', { class: 'row' }, emojiButton(text), count)), text),
@@ -2907,7 +2952,7 @@ function msgForm(needPing) {
       h('div', { class: 'row' }, swatches, h('span', { class: 'hash' }, '#'), color)),
     needPing ? h('label', { class: 'row small tick' }, ping, 'Отметить @everyone (все получат уведомление)') : null,
     h('div', { class: 'cfield' }, h('label', null, 'Так это увидят в Discord'), prev));
-  return { box, author, title, color, text, ping };
+  return { box, author, title, color, text, ping, speaker };
 }
 
 function resultBox() {
@@ -2994,7 +3039,7 @@ async function pageSend() {
     r1.busy();
     try {
       r1.show(await api('/api/send', { method: 'POST', body: { channel: channelId, text: f1.text.value, title: f1.title.value,
-        color: f1.color.value, ping: f1.ping.checked, author: f1.author.value } }));
+        color: f1.color.value, ping: f1.ping.checked, author: f1.author.value, speaker: f1.speaker() } }));
       toast('Отправлено', 'ok');
     } catch (e) { r1.err(e); }
   } }, 'Отправить в канал');
@@ -3047,7 +3092,7 @@ async function pageSend() {
   await Promise.all([loadChannels(), dm.load(), bc.load()]);
 
   return h('div', null,
-    pageHead('Сообщения', 'Бот напишет от своего имени: в канал, одному человеку или группе людей.',
+    pageHead('Сообщения', 'Пишите от имени бота, участника или любого своего имени: в канал, одному человеку или группе людей.',
       h('button', { class: 'btn', onclick: () => go('send') }, 'Обновить')),
     tabs, body);
 }

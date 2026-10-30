@@ -476,6 +476,7 @@ _PERM_RU = {
     "attach_files": "Прикреплять файлы",
     "mention_everyone": "Упоминать @everyone",
     "read_message_history": "Читать историю сообщений",
+    "manage_webhooks": "Управлять вебхуками",
 }
 
 
@@ -627,8 +628,43 @@ def _compose_embed(title: Any, text: str, color: Any, author: Any):
     return emb
 
 
+WEBHOOK_NAME = "Панель"
+MAX_SPEAKER_NAME = 80
+
+
+def _speaker(bot, spec: Any):
+    """(имя, ссылка на аватар, ошибка) для «писать от имени». Пусто — пишет сам бот."""
+    if not isinstance(spec, dict):
+        return "", "", ""
+    member_id = str(spec.get("member") or "").strip()
+    name = str(spec.get("name") or "").strip()
+    avatar = str(spec.get("avatar") or "").strip()
+    if member_id:
+        guild = guild_of(bot)
+        m = guild.get_member(int(member_id)) if guild is not None and member_id.isdigit() else None
+        if m is None:
+            return "", "", "Участника, от имени которого писать, нет на сервере"
+        return m.display_name[:MAX_SPEAKER_NAME], str(m.display_avatar.url), ""
+    if not name:
+        return "", "", ""
+    if avatar and not avatar.startswith("https://"):
+        return "", "", "Ссылка на картинку должна начинаться с https://"
+    return name[:MAX_SPEAKER_NAME], avatar[:500], ""
+
+
+async def _webhook_for(bot, ch):
+    """Вебхук бота «Панель» в канале (в ветке — в родительском канале). Создаёт при первой отправке."""
+    target = ch.parent if isinstance(ch, disnake.Thread) else ch
+    hooks = await target.webhooks()
+    me = bot.user.id if bot.user else None
+    for hook in hooks:
+        if hook.name == WEBHOOK_NAME and getattr(hook.user, "id", None) == me and hook.token:
+            return hook
+    return await target.create_webhook(name=WEBHOOK_NAME, reason="Панель: отправка от чужого имени")
+
+
 async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "",
-                       ping: bool = False, author: str = "") -> Dict[str, Any]:
+                       ping: bool = False, author: str = "", speaker: Any = None) -> Dict[str, Any]:
     text = (text or "").strip()
     if not text:
         return {"error": "Пустое сообщение — писать нечего"}
@@ -638,11 +674,20 @@ async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "
     if err:
         return {"error": err}
     emb = _compose_embed(title, text, color, author)
+    sp_name, sp_avatar, sp_err = _speaker(bot, speaker)
+    if sp_err:
+        return {"error": sp_err}
     need = ["view_channel", "send_messages"] + (["embed_links"] if emb else []) \
         + (["mention_everyone"] if ping else [])
     miss = _missing_perms(bot, ch, need)
     if miss:
         return {"error": _no_perms_text(ch, miss)}
+    if sp_name:
+        hook_ch = ch.parent if isinstance(ch, disnake.Thread) else ch
+        miss = _missing_perms(bot, hook_ch, ["manage_webhooks"])
+        if miss:
+            return {"error": "Чтобы писать от другого имени, боту нужно право «Управлять вебхуками» "
+                             f"в канале «{getattr(hook_ch, 'name', '?')}». Выдайте его или отправьте от имени бота."}
     # без заголовка текст идёт обычным сообщением: раньше он терялся, а Discord отвечал ошибкой
     content = (text if emb is None else None)
     if ping:
@@ -650,10 +695,18 @@ async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "
     mentions = disnake.AllowedMentions(everyone=bool(ping), users=False, roles=False,
                                        replied_user=False)
     try:
-        msg = await ch.send(content=content, embed=emb, allowed_mentions=mentions)
+        if sp_name:
+            hook = await _webhook_for(bot, ch)
+            kw = {"thread": ch} if isinstance(ch, disnake.Thread) else {}
+            msg = await hook.send(content=content, embed=emb, username=sp_name,
+                                  avatar_url=sp_avatar or disnake.utils.MISSING,
+                                  allowed_mentions=mentions, wait=True, **kw)
+        else:
+            msg = await ch.send(content=content, embed=emb, allowed_mentions=mentions)
     except Exception as e:
         return {"error": _discord_error(e)}
-    out = {"link": msg.jump_url, "where": f"#{ch.name}", "message_id": str(msg.id)}
+    out = {"link": msg.jump_url, "where": f"#{ch.name}" + (f" · от имени «{sp_name}»" if sp_name else ""),
+           "message_id": str(msg.id)}
     hint = _hygiene_hint(bot, ch)
     if hint:
         out["hint"] = hint

@@ -720,7 +720,8 @@ class WebPanel(commands.Cog):
         res = await tools.post_channel(self.bot, body.get("channel"),
                                       str(body.get("text") or ""), str(body.get("title") or ""),
                                       str(body.get("color") or ""), bool(body.get("ping")),
-                                      author=str(body.get("author") or ""))
+                                      author=str(body.get("author") or ""),
+                                      speaker=body.get("speaker"))
         print(f"✉️ Панель: в {res.get('where', '?')}: {str(res.get('error') or res.get('link'))[:120]}",
               flush=True)
         return _json(res, 400 if self._fail(res) else 200)
@@ -798,7 +799,7 @@ class WebPanel(commands.Cog):
                             res = await tools.post_channel(
                                 self.bot, it.get("channel"), it.get("text", ""), it.get("title", ""),
                                 it.get("color", ""), bool(it.get("ping")),
-                                author=it.get("author", ""))
+                                author=it.get("author", ""), speaker=it.get("speaker"))
                             extras.sched_mark(it["id"], res)
                             print(f"⏰ Планировщик: в {res.get('where', it.get('channel'))}: "
                                   f"{str(res.get('error') or 'отправлено')[:120]}", flush=True)
