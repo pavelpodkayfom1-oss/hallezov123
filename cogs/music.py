@@ -23,7 +23,7 @@ from disnake.ext import commands
 
 from utils import brand, cdn_assets
 from utils.checks import get_text, is_admin, load_config
-from utils.embeds import card, list_embed, note_embed, panel_embed
+from utils.embeds import bar, card, list_embed, note_embed, panel_embed
 
 # Кулдаун на заказ музыки (секунд на одного пользователя)
 PLAY_COOLDOWN = 20
@@ -40,6 +40,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # поэтому треки переживают деплой и рестарты.
 MEDIA_DIR = os.path.join(BASE_DIR, "media")
 SETTINGS_FILE = os.path.join(BASE_DIR, "music_settings.json")
+
+
+def _site_url() -> str:
+    """Адрес сайта музыки. Кнопка «Сайт» открывает его сразу, без сообщения-ссылки,
+    поэтому адрес читается при каждом построении панели: `.env` правится на хостинге."""
+    return (os.getenv("MUSIC_URL") or load_config().get("music_site_url") or "").strip()
 
 
 def _trim():
@@ -574,44 +580,56 @@ def _T(bot, key: str, default: str, **subs) -> str:
 T_PANEL_TITLE = ":hz_pcicon:  МУЗЫКА СЕМЬИ"
 T_PANEL_INTRO = "*:red_crown:  Один голос на всю семью  :red_crown:*"
 T_NOW_HEAD = ":hz_pcicon:  СЕЙЧАС"
-T_NOW_IDLE = "Бот не в голосовом — жми **«В войс»**"
-T_NOW_EMPTY = "очередь пуста"
-T_NOW_LINE = ":hz_trainicon:  очередь {q}  ·  :pinkghost:  диджей {dj}  ·  :hz_bluemodroleicon:  звук {vol}%"
-T_STATE_PLAY = "играет"
-T_STATE_PAUSE = "пауза"
-T_STATE_QUIET = "тишина"
+T_NOW_IDLE = ":hz_warn:  Бот не в голосовом — жми **«В войс»**"
+T_NOW_EMPTY = ":hz_trainicon:  очередь пуста"
+# Полоска громкости — она же `bar()`: проценты читаются глазами быстрее, чем цифра.
+T_NOW_LINE = (":hz_trainicon:  очередь {q}  ·  :pinkghost:  диджей {dj}\n"
+              ":hz_bluemodroleicon:  звук {bar}  {vol}%")
+T_STATE_PLAY = "● играет"
+T_STATE_PAUSE = "◐ пауза"
+T_STATE_QUIET = "○ тишина"
 T_ORDER_HEAD = ":hz_megaphone:  КАК ЗАКАЗАТЬ"
 T_ORDER_TEXT = (
-    "Кнопка **«Заказать»** — имя из библиотеки или ссылка.\n"
-    "Написал имя в этом канале, стоя в том же голосовом, — считается так же.\n"
-    ":hz_shareicon:  «Сайт музыки» в списке «Ещё» — то же самое из браузера, без пароля."
+    "> :hz_megaphone:  **«Заказать»** — имя из библиотеки или ссылка\n"
+    "> :hz_house:  Набрал имя здесь, стоя в голосовом, — тоже заказ"
 )
+T_ORDER_SITE_BTN = "> :hz_shareicon:  **«Сайт»** вверху — то же из браузера, без пароля"
+T_ORDER_SITE_MENU = "> :hz_shareicon:  **«Сайт»** в списке «Ещё» — заказ из браузера"
 T_FILES_HEAD = ":hz_gifticon:  ОТКУДА ТРЕКИ"
 T_FILES_TEXT = (
-    "«Закинуть трек» берёт mp3 прямо из сообщения — до {n} штук по {mb} МБ.\n"
-    "Файл, положенный во вкладку Files рядом с `main.py`, тоже играется."
+    "> :hz_gifticon:  «Закинуть трек» берёт mp3 из сообщения — до {n} штук по {mb} МБ\n"
+    "> :hz_book:  Файл во вкладке Files рядом с `main.py` тоже играется"
 )
 T_CTRL_HEAD = ":hz_trainicon:  ПУЛЬТ"
 T_CTRL_TEXT = (
-    "Второй ряд — пауза, скип, громкость и очередь.\n"
-    "Стоп, плейлисты, авто-диджей и настройки — в списке «Ещё»."
+    "> :hz_pcicon:  Пауза, скип, очередь, громкость — вторым рядом\n"
+    "> :hz_moderator:  Стоп, плейлисты, авто-диджей, настройки — в **«Ещё»**"
 )
+T_BIND_HEAD = ":hz_house:  КАНАЛ МУЗЫКИ"
+T_BIND_HERE = ("> {ch}\n"
+               "> :hz_megaphone:  Тут панель, заказы и анонсы\n"
+               "> :hz_pencil:  Сменить — список ниже")
+T_BIND_OTHER = ("> :hz_megaphone:  Анонсы и заказы уходят в {ch}\n"
+                "> :hz_pencil:  Сменить — список ниже")
+T_BIND_NONE = ("> :hz_warn:  Не выбран — бот пишет там, где нажали\n"
+               "> :hz_pencil:  Выбери списком ниже")
 T_PANEL_DONE = (
     "{ch}\n\n"
     ":hz_house:  Панель, анонсы и заказы текстом — теперь только тут.\n"
     ":hz_trainicon:  Старая панель удалена: два экрана с кнопками в одном чате — не порядок."
 )
-T_PANEL_MOVED = (
-    ":hz_house:  Канал для панели и анонсов — {ch}.\n"
-    ":hz_trainicon:  Выбрать другой — список «Ещё» → «Настройки»."
-)
+T_PANEL_MOVED = (":hz_house:  Канал для панели, заказов и анонсов — {ch}\n"
+                 ":hz_pencil:  Старый канал остаётся обычным чатом: музыка больше не мешает.")
 T_CFG_CHANNEL_HEAD = ":hz_house:  КАНАЛ ПАНЕЛИ"
 T_CFG_CHANNEL_SET = "{ch}\n:hz_trainicon:  Панель, анонсы и заказы текстом — только тут"
 T_CFG_CHANNEL_NONE = ":hz_warn:  Не выбран — где вызвали `/music_panel`, там панель и лежит"
 T_ANN_HEAD = ":hz_pcicon:  СЕЙЧАС ИГРАЕТ"
-T_ANN_LINE = ":hz_trainicon:  {dur}  ·  :hz_bluemodroleicon:  звук {vol}%"
-T_ANN_WHO = ":hz_megaphone:  Заказал(а) {who}"
+T_ANN_LINE = ("> :hz_trainicon:  длительность {dur}\n"
+              "> :hz_bluemodroleicon:  звук {bar}  {vol}%")
+T_ANN_WHO = "> :hz_megaphone:  Заказал(а) {who}"
 T_DJ_OFF = ":pinkghost:  Библиотека кончилась — авто-диджей выключен."
+T_SITE_NOBTN = (":hz_warn:  Своего адреса у сайта пока нет. Добавь `MUSIC_URL` в `.env` "
+                "на хостинге — и вверху панели появится кнопка **«Сайт»**.")
 
 
 def _ok(bot, head: str, text: str, guild=None) -> disnake.Embed:
@@ -677,6 +695,8 @@ MORE_ITEMS = [
     ("dj", "🔁", "Авто-диджей", "сам берёт случайный трек, когда очередь пуста"),
     ("vote", "🗳", "Скип голосом", "пропускаем большинством в канале"),
     ("cfg", "⚙️", "Настройки", "громкость, кулдаун, размер очереди, авто-выход"),
+    # «Сайт» живёт здесь, только пока у сайта нет адреса: с адресом он уезжает кнопкой
+    # на верхний ряд панели и открывается одним нажатием.
     ("site", "🌐", "Сайт музыки", "заказ из браузера: вставил ссылку — играет"),
     ("refresh", "🔄", "Обновить панель", "живое «сейчас играет» и свежая очередь"),
 ]
@@ -686,13 +706,14 @@ class MoreMenu(disnake.ui.StringSelect):
     """Всё, что жмут реже, чем паузу: одна строка вместо трёх рядов кнопок."""
 
     def __init__(self):
+        items = [it for it in MORE_ITEMS if it[0] != "site" or not _site_url()]
         super().__init__(
             custom_id="music:more",
             placeholder="Ещё · стоп, библиотека, плейлисты, настройки",
             min_values=1, max_values=1,
             options=[disnake.SelectOption(label=lab, emoji=em, description=desc,
                                           value="music:" + val)
-                     for val, em, lab, desc in MORE_ITEMS],
+                     for val, em, lab, desc in items],
         )
 
     async def callback(self, inter: disnake.MessageInteraction):
@@ -723,16 +744,24 @@ class MoreMenu(disnake.ui.StringSelect):
 
 
 class MusicPanelView(disnake.ui.View):
-    """Панель музыки в канале: три ряда вместо шести рядов кнопок.
+    """Панель музыки в канале: четыре ряда вместо шести рядов кнопок.
 
-    Ряд 0 — как начать, ряд 1 — пульт того, что играет, ряд 2 — редкое в одном
-    выпадающем списке. custom_id держат кнопки живыми после рестарта. Эмодзи на
-    кнопках unicode: серверные бренд-эмодзи в кнопках не рисуются.
+    Ряд 0 — как начать (заказ, голос, выход, сайт), ряд 1 — пульт того, что играет,
+    ряд 2 — редкое в одном выпадающем списке, ряд 3 — канал, куда бот пишет музыку.
+    custom_id держат кнопки живыми после рестарта. Эмодзи на кнопках unicode:
+    серверные бренд-эмодзи в кнопках не рисуются.
     """
 
     def __init__(self, bot=None):
         super().__init__(timeout=None)
+        url = _site_url()
+        if url:
+            # style=link: Discord открывает ссылку сам, нажатие = сайт в браузере.
+            # Сообщение со ссылкой, которое надо ещё скопировать, — лишний шаг.
+            self.add_item(disnake.ui.Button(label="Сайт  ↗", emoji="🌐",
+                                            style=disnake.ButtonStyle.link, url=url, row=0))
         self.add_item(MoreMenu())
+        self.add_item(PanelChannelSelect(on_panel=True))
 
     # ---------- ряд 1: начать ----------
     @disnake.ui.button(label="Заказать", emoji="🎵", style=disnake.ButtonStyle.primary,
@@ -838,23 +867,28 @@ class MusicPanelView(disnake.ui.View):
         await inter.bot.get_cog("Music").change_volume(inter, +0.1)
 
 class PanelChannelSelect(disnake.ui.ChannelSelect):
-    """Куда бот пишет про музыку: выбор живёт в настройках сервера, а не в памяти."""
+    """Куда бот пишет музыку: выбор живёт на панели и в настройках сервера, а не в памяти.
 
-    def __init__(self, guild, current: int):
-        ch = guild.get_channel(current) if current else None
+    На панели ряд свой, custom_id тоже:persistent-вью одной кнопки на два экрана не
+    держит — disnake диспатчит по custom_id и последний выбор перетёр бы первый.
+    """
+
+    def __init__(self, guild=None, current: int = 0, *, on_panel: bool = False):
+        ch = guild.get_channel(current) if (guild is not None and current) else None
         super().__init__(
-            custom_id="music:cfg:channel",
-            placeholder="Канал панели и анонсов",
+            custom_id="music:panel:channel" if on_panel else "music:cfg:channel",
+            placeholder="Канал музыки · сюда писать заказы и анонсы",
             channel_types=[disnake.ChannelType.text],
             min_values=1, max_values=1,
             default_values=[ch] if ch else None,
-            row=2,
+            row=3 if on_panel else 2,
         )
 
     async def callback(self, inter: disnake.MessageInteraction):
-        view = self.view
-        if isinstance(view, MusicSettingsView):
-            await view.channel_pick(self, inter)
+        cog = inter.bot.get_cog("Music")
+        if cog is None or inter.guild is None or not self.values:
+            return await inter.response.defer(ephemeral=True)
+        await cog.bind_panel_channel(inter, self.values[0], self.view)
 
 
 class MusicSettingsView(disnake.ui.View):
@@ -899,23 +933,6 @@ class MusicSettingsView(disnake.ui.View):
             f"{pc}  НАСТРОЙКИ МУЗЫКИ", sections, color_key="music_color", guild=guild,
             intro=(f"*{crown}  Один голос на всю семью  {crown}*\n"
                    f"{bot_i}  Значения помнятся после рестарта бота."))
-
-    async def channel_pick(self, sel, inter) -> None:
-        """Выбор канала панели: сразу в конфиг, чтобы пережить рестарт бота."""
-        ch = sel.values[0] if sel.values else None
-        if ch is None:
-            return
-        err = _cfg_save(inter.guild.id, {"panel": int(ch.id)})
-        if err:
-            return await inter.response.send_message(
-                embed=_err(inter.bot, "НЕ СОХРАНИЛОСЬ", err), ephemeral=True)
-        cog = inter.bot.get_cog("Music")
-        if cog is not None:
-            cog.get_player(inter.guild).text_channel = ch
-        await inter.response.send_message(
-            embed=_ok(inter.bot, "КАНАЛ ВЫБРАН",
-                      _T(inter.bot, "music_panel_moved", T_PANEL_MOVED, ch=ch.mention)),
-            ephemeral=True)
 
     async def _apply(self, inter, patch: dict) -> None:
         err = _cfg_save(self.guild_id, patch)
@@ -1352,6 +1369,35 @@ class Music(commands.Cog):
         p = self.get_player(guild)
         p.text_channel = self.panel_channel(guild) or channel
 
+    async def bind_panel_channel(self, inter, ch, view=None) -> None:
+        """Смена «канала музыки» прямо с экрана: в конфиг и в перерисовку тем же
+        нажатием. Человек видит новый канал сразу, а не после рестарта бота."""
+        if not is_admin(inter):
+            return await inter.response.send_message(
+                embed=_err(inter.bot, "НЕ ПО ТЕБЕ",
+                           f"{_e(inter.bot, 'hz_warn', '⚠️')}  Канал музыки переставляет "
+                           "админ — так панель не утаскивают случайные люди."),
+                ephemeral=True)
+        cid = int(getattr(ch, "id", 0) or 0)
+        if not cid:
+            return await inter.response.defer(ephemeral=True)
+        err = _cfg_save(inter.guild.id, {"panel": cid})
+        if err:
+            return await inter.response.send_message(
+                embed=_err(inter.bot, "НЕ СОХРАНИЛОСЬ", err), ephemeral=True)
+        self.get_player(inter.guild).text_channel = inter.guild.get_channel(cid) or ch
+        if isinstance(view, MusicSettingsView):
+            return await inter.response.edit_message(
+                embed=view.embed(inter.bot, inter.guild), view=view)
+        emb = self._panel_embed(inter.guild, inter.channel)
+        await inter.response.edit_message(embed=emb, view=MusicPanelView(inter.bot),
+                                          file=_panel_banner(emb))
+        await inter.followup.send(
+            embed=_ok(inter.bot, "КАНАЛ ВЫБРАН",
+                      _T(inter.bot, "music_panel_moved", T_PANEL_MOVED,
+                         ch=(inter.guild.get_channel(cid) or ch).mention)),
+            ephemeral=True)
+
     async def cleanup(self, guild: disnake.Guild):
         p = self.players.pop(guild.id, None)
         if p:
@@ -1775,7 +1821,8 @@ class Music(commands.Cog):
             link = track["webpage_url"]
             shown = f"[{track['title']}]({link})" if link.startswith("http") else f"**{track['title']}**"
             body = _T(self.bot, "music_ann_line", T_ANN_LINE,
-                      dur=_fmt_duration(track["duration"]), vol=int(round(p.volume * 100)))
+                      dur=_fmt_duration(track["duration"]), vol=int(round(p.volume * 100)),
+                      bar=bar(int(round(p.volume * 100)), 100, width=6))
             if track.get("requester"):
                 body += "\n" + _T(self.bot, "music_ann_who", T_ANN_WHO,
                                   who=track["requester"])
@@ -1809,18 +1856,15 @@ class Music(commands.Cog):
             ephemeral=True)
 
     async def say_site(self, inter):
-        pc = _e(self.bot, "hz_pcicon", "🎧")
-        url = (os.getenv("MUSIC_URL") or load_config().get("music_site_url") or "").strip()
+        url = _site_url()
         if url:
             emb = _ok(self.bot, "САЙТ МУЗЫКИ",
-                      f"### {pc}  {url}\n\n"
+                      f"### {_e(self.bot, 'hz_pcicon', '🎧')}  {url}\n\n"
                       f"{_e(self.bot, 'hz_megaphone', '📢')}  Открыт без пароля: вставил "
                       "ссылку или имя — трек в общей очереди.")
         else:
             emb = _err(self.bot, "ССЫЛКА НЕ НАСТРОЕНА",
-                       f"{_e(self.bot, 'hz_warn', '⚠️')}  Сайт музыки работает на порту "
-                       "8081, но своего адреса у него ещё нет. Добавь `MUSIC_URL` в `.env` "
-                       "на хостинге — и здесь появится ссылка.")
+                       _T(self.bot, "music_site_nobtn", T_SITE_NOBTN))
         await inter.response.send_message(embed=emb, ephemeral=True)
 
     # ---------- команды ----------
@@ -1841,7 +1885,7 @@ class Music(commands.Cog):
         if err:
             return await inter.response.send_message(
                 embed=_err(self.bot, "НЕ СОХРАНИЛОСЬ", err), ephemeral=True)
-        emb = self._panel_embed(inter.guild)
+        emb = self._panel_embed(inter.guild, ch)
         msg = await ch.send(embed=emb, view=MusicPanelView(self.bot),
                             file=_panel_banner(emb))
         _cfg_save(inter.guild.id, {"panel_msg": msg.id})
@@ -1857,7 +1901,7 @@ class Music(commands.Cog):
         Экраны, выложенные до настройки канала, в конфиге не значатся — без этого шага
         такой старый клон висел бы в чате вторым и путал людей.
         """
-        emb = self._panel_embed(inter.guild)
+        emb = self._panel_embed(inter.guild, inter.channel)
         file = _panel_banner(emb)
         await inter.response.edit_message(embed=emb, view=MusicPanelView(inter.bot),
                                           file=file)
@@ -1898,19 +1942,38 @@ class Music(commands.Cog):
                  _T(self.bot, "music_state_quiet", T_STATE_QUIET))
         title = str(cur.get("title") or _T(self.bot, "music_now_empty", T_NOW_EMPTY))[:70]
         line = _T(self.bot, "music_now_line", T_NOW_LINE,
-                  q=len(p.queue) if p else 0, dj="вкл" if (p and p.dj) else "выкл", vol=vol)
-        return f"**{state}**  {title}\n{line}"
+                  q=len(p.queue) if p else 0, dj="вкл" if (p and p.dj) else "выкл",
+                  vol=vol, bar=bar(vol, 100, width=6))
+        return f"{state}  ·  **{title}**\n{line}"
 
-    def _panel_embed(self, guild) -> disnake.Embed:
+    def _bind_line(self, guild, where=None) -> str:
+        """Строка «канал музыки» на панели: куда уходят заказы и анонсы.
+
+        Честный ответ нужен, когда панель осталась в одном чате, а канал выбрали другой:
+        иначе человек ищет анонс не там, где он лежит.
+        """
+        cid = _cfg(guild.id)["panel"] if guild else 0
+        ch = guild.get_channel(cid) if (guild and cid) else None
+        if ch is None:
+            return _T(self.bot, "music_bind_none", T_BIND_NONE)
+        if where is not None and getattr(where, "id", cid) != cid:
+            return _T(self.bot, "music_bind_other", T_BIND_OTHER, ch=ch.mention)
+        return _T(self.bot, "music_bind_here", T_BIND_HERE, ch=ch.mention)
+
+    def _panel_embed(self, guild, where=None) -> disnake.Embed:
+        order = _T(self.bot, "music_order_text", T_ORDER_TEXT)
+        site_key, site_default = (("music_order_site_btn", T_ORDER_SITE_BTN) if _site_url()
+                                  else ("music_order_site_menu", T_ORDER_SITE_MENU))
         sections = [
             (_T(self.bot, "music_now_head", T_NOW_HEAD), self._now_line(guild)),
             (_T(self.bot, "music_order_head", T_ORDER_HEAD),
-             _T(self.bot, "music_order_text", T_ORDER_TEXT)),
+             f"{order}\n{_T(self.bot, site_key, site_default)}"),
             (_T(self.bot, "music_files_head", T_FILES_HEAD),
              _T(self.bot, "music_files_text", T_FILES_TEXT,
                 n=MAX_FILES_IN_MSG, mb=MAX_TRACK_MB)),
             (_T(self.bot, "music_ctrl_head", T_CTRL_HEAD),
              _T(self.bot, "music_ctrl_text", T_CTRL_TEXT)),
+            (_T(self.bot, "music_bind_head", T_BIND_HEAD), self._bind_line(guild, where)),
         ]
         return panel_embed(_T(self.bot, "music_panel_title", T_PANEL_TITLE), sections,
                            color_key="music_color", guild=guild,
