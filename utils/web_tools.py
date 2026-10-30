@@ -592,7 +592,17 @@ def member_rows(bot, q: str = "", limit: int = 50) -> Dict[str, Any]:
     needle = (q or "").strip().lower()
     cap = max(1, min(int(limit or 50), 200))
     out: List[Dict[str, Any]] = []
-    for m in guild.members:
+    members = list(guild.members)
+    if not needle:
+        # без запроса сначала руководство (кто может управлять сообщениями или сервером)
+        def _lead(m) -> bool:
+            try:
+                p = m.guild_permissions
+                return bool(p.administrator or p.manage_guild or p.manage_messages)
+            except Exception:
+                return False
+        members.sort(key=lambda m: (not _lead(m), -(m.top_role.position if getattr(m, "top_role", None) else 0)))
+    for m in members:
         if m.bot:
             continue
         shown = m.nick or str(m)
@@ -611,7 +621,11 @@ def member_rows(bot, q: str = "", limit: int = 50) -> Dict[str, Any]:
             voice = m.voice.channel.name if m.voice and m.voice.channel else ""
         except Exception:
             voice = ""
-        out.append({"id": str(m.id), "name": shown, "top": top, "voice": voice,
+        try:
+            avatar = str(m.display_avatar.with_size(64).url)
+        except Exception:
+            avatar = ""
+        out.append({"id": str(m.id), "name": shown, "top": top, "voice": voice, "avatar": avatar,
                     "joined": m.joined_at.strftime("%d.%m.%Y") if m.joined_at else ""})
     return {"rows": out, "total": len(out)}
 
