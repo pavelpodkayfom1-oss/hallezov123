@@ -278,7 +278,7 @@ PAGE_HTML = r"""<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
 <title>HALLEZ | DJ Studio</title>
-<style nonce="NONCE">
+<style nonce="__NONCE__">
 :root{--bg:#000;--surface:#0a0a0a;--surface2:#141414;--surface3:#1f1f1f;--text:#fff;--text2:#999;
  --text3:#666;--border:#222;--accent:#00ff88;--accent2:#00cc6a;--vinyl:#1a1a1a;--glow:rgba(0,255,136,.3)}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -512,7 +512,7 @@ body::before{content:"";position:fixed;inset:0;background:
 <footer class="footer">Hallez DJ Studio &bull; Professional Music Control</footer>
 </div>
 
-<script nonce="NONCE">
+<script nonce="__NONCE__">
 const $ = id => document.getElementById(id);
 let refreshTimer = null;
 
