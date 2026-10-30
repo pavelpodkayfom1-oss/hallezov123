@@ -9,10 +9,13 @@
 из imageio-ffmpeg (см. _ffmpeg_exe).
 """
 import asyncio
+import hashlib
+import io
 import json
 import os
 import random
 import re
+import subprocess
 import sys
 import tempfile
 import time
@@ -216,14 +219,91 @@ FFMPEG_BEFORE = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
 FFMPEG_OPTS = "-vn -sn -dn"
 
 
-def _before_options(source: str):
-    """Сетевые опции — только ссылкам.
+def _clamp(value, lo: int, hi: int) -> int:
+    """Число в границах. Непонятное значение = ноль, а не минимум: ручка, уехавшая
+    в -12 дБ из-за мусора в запросе, звучит как сломанный плеер."""
+    try:
+        n = int(round(float(value)))
+    except (TypeError, ValueError):
+        n = 0
+    return max(lo, min(hi, n))
+
+
+# Ручки пульта = настоящие ffmpeg-фильтры. Звук в голосовом один на весь канал,
+# поэтому крутит один человек, а слышат все — страница показывает, кто именно.
+FX_LIMITS = {"bass": (-12, 12), "mid": (-12, 12), "high": (-12, 12),
+            "filter": (0, 3), "echo": (0, 1)}
+FILTER_CUT = (0, 5200, 2600, 1100)  # выкл · мягкий · плотный · обрезан
+FILTER_NAMES = ("выкл", "мягкий", "плотный", "обрезан")
+REPEATS = ("off", "one", "all")
+REPEAT_NAMES = {"off": "повтор выключен", "one": "трек по кругу", "all": "вся очередь по кругу"}
+
+
+def _fx_clean(fx) -> dict:
+    """Положение ручек после проверки: чужой json не должен уронить ffmpeg."""
+    fx = fx if isinstance(fx, dict) else {}
+    out = {}
+    for key, (lo, hi) in FX_LIMITS.items():
+        value = fx.get(key)
+        out[key] = _clamp(0 if value is None else value, lo, hi)
+    try:
+        speed = float(fx.get("speed", 1.0))
+    except (TypeError, ValueError):
+        speed = 1.0
+    out["speed"] = round(max(0.7, min(1.5, speed)), 2)
+    return out
+
+
+def _fx_chain(fx: dict) -> str:
+    """Цепочка -af по ручкам. Пустая строка — звук ровно как в файле."""
+    parts = []
+    for key, tmpl in (("bass", "bass=g=%d:f=110"),
+                      ("mid", "equalizer=f=1000:t=q:w=1.2:g=%d"),
+                      ("high", "treble=g=%d:f=4000")):
+        if fx.get(key):
+            parts.append(tmpl % fx[key])
+    cut = FILTER_CUT[_clamp(fx.get("filter"), 0, 3)]
+    if cut:
+        parts.append(f"lowpass=f={cut}")
+    if fx.get("echo"):
+        parts.append("aecho=0.8:0.85:400:0.35")
+    speed = round(float(fx.get("speed") or 1.0), 2)
+    if abs(speed - 1.0) > 0.009:
+        parts.append(f"atempo={speed}")
+    return ",".join(parts)
+
+
+def _fx_line(fx: dict) -> str:
+    """Что показать в канале и на странице: только те ручки, которые сдвинуты."""
+    bits = [f"{lab} {fx[key]:+d} дБ" for key, lab in
+            (("bass", "бас"), ("mid", "середина"), ("high", "верха")) if fx.get(key)]
+    if fx.get("filter"):
+        bits.append(f"фильтр {FILTER_NAMES[fx['filter']]}")
+    if fx.get("echo"):
+        bits.append("эхо")
+    if abs(float(fx.get("speed") or 1.0) - 1.0) > 0.009:
+        bits.append(f"темп {fx['speed']}x")
+    return ", ".join(bits)
+
+
+def _before_options(source: str, at: int = 0):
+    """Опции ДО входного файла: перемотка и сетевые страховки.
+
+    Секунду отдаём именно сюда, а не в output: на входном -ss ffmpeg перескакивает
+    сразу, а на выходном — декодирует весь трек с нуля до нужного места, и на слабом
+    хосте это выглядит как зависший плеер.
 
     Локальный файл с «-reconnect» ffmpeg не открывает вообще: он отвечает
     «Option reconnect not found → Error opening input file», и трек из библиотеки
     молча не запускался, хотя голосовое подключалось.
     """
-    return FFMPEG_BEFORE if str(source).startswith("http") else None
+    parts = []
+    if at:
+        parts.append(f"-ss {int(at)}")
+    if str(source).startswith("http"):
+        parts.append(FFMPEG_BEFORE)
+    return " ".join(parts) or None
+
 
 _EXE = None
 
@@ -388,7 +468,8 @@ def _fmt_duration(sec) -> str:
 # Один файл на все серверы: {id: {громкость, кулдаун, очередь, диджей, авто-выход,
 # канал панели и id самой панели — по нему старая карточка убирается перед новой}}.
 DEFAULT_SETTINGS = {"volume": 50, "cooldown": PLAY_COOLDOWN, "queue": MAX_QUEUE,
-                    "dj": False, "leave": True, "panel": 0, "panel_msg": 0}
+                    "dj": False, "leave": True, "panel": 0, "panel_msg": 0,
+                    "fx": {}, "repeat": "off"}
 COOLDOWNS = (0, 5, 10, 20, 40, 60)
 QUEUES = (10, 25, 40, 60)
 
@@ -443,6 +524,134 @@ def _cfg_save(guild_id, patch: dict) -> str:
         return f"Настройки не записались: `{e}`"
 
 
+# ══════════════════ свет от обложки ══════════════════
+# Палитру снимает сервер. Страница сама пиксели чужой картинки не прочитает: canvas с
+# обложкой YouTube «отравлен» до первого рисования, и getImageData отвечает SecurityError.
+_PALETTE: dict = {}
+_COVER: dict = {}
+MAX_PALETTE = 60
+MAX_COVER = 24
+
+
+def _hex(rgb) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*[max(0, min(255, int(c))) for c in rgb])
+
+
+def _tame(color: str) -> str:
+    """Цвет подсветки: видимый, но не режущий глаз.
+
+    Чистая доминанта с тёмной обложки дала бы чёрное свечение — его просто не видно.
+    """
+    import colorsys
+
+    r = int(color[1:3], 16) / 255.0
+    g = int(color[3:5], 16) / 255.0
+    b = int(color[5:7], 16) / 255.0
+    h, l, s = colorsys.rgb_to_hls(r, g, b)
+    l = min(.60, max(.36, l))
+    s = min(.80, max(.30, s))
+    r, g, b = colorsys.hls_to_rgb(h, l, s)
+    return _hex((r * 255, g * 255, b * 255))
+
+
+def _palette_of_bytes(raw: bytes) -> list:
+    """5 главных цветов обложки, от самого частого к акценту."""
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(raw)).convert("RGB")
+    img.thumbnail((64, 64))
+    q = img.quantize(colors=5)
+    pal = q.getpalette() or []
+    counts = sorted(q.getcolors(1 << 20) or [], reverse=True)
+    out = []
+    for _cnt, idx in counts[:5]:
+        part = pal[idx * 3:idx * 3 + 3]
+        if len(part) == 3:
+            out.append(_tame(_hex(part)))
+    return out
+
+
+def _cover_of_file(path: str):
+    """Встроенная обложка mp3: без неё библиотека жила бы в сером.
+
+    Картинка внутри mp3 лежит видеопотком, поэтому отсекаем звук (-an). С -vn ffmpeg
+    не находит ни одного потока в выходном файле и молча отдаёт пустоту.
+    """
+    exe = _ffmpeg_exe()
+    if not exe or not os.path.exists(path):
+        return None
+    out = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+    out.close()
+    try:
+        subprocess.run([exe, "-hide_banner", "-loglevel", "error", "-y", "-i", path,
+                        "-an", "-vcodec", "mjpeg", "-frames:v", "1", "-f", "image2", out.name],
+                       timeout=10, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        with open(out.name, "rb") as fh:
+            raw = fh.read()
+        return raw if len(raw) > 1024 else None
+    except Exception:
+        return None
+    finally:
+        try:
+            os.unlink(out.name)
+        except OSError:
+            pass
+
+
+def palette_peek(key: str):
+    return _PALETTE.get(key) if key else None
+
+
+def palette_put(key: str, colors: list) -> None:
+    if not key or not colors:
+        return
+    if len(_PALETTE) >= MAX_PALETTE:
+        _PALETTE.clear()
+    _PALETTE[key] = colors[:5]
+
+
+def _cover_raw(kind: str, src: str):
+    """Байты обложки: ссылку качаем, из mp3 достаёт ffmpeg. Блокирующий — зовут из потока."""
+    try:
+        if kind == "url":
+            import urllib.request
+
+            req = urllib.request.Request(src, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=8) as resp:  # noqa: S310 — адрес даёт Discord
+                return resp.read(2000000) or None
+        if kind == "file":
+            return _cover_of_file(src)
+    except Exception:
+        return None
+    return None
+
+
+async def cover_bytes(key: str, kind: str, src: str):
+    """Обложка один раз в памяти — с неё и картинка на странице, и цвета для подсветки.
+
+    Пустой ответ тоже запоминаем: иначе каждый опрос страницы лезет на диск за тем,
+    чего там нет.
+    """
+    if not key:
+        return None
+    if key in _COVER:
+        return _COVER[key] or None
+    raw = await asyncio.to_thread(_cover_raw, kind, src) or b""
+    if len(_COVER) >= MAX_COVER:
+        _COVER.clear()
+    _COVER[key] = raw
+    return raw or None
+
+
+async def palette_for(key: str, kind: str, src: str) -> list:
+    if key in _PALETTE:
+        return _PALETTE[key]
+    raw = await cover_bytes(key, kind, src)
+    colors = await asyncio.to_thread(_palette_of_bytes, raw) if raw else []
+    palette_put(key, colors or [])
+    return colors
+
+
 def _web_track(track: dict, guild, elapsed=None):
     """Трек для страницы: только то, что можно показать человеку без Discord.
 
@@ -480,6 +689,19 @@ class GuildPlayer:
         self.dj_fails = 0
         # 🗳 голоса за скип текущего трека
         self.votes: set = set()
+        # 🎛 ручки пульта: живут на сервере, потому что звук в канале один на всех
+        self.fx = _fx_clean(cfg.get("fx"))
+        self.fx_by = ""
+        # ↩ «назад» и история для страницы
+        self.history: deque = deque(maxlen=12)
+        self.repeat = cfg.get("repeat") if cfg.get("repeat") in REPEATS else "off"
+        # ⏩ позиция: -ss задаёт отсчёт, mark — секунды, с которых он идёт
+        self.base = 0
+        self.mark = 0.0
+        # источник, который надо поставить сразу после остановки текущего
+        self.pending = None
+        # True, когда остановка наша (скип/перемотка), а не трек сам кончился
+        self.stopping = False
 
 
 class _PlaylistSelect(disnake.ui.Select):
@@ -830,10 +1052,10 @@ class MusicPanelView(disnake.ui.View):
         p = cog.get_player(inter.guild)
         title = (p.current or {}).get("title", "трек")
         if vc.is_paused():
-            vc.resume()
+            cog._resume(p, vc)
             emb = _ok(inter.bot, "ИГРАЕТ ДАЛЬШЕ", f"▶️  **{title}**")
         elif vc.is_playing():
-            vc.pause()
+            cog._pause(p, vc)
             emb = _ok(inter.bot, "ПАУЗА",
                       f"⏸  **{title}**\n\n"
                       f"{_e(inter.bot, 'hz_trainicon', '📜')}  Это же нажатие — продолжить.")
@@ -1430,12 +1652,10 @@ class Music(commands.Cog):
         p = self.players.get(guild.id)
         cfg = _cfg(guild.id)
         volume = p.volume if p else cfg["volume"] / 100.0
-        elapsed = None
-        try:
-            if p and p.source and vc and vc.is_playing():
-                elapsed = max(0, int(p.source.position) // 1000)
-        except Exception:
-            elapsed = None
+        elapsed = self._elapsed(p, vc) if p else None
+        cover_key, _kind, _src = self.web_cover_source(guild)
+        cover = ("/music/api/cover?k=" + hashlib.sha1(cover_key.encode()).hexdigest()[:10]
+                 if cover_key else None)
         return {
             "connected": bool(vc and vc.is_connected()),
             "channel": vc.channel.name if vc and vc.channel else None,
@@ -1445,9 +1665,52 @@ class Music(commands.Cog):
             "dj": bool(p.dj if p else cfg["dj"]),
             "queue_max": cfg["queue"],
             "cooldown": cfg["cooldown"],
+            "repeat": (p.repeat if p else cfg.get("repeat")) or "off",
+            "fx": p.fx if p else _fx_clean(cfg.get("fx")),
+            "fx_by": (p.fx_by if p else "") or None,
+            "cover": cover,
+            "palette": palette_peek(cover_key) or [],
+            "history": [_web_track(t, guild)
+                        for t in reversed(list(p.history)[-8:])][:8] if p else [],
             "current": _web_track((p.current if p else None) or {}, guild, elapsed),
             "queue": [_web_track(t, guild) for t in (list(p.queue) if p else [])],
         }
+
+    def web_cover_source(self, guild: disnake.Guild):
+        """Откуда брать картинку для подсветки: (ключ кэша, откуда, адрес) или пустота."""
+        p = self.players.get(guild.id)
+        track = (p.current if p else None) or {}
+        thumb = str(track.get("thumbnail") or "")
+        if thumb.startswith("http"):
+            return thumb, "url", thumb
+        stream = str(track.get("stream_url") or "")
+        if stream and not stream.startswith("http") and stream.lower().endswith(AUDIO_EXT):
+            path = os.path.abspath(stream)
+            return path, "file", path
+        return "", None, None
+
+    async def web_cover(self, guild: disnake.Guild):
+        """Байты обложки и её цвета; пустой трек без картинки — пустой ответ."""
+        key, kind, src = self.web_cover_source(guild)
+        if not key:
+            return None, []
+        raw = await cover_bytes(key, kind, src)
+        return raw, await palette_for(key, kind, src)
+
+    def web_library(self, query: str = "") -> dict:
+        """Библиотека для живого поиска: имя, есть ли обложка, ничего лишнего."""
+        want = re.sub(r"\s+", " ", str(query or "")).strip().lower()
+        files = _library()
+        hits = [f for f in files if not want or want in _stem(f).lower()][:30]
+        return {"found": len(hits), "total": len(files),
+                "tracks": [{"title": _stem(f)[:120]} for f in hits]}
+
+    def web_playlists(self) -> dict:
+        """Плейлисты семьи для страницы: те же, что играет /музыка, без своего хранилища."""
+        data = _playlists()
+        return {"playlists": [{"name": str(name)[:40],
+                               "tracks": [str(t)[:120] for t in (tracks or [])][:MAX_IN_PLAYLIST]}
+                              for name, tracks in list(data.items())[:MAX_PLAYLISTS]]}
 
     async def web_enqueue(self, guild: disnake.Guild, query: str, nick: str,
                           key: str = "") -> dict:
@@ -1494,17 +1757,18 @@ class Music(commands.Cog):
         except Exception:
             pass
 
-    async def web_action(self, guild: disnake.Guild, action: str, value=None) -> dict:
+    async def web_action(self, guild: disnake.Guild, action: str, value=None,
+                         who: str = "") -> dict:
         vc = guild.voice_client
         if not vc or not vc.is_connected():
             return {"error": "Бот сейчас ни в каком канале не сидит"}
         p = self.get_player(guild)
         if action == "pause":
             if vc.is_playing():
-                vc.pause()
+                self._pause(p, vc)
                 return {"ok": True, "did": "Пауза"}
             if vc.is_paused():
-                vc.resume()
+                self._resume(p, vc)
                 return {"ok": True, "did": "Играет дальше"}
             return {"error": "Сейчас ничего не играет"}
         if action == "skip":
@@ -1512,12 +1776,28 @@ class Music(commands.Cog):
                 return {"error": "Пропускать нечего"}
             title = (p.current or {}).get("title", "трек")
             p.votes.clear()
+            p.stopping = True
             vc.stop()
             return {"ok": True, "did": f"Пропустила: {title}"}
+        if action == "prev":
+            if not p.history:
+                return {"error": "Назад некуда — это первый трек после включения"}
+            back = p.history.pop()
+            if p.current:
+                p.queue.appendleft(dict(p.current))
+            p.queue.appendleft(back)
+            p.stopping = True
+            if vc.is_playing() or vc.is_paused():
+                vc.stop()
+            else:
+                await self._play_next(guild)
+            return {"ok": True, "did": f"Вернула: {back.get('title', 'трек')}"}
         if action == "stop":
             p.queue.clear()
+            p.history.clear()
             p.dj = False
             p.votes.clear()
+            p.stopping = True
             if vc.is_playing() or vc.is_paused():
                 vc.stop()
             _cfg_save(guild.id, {"dj": False})
@@ -1536,6 +1816,63 @@ class Music(commands.Cog):
             p.dj = not p.dj
             _cfg_save(guild.id, {"dj": p.dj})
             return {"ok": True, "did": "Авто-диджей включён" if p.dj else "Авто-диджей выключен"}
+        if action == "shuffle":
+            if len(p.queue) < 2:
+                return {"error": "В очереди меньше двух треков — перемешивать нечего"}
+            items = list(p.queue)
+            random.shuffle(items)
+            p.queue = deque(items)
+            return {"ok": True, "did": f"Перемешала: {len(items)} треков в новом порядке"}
+        if action == "repeat":
+            order = REPEATS
+            p.repeat = order[(order.index(p.repeat) + 1) % len(order)] if p.repeat in order else "off"
+            _cfg_save(guild.id, {"repeat": p.repeat})
+            return {"ok": True, "did": REPEAT_NAMES[p.repeat]}
+        if action == "playlist":
+            # один запрос на весь плейлист: иначе список из 30 треков упирался бы
+            # в лимит записей с одного адреса
+            name = re.sub(r"\s+", " ", str(value or "")).strip()[:40]
+            saved = _playlists().get(name)
+            if not saved:
+                return {"error": f"Плейлиста «{name}» нет — возможно, его переименовали"}
+            room = _cfg(guild.id)["queue"] - len(p.queue)
+            if room <= 0:
+                return {"error": f"Очередь полная: {_cfg(guild.id)['queue']} треков"}
+            added, missing = [], []
+            for stem in saved[:room]:
+                path = _stem_to_path(stem)
+                if path is None:
+                    missing.append(stem)
+                    continue
+                p.queue.append({"title": str(stem)[:120], "stream_url": path,
+                                "webpage_url": str(stem), "duration": None,
+                                "thumbnail": None, "ts": time.time(),
+                                "requester": f"📌 {name}"})
+                added.append(stem)
+            if not added:
+                return {"error": f"Из «{name}» в библиотеке ничего не осталось"}
+            if not (vc.is_playing() or vc.is_paused()):
+                await self._play_next(guild)
+            back = f", {len(missing)} нет в библиотеке" if missing else ""
+            return {"ok": True, "did": f"Плейлист «{name}»: {len(added)} треков{back}"}
+        if action == "seek":
+            got = await self._rebuild(guild, at=value)
+            if got.get("error"):
+                return got
+            return {"ok": True, "did": "Перемотала"}
+        if action == "fx":
+            patch = _fx_clean(value)
+            same = _fx_chain(patch) == _fx_chain(p.fx)
+            p.fx = patch
+            p.fx_by = str(who or "")[:32]
+            _cfg_save(guild.id, {"fx": patch})
+            if same:
+                return {"ok": True, "did": "Ничего не изменилось"}
+            got = await self._rebuild(guild)
+            if got.get("error"):
+                return got
+            line = _fx_line(patch)
+            return {"ok": True, "did": ("Звук: " + line) if line else "Звук как в записи"}
         return {"error": "Не знаю такой кнопки"}
 
     async def _say(self, inter, emb):
@@ -1721,18 +2058,20 @@ class Music(commands.Cog):
         await inter.followup.send(embed=emb, ephemeral=True)
         await self._play_next(inter.guild)
 
-    def _make_source(self, track: dict, volume: float):
+    def _make_source(self, track: dict, volume: float, at: int = 0, fx: dict = None):
         """Источник ffmpeg + файл, куда он пишет свои ошибки.
 
         stderr в PIPE без читателя опасен: буфер забивается и ffmpeg встаёт посреди
         трека, поэтому пишем во временный файл и читаем хвост только при ошибке.
         """
         err = tempfile.TemporaryFile()
+        chain = _fx_chain(fx or {})
+        opts = f"{FFMPEG_OPTS} -af {chain}" if chain else FFMPEG_OPTS
         try:
             src = disnake.PCMVolumeTransformer(
                 disnake.FFmpegPCMAudio(track["stream_url"], executable=_ffmpeg_exe() or "ffmpeg",
-                                       before_options=_before_options(track["stream_url"]),
-                                       options=FFMPEG_OPTS, stderr=err),
+                                       before_options=_before_options(track["stream_url"], at),
+                                       options=opts, stderr=err),
                 volume=volume,
             )
         except Exception:
@@ -1749,6 +2088,104 @@ class Music(commands.Cog):
         except Exception:
             return ""
         return " · ".join(line.strip() for line in text.splitlines() if line.strip())[:400]
+
+    def _make_after(self, p: GuildPlayer, track: dict, guild, err_file):
+        """Хвост воспроизведения: отчитаться, поставить перестроенный поток или идти дальше.
+
+        Ошибка читается из stderr-файла: сам трек мог лежать на диске, а ffmpeg
+        отказаться его открывать — без хвоста в карточке это выглядело бы как тишина.
+        """
+        loop = asyncio.get_running_loop()
+
+        def after(err):
+            tail = self._stderr_tail(err_file) if err else ""
+            try:
+                err_file.close()
+            except Exception:
+                pass
+            if err:
+                _log(f"ошибка воспроизведения: {err} | {tail}")
+                asyncio.run_coroutine_threadsafe(
+                    self._play_failed(p, track, f"`{err}`" + (f"\n{tail}" if tail else "")), loop)
+            job = p.pending
+            if job:
+                p.pending = None
+                asyncio.run_coroutine_threadsafe(self._put_source(guild, job), loop)
+                return
+            if not p.stopping and p.repeat == "one" and p.current:
+                p.queue.appendleft(dict(p.current))
+            asyncio.run_coroutine_threadsafe(self._play_next(guild), loop)
+
+        return after
+
+    async def _put_source(self, guild, job) -> None:
+        """Ставит поток, собранный при перемотке или повороте ручки."""
+        source, err_file, was_paused = job
+        p = self.players.get(guild.id)
+        vc = guild.voice_client
+        if not p or not vc or not vc.is_connected():
+            try:
+                err_file.close()
+            except Exception:
+                pass
+            return
+        p.source = source
+        p.stopping = False
+        p.mark = 0.0 if was_paused else time.monotonic()
+        vc.play(source, after=self._make_after(p, p.current or {}, guild, err_file))
+        if was_paused:
+            vc.pause()
+
+    def _elapsed(self, p: GuildPlayer, vc) -> int:
+        """Сколько секунд трека прозвучало для канала.
+
+        Позиции у источника в disnake нет: PCMVolumeTransformer её не пробрасывает, и
+        без своего счёта перемотка показывала бы всегда ноль. Поэтому часы у нас:
+        base — уже сыгранное, mark — с какого момента счёт идёт дальше (0 = тишина).
+        """
+        if p is None:
+            return 0
+        if p.mark and vc is not None and vc.is_playing():
+            return int(p.base + (time.monotonic() - p.mark))
+        return int(p.base)
+
+    def _pause(self, p: GuildPlayer, vc) -> None:
+        """Пауза замораживает счёт: иначе после снятия трек «ускочит» вперёд."""
+        p.base = self._elapsed(p, vc)
+        p.mark = 0.0
+        vc.pause()
+
+    def _resume(self, p: GuildPlayer, vc) -> None:
+        vc.resume()
+        p.mark = time.monotonic()
+
+    async def _rebuild(self, guild, at=None) -> dict:
+        """Перезапускает текущий трек с нужной секунды и с актуальными ручками.
+
+        По-другому звук не поменять: ffmpeg фильтры на лету не принимает, зато -ss на
+        входе позволяет не начинать трек сначала.
+        """
+        p = self.players.get(guild.id)
+        vc = guild.voice_client
+        if not p or not p.current:
+            return {"error": "Сейчас нечего перестраивать"}
+        if not vc or not (vc.is_playing() or vc.is_paused()):
+            return {"ok": True, "did": "Запомнила: ручки лягут на следующий трек"}
+        dur = p.current.get("duration")
+        at = self._elapsed(p, vc) if at is None else _clamp(at, 0, 10 ** 6)
+        if dur:
+            at = min(at, max(0, int(dur) - 1))
+        try:
+            source, err_file = self._make_source(p.current, p.volume, at=at, fx=p.fx)
+        except Exception as e:
+            return {"error": f"Так ffmpeg не умеет: {str(e)[:120]}"}
+        was_paused = vc.is_paused()
+        p.base = at
+        p.mark = 0.0
+        p.stopping = True
+        p.pending = (source, err_file, was_paused)
+        vc.stop()
+        return {"ok": True}
 
     async def _play_failed(self, p: GuildPlayer, track: dict, why: str) -> None:
         ch = p.text_channel
@@ -1773,7 +2210,10 @@ class Music(commands.Cog):
         if vc.is_playing() or vc.is_paused():
             return
         if not p.queue:
-            if p.dj:
+            if p.repeat == "all" and p.history:
+                # «вся очередь по кругу»: пустой список добираем последним сыгранным
+                p.queue.append(dict(p.history[-1]))
+            elif p.dj:
                 picked = self._dj_track(p)
                 if picked is None:
                     p.dj = False
@@ -1789,12 +2229,14 @@ class Music(commands.Cog):
                 return
 
         track = p.queue.popleft()
+        if p.current and p.current.get("title") != track.get("title"):
+            p.history.append(dict(p.current))
         try:
             if track["webpage_url"].startswith("http") and time.time() - track["ts"] > 600:
                 # ссылка на чужой стрим могла протухнуть, файл с диска — нет
                 fresh = await self._extract(track["webpage_url"])
                 track.update(fresh)
-            source, err_file = self._make_source(track, p.volume)
+            source, err_file = self._make_source(track, p.volume, fx=p.fx)
         except Exception as e:
             p.dj_fails += 1
             gave_up = p.dj and p.dj_fails >= 4
@@ -1810,24 +2252,11 @@ class Music(commands.Cog):
         p.votes.clear()
         p.current = track
         p.source = source
+        p.base = 0
+        p.mark = time.monotonic()
+        p.stopping = False
 
-        loop = asyncio.get_running_loop()
-
-        def after(err):
-            # ошибка читается из stderr-файла: сам трек мог лежать на диске, а ffmpeg
-            # отказаться его открывать — без хвоста в карточке это выглядело бы как тишина
-            tail = self._stderr_tail(err_file) if err else ""
-            try:
-                err_file.close()
-            except Exception:
-                pass
-            if err:
-                _log(f"ошибка воспроизведения: {err} | {tail}")
-                asyncio.run_coroutine_threadsafe(
-                    self._play_failed(p, track, f"`{err}`" + (f"\n{tail}" if tail else "")), loop)
-            asyncio.run_coroutine_threadsafe(self._play_next(guild), loop)
-
-        vc.play(source, after=after)
+        vc.play(source, after=self._make_after(p, track, guild, err_file))
 
         if p.text_channel:
             link = track["webpage_url"]
@@ -1838,6 +2267,10 @@ class Music(commands.Cog):
             if track.get("requester"):
                 body += "\n" + _T(self.bot, "music_ann_who", T_ANN_WHO,
                                   who=track["requester"])
+            line = _fx_line(p.fx)
+            if line:
+                # звук крутят с страницы — в канале должно быть видно, почему он не как в записи
+                body += f"\n> 🎛  {line}"
             emb = card(_T(self.bot, "music_ann_head", T_ANN_HEAD),
                        color_key="music_color", guild=guild)
             emb.description = f"### {shown}\n\n{body}"
