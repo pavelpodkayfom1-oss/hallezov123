@@ -63,6 +63,8 @@ ROSTER_MAX_ROLES = 120          # сколько ролей авто-списо�
                                 # ранги семьи легко оказываются ниже 40 служебных и цветовых
                                 # ролей, и тогда состав «исчезал» целиком
 ROSTER_FLUSH_DELAY = 20         # секунд ожидания после смены ролей: пачим залпом, без спама правками
+ROSTER_FETCH_CAP = 2000         # сколько людей догружаем с сервера на состав: больше не просим,
+                                # иначе разовая выгрузка съест память на 256 МБ хостинга
 
 SETTINGS_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "hall_settings.json"
@@ -1244,7 +1246,7 @@ class HallTools(commands.Cog):
                 sections.append(("Вне списка", rest))
         return sections
 
-    def build_roster_embed(self, sections) -> disnake.Embed:
+    def build_roster_embed(self, sections, gap: int = 0) -> disnake.Embed:
         """Состав текстом: должность подписана знаком по смыслу, старшинство читается по
         цвету стрелки у каждого ника — наверху жёлтые, ниже зелёные, синие, фиолетовые.
 
@@ -1261,6 +1263,10 @@ class HallTools(commands.Cog):
         if stray:
             head += (f"\n{stray} человек вне своей роли: её убрали из списка вручную "
                      f"или она ниже {ROSTER_MAX_ROLES}-го места в иерархии.")
+        if gap:
+            note = (f"{brand.pick(self.bot, *ROSTER_WARN)} {gap} участн. сервера ещё "
+                    f"не догрузились — список дополнится сам").strip()
+            head += f"\n{note}"
         e = make_embed(
             f"{marks[0]} Состав семьи {name}".strip(),
             head,
@@ -1296,6 +1302,26 @@ class HallTools(commands.Cog):
                 e.description = (e.description or "") + f"\n{note}"
         return e
 
+    async def warm_roster_cache(self, guild: disnake.Guild) -> int:
+        """Состав строится по guild.members, а бот поднимается без полной выгрузки людей
+        сервера (chunk_guilds_at_startup=False — на 256 МБ хостинга выгрузка обходится
+        перезапуском посреди трека). Пока кэш холодный, в семье виден один человек.
+
+        Считаем по самим числам: member_count Discord отдаёт точный, len(guild.members) —
+        сколько бот реально знает. Догружаем сами и возвращаем, скольких не удалось.
+        """
+        known = len(guild.members)
+        want = guild.member_count or known
+        if known >= want:
+            return 0
+        try:
+            await guild.fetch_members(limit=ROSTER_FETCH_CAP).flatten()
+        except (disnake.HTTPException, disnake.ClientException) as ex:
+            print(f"[hall_tools] список людей сервера не догрузился ({guild.name}): {ex}",
+                  file=sys.stderr, flush=True)
+            return want - known
+        return max(0, want - len(guild.members))
+
     async def update_roster(self, guild: disnake.Guild, force: bool = False) -> bool:
         s = get_settings()
         if not s["roster_channel_id"]:
@@ -1303,10 +1329,22 @@ class HallTools(commands.Cog):
         channel = guild.get_channel(s["roster_channel_id"])
         if channel is None:
             return False
+        gap = await self.warm_roster_cache(guild)
         sections = self.roster_sections(guild, s)
         if not sections:
             return False
-        embed = self.build_roster_embed(sections)
+        total = len({m.id for _, ms in sections for m in ms})
+        # Полупустой пост поверх живого класть нельзя: выглядит так, будто семья распалась.
+        # Если догрузить не удалось и неизвестных больше, чем показанных, — оставляем на
+        # стене прошлый состав; цикл каждые 3 минуты попробует ещё раз.
+        if gap > total:
+            print(
+                f"[hall_tools] состав не обновлён ({guild.name}): в списке {total} чел., "
+                f"ещё {gap} бот не получил — правку отложил",
+                file=sys.stderr, flush=True,
+            )
+            return False
+        embed = self.build_roster_embed(sections, gap=gap)
         digest = json.dumps(embed.to_dict(), sort_keys=True, ensure_ascii=False)
         if not force and digest == self._roster_hash.get(guild.id):
             return False
