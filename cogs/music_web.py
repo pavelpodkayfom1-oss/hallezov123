@@ -339,7 +339,8 @@ PAGE_HTML = r"""
   --g1:#4b3a8f; --g2:#2e6b6b; --g3:#7a3f52;   /* эти три цвета берёт с обложки трека */
   --accent:var(--g1);
   --r-hero:30px 10px 30px 10px; --r-card:22px 8px 22px 8px; --r-soft:18px;
-  --r-pill:999px; --r-chip:12px 4px 12px 4px;
+  --r-pill:999px; --r-chip:12px 4px 12px 4px; --r-circ:50%;
+  --beat:1.15s;   /* такт фона: страница подставляет значение из ручки «Темп» */
   --shadow:0 24px 60px rgba(0,0,0,.55);
   --ease:cubic-bezier(.22,.61,.36,1);
 }
@@ -358,8 +359,14 @@ img{display:block;max-width:100%}
 h1,h2,h3{margin:0;font-weight:800;letter-spacing:-.01em}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
 
-/* ═════════ живой фон: три мягких пятна + зерно + сетка ═════════ */
-.sky{position:fixed;inset:-25%;z-index:0;pointer-events:none;filter:blur(80px) saturate(1.25)}
+/* ═════════ живой фон: три мягких пятна + зерно + сетка ═════════
+   фон поднимается и опускается тактом: цвет берёт с обложки, ритм — с ручки «Темп».
+   пятно делаем за 12% такта и отпускаем 88% — это удар, а не мигалка */
+.sky{position:fixed;inset:-25%;z-index:0;pointer-events:none;filter:blur(80px) saturate(1.25);
+  transform-origin:50% 55%;animation:breathe var(--beat) var(--ease) infinite}
+@keyframes breathe{0%{transform:scale(1);opacity:.84}
+  12%{transform:scale(1.042) translateY(-1vh);opacity:1}
+  100%{transform:scale(1);opacity:.84}}
 .orb{position:absolute;border-radius:50%;opacity:.55;
   transition:background-color 1600ms var(--ease),opacity 900ms linear,transform 900ms var(--ease);
   will-change:transform}
@@ -378,7 +385,8 @@ h1,h2,h3{margin:0;font-weight:800;letter-spacing:-.01em}
   background:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px) 0 0/100% 46px,
              linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px) 0 0/46px 100%;
   mask:radial-gradient(130% 80% at 50% 0%,#000 8%,transparent 72%)}
-body.calm .sky,body.calm .mesh{opacity:.34}
+body.paused .sky{animation:none}
+body.calm .sky,body.calm .mesh{opacity:.34;animation:none}
 body.calm .orb{animation:none}
 
 /* ═════════ остеклённые поверхности ═════════ */
@@ -415,12 +423,14 @@ body.calm .orb{animation:none}
 .text-input{background:transparent;border:0;min-width:0;width:clamp(84px,18vw,150px);
   padding:6px 2px;font-size:.86rem}
 .text-input::placeholder{color:var(--text-3)}
-.icon-btn{width:38px;height:38px;border-radius:14px 6px 14px 6px;border:1px solid var(--line);
+.icon-btn{width:38px;height:38px;border-radius:var(--r-circ);border:1px solid var(--line);
   background:var(--glass);color:var(--text-2);display:grid;place-items:center;font-size:1rem;
-  transition:transform .2s var(--ease),border-color .3s,color .3s,box-shadow .3s}
+  transition:transform .2s var(--ease),border-color .3s,color .3s,box-shadow .3s,background-color .3s}
 .icon-btn:hover{color:var(--text);border-color:var(--line-2);transform:translateY(-2px);
   box-shadow:0 10px 26px -14px var(--g1)}
-.icon-btn.on{color:var(--ink);background:var(--text);border-color:var(--text)}
+.icon-btn:active{transform:scale(.9)}
+.icon-btn.on{color:var(--ink);background:var(--text);border-color:transparent;
+  box-shadow:0 0 0 5px rgba(244,241,234,.07)}
 @media (max-width:640px){.top{gap:10px}.brand{font-size:.74rem}}
 
 /* ═════════ главный экран: сейчас играет ═════════ */
@@ -430,7 +440,11 @@ body.calm .orb{animation:none}
   transform-style:preserve-3d;transition:transform .3s var(--ease),border-color .8s linear}
 .hero::before{content:"";position:absolute;left:-6%;top:12%;width:56%;height:76%;border-radius:50%;
   background:var(--accent);filter:blur(90px);opacity:.4;z-index:-1;
-  transition:background-color 1400ms var(--ease)}
+  transition:background-color 1400ms var(--ease);
+  animation:halo var(--beat) var(--ease) infinite}
+@keyframes halo{0%{opacity:.36;transform:scale(1)}12%{opacity:.52;transform:scale(1.045)}
+  100%{opacity:.36;transform:scale(1)}}
+body.paused .hero::before,body.calm .hero::before{animation:none}
 .art{position:relative;border-radius:26px 8px 26px 8px;overflow:hidden;aspect-ratio:1;
   background:linear-gradient(150deg,var(--ink-3),var(--ink-2));
   box-shadow:0 30px 70px -30px #000,0 0 0 1px var(--line) inset;
@@ -457,11 +471,11 @@ body.calm .orb{animation:none}
 .dot{width:4px;height:4px;border-radius:50%;background:var(--text-3);flex:none}
 .time{font-variant-numeric:tabular-nums;color:var(--text-3);font-size:.84rem}
 
-/* ── волны: страница дышит в такт, звук она не трогает ── */
+/* ── волны: столбики идут тем же тактом, что и фон; звук страница не трогает ── */
 .viz{display:flex;align-items:flex-end;gap:3px;height:52px;margin:18px 0 6px}
 .viz span{flex:1 1 0;min-width:2px;height:100%;border-radius:4px 4px 2px 2px;
   background:linear-gradient(to top,var(--g2),var(--accent));opacity:.85;
-  transform-origin:bottom;transform:scaleY(.3);animation:pulse 1.5s ease-in-out infinite}
+  transform-origin:bottom;transform:scaleY(.3);animation:pulse var(--beat) ease-in-out infinite}
 @keyframes pulse{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
 body.paused .viz span{animation-play-state:paused;opacity:.4}
 body.calm .viz{height:22px}
@@ -488,19 +502,24 @@ body.calm .viz span{animation:none;transform:scaleY(.55)}
   border:2px solid var(--ink);cursor:grab}
 .range.off{pointer-events:none;opacity:.4}
 
-/* ── транспорт ── */
+/* ── транспорт: круглые кнопки, большая — с бликом и ореолом цвета трека ── */
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:20px}
 .big{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;font-size:1.4rem;
-  background:var(--text);color:var(--ink);flex:none;
-  box-shadow:0 16px 40px -16px var(--accent);transition:transform .2s var(--ease),box-shadow .3s}
-.big:hover{transform:scale(1.06)}
-.big:active{transform:scale(.95)}
-.ctrl{width:46px;height:46px;border-radius:16px 6px 16px 6px;display:grid;place-items:center;
+  color:var(--ink);flex:none;
+  background:radial-gradient(125% 125% at 30% 20%,#fffdf8,var(--text) 46%,#d8d2c4 100%);
+  box-shadow:0 18px 42px -18px var(--accent),0 0 0 1px rgba(244,241,234,.22) inset;
+  transition:transform .2s var(--ease),box-shadow .35s}
+.big:hover{transform:scale(1.06);
+  box-shadow:0 26px 54px -20px var(--accent),0 0 0 7px rgba(244,241,234,.06)}
+.big:active{transform:scale(.93)}
+.ctrl{width:46px;height:46px;border-radius:var(--r-circ);display:grid;place-items:center;
   border:1px solid var(--line);background:var(--glass);color:var(--text-2);font-size:1.05rem;
-  transition:transform .2s var(--ease),color .25s,border-color .25s,background-color .6s}
-.ctrl:hover{color:var(--text);border-color:var(--line-2);transform:translateY(-2px)}
-.ctrl:active{transform:translateY(0) scale(.94)}
-.ctrl.on{color:var(--ink);background:var(--text);border-color:transparent}
+  transition:transform .2s var(--ease),color .25s,border-color .25s,background-color .6s,box-shadow .3s}
+.ctrl:hover{color:var(--text);border-color:var(--line-2);transform:translateY(-2px);
+  box-shadow:0 12px 26px -16px var(--g1)}
+.ctrl:active{transform:translateY(0) scale(.92)}
+.ctrl.on{color:var(--ink);background:var(--text);border-color:transparent;
+  box-shadow:0 0 0 5px rgba(244,241,234,.06),0 14px 30px -18px var(--accent)}
 .ctrl small{font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;display:block}
 .vol{position:relative;display:flex;align-items:center;gap:9px;padding:7px 14px;border-radius:var(--r-pill);
   border:1px solid var(--line);background:rgba(0,0,0,.26)}
@@ -538,23 +557,26 @@ body.calm .viz span{animation:none;transform:scaleY(.55)}
 .knob .range::before{content:"";position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;
   border-radius:99px;background:rgba(244,241,234,.14)}
 .knob.live{border-color:var(--accent)}
-.seg{display:flex;gap:6px;flex-wrap:wrap}
-.seg button{flex:1 1 0;min-width:44px;padding:7px 4px;border-radius:10px 4px 10px 4px;
-  border:1px solid var(--line);background:rgba(0,0,0,.2);color:var(--text-3);font-size:.72rem;
-  transition:color .25s,border-color .25s,background-color .25s}
+.seg{display:flex;gap:4px;flex-wrap:wrap;padding:4px;border-radius:var(--r-pill);
+  border:1px solid var(--line);background:rgba(0,0,0,.3)}
+.seg button{flex:1 1 0;min-width:44px;padding:7px 10px;border-radius:var(--r-pill);
+  border:1px solid transparent;background:transparent;color:var(--text-3);font-size:.72rem;
+  transition:color .25s,border-color .25s,background-color .25s,box-shadow .3s}
 .seg button:hover{color:var(--text)}
-.seg button.on{color:var(--ink);background:var(--text);border-color:transparent;font-weight:700}
+.seg button.on{color:var(--ink);background:var(--text);font-weight:700;
+  box-shadow:0 10px 22px -14px var(--accent)}
 
 /* ═════════ вкладки и списки ═════════ */
 .tabs{display:flex;gap:8px;flex-wrap:wrap;margin:30px 0 16px;position:sticky;top:0;z-index:4;
   padding:10px 0;background:linear-gradient(180deg,var(--ink) 62%,rgba(7,7,11,0));
   -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-.tab{padding:9px 16px;border-radius:var(--r-chip);border:1px solid var(--line);
+.tab{padding:9px 18px;border-radius:var(--r-pill);border:1px solid var(--line);
   background:var(--glass);color:var(--text-2);font-size:.82rem;white-space:nowrap;
-  transition:color .25s,border-color .25s,transform .2s var(--ease),box-shadow .3s}
+  transition:color .25s,border-color .25s,transform .2s var(--ease),box-shadow .3s,background-color .3s}
 .tab:hover{color:var(--text);transform:translateY(-2px)}
+.tab:active{transform:translateY(0) scale(.96)}
 .tab.on{color:var(--ink);background:var(--text);border-color:transparent;font-weight:700;
-  box-shadow:0 14px 30px -18px var(--accent)}
+  box-shadow:0 14px 30px -18px var(--accent),0 0 0 5px rgba(244,241,234,.05)}
 .tab em{font-style:normal;color:var(--text-3);margin-left:7px;font-size:.74rem}
 .tab.on em{color:rgba(12,12,18,.55)}
 .pane{display:none}
@@ -605,15 +627,43 @@ body.calm .viz span{animation:none;transform:scaleY(.55)}
   border-radius:var(--r-soft);border:1px solid var(--line);background:rgba(0,0,0,.3)}
 .order .grow:focus-within{border-color:var(--accent);box-shadow:0 0 26px -10px var(--g1)}
 .order input{flex:1 1 0;min-width:0;background:transparent;border:0;padding:14px 0;font-size:.94rem}
-.send{padding:14px 26px;border-radius:var(--r-soft);background:var(--text);color:var(--ink);
-  font-weight:800;letter-spacing:.04em;transition:transform .2s var(--ease),box-shadow .3s,opacity .2s}
-.send:hover{transform:translateY(-2px);box-shadow:0 18px 38px -18px var(--accent)}
+.send{padding:13px 28px;border-radius:var(--r-pill);color:var(--ink);
+  background:linear-gradient(140deg,#fffdf8,var(--text) 42%,#d7d1c3);
+  font-weight:800;letter-spacing:.04em;box-shadow:0 14px 32px -20px var(--accent);
+  transition:transform .2s var(--ease),box-shadow .35s,opacity .2s}
+.send:hover{transform:translateY(-2px);
+  box-shadow:0 24px 46px -20px var(--accent),0 0 0 6px rgba(244,241,234,.06)}
 .send:active{transform:scale(.97)}
 .send[disabled]{opacity:.5;cursor:progress}
 @media (max-width:720px){.order form{grid-template-columns:minmax(0,1fr) auto}}
 .tabs.flat{position:static;background:none;padding:0;margin:16px 0 14px;backdrop-filter:none;
   -webkit-backdrop-filter:none}
-.tabs.flat .tab{font-size:.76rem;padding:7px 13px}
+.tabs.flat{gap:4px;width:fit-content;max-width:100%;padding:4px;border-radius:var(--r-pill);
+  border:1px solid var(--line);background:rgba(0,0,0,.3)}
+.tabs.flat .tab{font-size:.76rem;padding:7px 14px;border-color:transparent;background:transparent}
+.tabs.flat .tab:hover{transform:none}
+.tabs.flat .tab.on{background:var(--text)}
+
+/* ═════════ низ страницы: ссылка на музыку — крупно, одним движением ═════════ */
+.dock{position:relative;overflow:hidden;margin-top:30px;padding:clamp(18px,3vw,30px);
+  border-radius:var(--r-hero);border-bottom:2px solid var(--accent)}
+.dock::before{content:"";position:absolute;right:-8%;top:-45%;width:52%;height:170%;border-radius:50%;
+  background:var(--accent);filter:blur(74px);opacity:.36;pointer-events:none;
+  animation:halo var(--beat) var(--ease) infinite;transition:background-color 1400ms var(--ease)}
+body.paused .dock::before,body.calm .dock::before{animation:none}
+.dock h2{font-size:clamp(1.06rem,2.6vw,1.42rem);margin:6px 0 8px;position:relative}
+.dock p{margin:0 0 16px;color:var(--text-2);font-size:.9rem;max-width:60ch;position:relative}
+.addr{display:flex;align-items:center;gap:12px;min-width:0;position:relative;
+  padding:13px 16px;border-radius:var(--r-pill);border:1px dashed var(--line-2);
+  background:rgba(0,0,0,.36);transition:border-color .3s}
+.addr:hover{border-color:var(--accent)}
+.addr em{font-style:normal;font-size:.66rem;text-transform:uppercase;letter-spacing:.14em;
+  color:var(--text-3);flex:none}
+.addr span{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-size:.92rem;font-weight:600;
+  color:var(--text);font-variant-numeric:tabular-nums}
+.dock-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;position:relative}
+a.send{text-decoration:none;display:inline-flex;align-items:center;gap:8px}
+.dock-acts .mini-btn{padding:12px 20px;font-size:.8rem}
 
 /* ═════════ мини-плеер и тост ═════════ */
 .mini{position:fixed;left:50%;transform:translate(-50%,140%);bottom:18px;z-index:6;
@@ -664,6 +714,9 @@ body.calm .viz span{animation:none;transform:scaleY(.55)}
   .tabs{margin-top:22px}
   .card{padding:12px}
   .knobs{grid-template-columns:repeat(auto-fit,minmax(128px,1fr))}
+  .dock{border-radius:24px 8px 24px 8px}
+  .addr{padding:11px 13px}
+  .dock-acts .mini-btn{flex:1 1 auto;text-align:center}
 }
 @media (max-width:420px){
   .mini{border-radius:18px 6px 18px 6px;padding:8px 10px}
@@ -829,6 +882,19 @@ body.calm .viz span{animation:none;transform:scaleY(.55)}
     <p class="hint" id="orderHint">Можно имя из библиотеки, можно ссылку. Между заказами
       с одного адреса — <b id="coolVal">15</b> секунд.</p>
   </section>
+
+  <footer class="dock glass" id="dock">
+    <span class="lab">эта страница</span>
+    <h2>Ссылка на музыку — сохрани или перешли семье</h2>
+    <p>Адрес не меняется, вход не нужен. Открой со своего телефона и заказывай в общий
+      голосовой канал, пока кто-то другой слушает.</p>
+    <div class="addr"><em>адрес</em><span id="dockUrl">…</span></div>
+    <div class="dock-acts">
+      <a class="send" id="dockOpen" href="#" target="_blank" rel="noopener">🎧 Открыть музыку</a>
+      <button class="mini-btn" id="dockCopy" type="button">Скопировать ссылку</button>
+      <button class="mini-btn" id="dockShare" type="button" hidden>Поделиться</button>
+    </div>
+  </footer>
 </div>
 
 <div class="mini glass" id="mini" aria-label="Мини-плеер">
@@ -1040,6 +1106,13 @@ function link(t) {
   return box;
 }
 
+/* ── такт фона: страница звук не слышит (он уходит в Discord), поэтому ритм
+      берёт из ручки «Темп» — фон и волны бьются вместе с пультом ── */
+function setBeat(speed) {
+  const s = Math.max(.5, Math.min(2, Number(speed) || 1));
+  document.documentElement.style.setProperty("--beat", (1.15 / s).toFixed(3) + "s");
+}
+
 /* ═════════ пульт: значения с сервера, отправка — debounce ─════════ */
 const FX = ["bass", "mid", "high", "filter", "echo", "speed"];
 function paintDeck() {
@@ -1061,6 +1134,7 @@ function paintDeck() {
   });
   $("fxBy").textContent = S.fx_by ? "крутит: " + S.fx_by : "ручки не трогали";
   $("fxBy").classList.toggle("who", !!S.fx_by);
+  setBeat(fx.speed);
 }
 function fxNow() {
   const patch = {};
@@ -1089,6 +1163,7 @@ document.querySelectorAll(".knob .range").forEach((r) => {
       (r.value > 0 ? "+" + r.value : r.value) + " дБ";
     const box = r.closest(".knob");
     if (box) box.classList.add("live");
+    if (k === "speed") setBeat(r.value);
     later("fx", sendFx, 420);
   });
 });
@@ -1104,6 +1179,7 @@ document.querySelectorAll(".seg button").forEach((b) => {
 $("fxReset").addEventListener("click", () => {
   document.querySelectorAll(".knob .range").forEach((r) => { r.value = r.dataset.knob === "speed" ? 1 : 0; });
   document.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("on", b.dataset.v === "0"));
+  setBeat(1);
   sendFx();
 });
 
@@ -1485,17 +1561,53 @@ $("nickInput").addEventListener("input", () => {
 });
 $("whoTag").textContent = "подпишем как: «" + (nick() || "гость") + "»";
 
-/* волны: 34 столбика, ритм страницы, звук не трогает */
+/* волны: 34 столбика, каждый бьётся долей такта — фон и волны в одном ритме */
 (function bars() {
   const box = $("viz");
+  const PARTS = [.5, .75, 1, 1.5, 2];
   for (let i = 0; i < 34; i++) {
     const s = document.createElement("span");
-    s.style.animationDelay = (-(i * .11) % 1.5).toFixed(2) + "s";
-    s.style.animationDuration = (1.1 + (i % 5) * .22).toFixed(2) + "s";
+    s.style.animationDuration = "calc(var(--beat,1.15s) * " + PARTS[i % 5] + ")";
+    s.style.animationDelay = "calc(var(--beat,1.15s) * -" + ((i % 4) * .2).toFixed(2) + ")";
     s.style.opacity = String(.55 + (i % 3) * .15);
     box.append(s);
   }
 })();
+
+/* ═════════ низ страницы: адрес, копирование и шеринг — всё по-настоящему ═════════ */
+const MUSIC_URL = location.origin + location.pathname;
+$("dockUrl").textContent = MUSIC_URL;
+$("dockOpen").href = MUSIC_URL;
+function copyUrl() {
+  const done = () => toast("Ссылка скопирована — можно кидать в чат");
+  const legacy = () => {
+    const ta = document.createElement("textarea");
+    ta.value = MUSIC_URL;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-1200px";
+    document.body.append(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+    if (ok) done(); else toast("Скопируй адрес руками: " + MUSIC_URL, true);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(MUSIC_URL).then(done, legacy);
+  else legacy();
+}
+$("dockCopy").addEventListener("click", copyUrl);
+if (navigator.share) {
+  const b = $("dockShare");
+  b.hidden = false;
+  b.addEventListener("click", () => {
+    navigator.share({title: "Hallez · музыка семьи", url: MUSIC_URL}).catch((e) => {
+      // если шеринг не открылся (на компьютере его часто нет), не молчим, а копируем
+      if (!e || e.name !== "AbortError") copyUrl();
+    });
+  });
+}
 
 /* старт: сначала скелетон, потом живое состояние; на вкладке не опрашиваем молча */
 $("queueList").append((() => {
