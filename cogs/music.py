@@ -9,6 +9,8 @@
 из imageio-ffmpeg (см. _ffmpeg_exe).
 """
 import asyncio
+import array
+import base64
 import hashlib
 import io
 import json
@@ -233,8 +235,15 @@ def _clamp(value, lo: int, hi: int) -> int:
 # поэтому крутит один человек, а слышат все — страница показывает, кто именно.
 FX_LIMITS = {"bass": (-12, 12), "mid": (-12, 12), "high": (-12, 12),
             "filter": (0, 3), "echo": (0, 1)}
-FILTER_CUT = (0, 5200, 2600, 1100)  # выкл · мягкий · плотный · обрезан
-FILTER_NAMES = ("выкл", "мягкий", "плотный", "обрезан")
+# Режимы пульта: каждый — настоящие фильтры ffmpeg, а не наклейка. «Чисто» ничего
+# не трогает, «Мягко» снимает резкость верхов, «Плотно» и «Бас-буст» поднимают низ.
+FILTER_MODES = (
+    ("чисто", ()),
+    ("мягко", ("lowpass=f=6000",)),
+    ("плотно", ("bass=g=6:f=80", "lowpass=f=7500")),
+    ("бас-буст", ("bass=g=10:f=110", "treble=g=-3:f=6000")),
+)
+FILTER_NAMES = tuple(name for name, _ in FILTER_MODES)
 REPEATS = ("off", "one", "all")
 REPEAT_NAMES = {"off": "повтор выключен", "one": "трек по кругу", "all": "вся очередь по кругу"}
 
@@ -262,9 +271,8 @@ def _fx_chain(fx: dict) -> str:
                       ("high", "treble=g=%d:f=4000")):
         if fx.get(key):
             parts.append(tmpl % fx[key])
-    cut = FILTER_CUT[_clamp(fx.get("filter"), 0, 3)]
-    if cut:
-        parts.append(f"lowpass=f={cut}")
+    mode = FILTER_MODES[_clamp(fx.get("filter"), 0, len(FILTER_MODES) - 1)][1]
+    parts.extend(mode)
     if fx.get("echo"):
         parts.append("aecho=0.8:0.85:400:0.35")
     speed = round(float(fx.get("speed") or 1.0), 2)
@@ -650,6 +658,164 @@ async def palette_for(key: str, kind: str, src: str) -> list:
     colors = await asyncio.to_thread(_palette_of_bytes, raw) if raw else []
     palette_put(key, colors or [])
     return colors
+
+
+# ══════════════════ ритм трека: полосы энергии ══════════════════
+# Страница сама звук не слышит: он уходит в голосовой канал, и AnalyserNode в
+# браузере анализировал бы тишину. Поэтому полосы снимает сервер с того же файла,
+# который сейчас играет, — ffmpeg режет трек на низ/середину/верх, а страница
+# двигает фон по кадру, соответствующему фактической секунде трека. Считается один
+# раз на файл и живёт на диске, повторный заказ того же трека ffmpeg не зовёт.
+AMBIENT_FRAME_MS = 50
+AMBIENT_MAX_SECONDS = 900
+AMBIENT_BANDS = (("low", 800, "lowpass=f=160"),
+                 ("mid", 2000, "highpass=f=160,lowpass=f=1400"),
+                 ("high", 4000, "highpass=f=1400"))
+AMBIENT_DIR = os.path.join(BASE_DIR, "music_ambient")
+MAX_AMBIENT_FILES = 60
+_AMBIENT: dict = {}
+MAX_AMBIENT = 12
+_AMBIENT_BUSY: set = set()
+
+
+def _ambient_key(path: str) -> str:
+    """Ключ полос: файл + его размер и дата. Перезалили трек — ключ другой."""
+    st = os.stat(path)
+    raw = f"{os.path.abspath(path)}|{st.st_size}|{int(st.st_mtime)}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _ambient_band(path: str, rate: int, af: str):
+    """Одна полоса как с16-моносигнал: ffmpeg сам фильтрует и передискретизирует."""
+    exe = _ffmpeg_exe()
+    if not exe:
+        return None
+    out = subprocess.run(
+        [exe, "-hide_banner", "-loglevel", "error", "-t", str(AMBIENT_MAX_SECONDS),
+         "-i", path, "-vn", "-af", af, "-ac", "1", "-ar", str(rate), "-f", "s16le", "-"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=240)
+    if out.returncode != 0 or not out.stdout:
+        return None
+    return array.array("h", out.stdout)
+
+
+def _ambient_frames(samples: array, rate: int) -> list:
+    """Средний квадрат амплитуды в кадре. Целые Python не переполняются."""
+    step = max(1, int(rate * AMBIENT_FRAME_MS / 1000))
+    return [sum(v * v for v in samples[i:i + step]) / step
+            for i in range(0, len(samples) - step + 1, step)]
+
+
+def _ambient_of_file(path: str):
+    """Блокирующий расчёт полос. Зовётся только из потока (asyncio.to_thread)."""
+    bands = []
+    for _name, rate, af in AMBIENT_BANDS:
+        try:
+            data = _ambient_band(path, rate, af)
+        except Exception:
+            data = None
+        if not data:
+            return None
+        bands.append(_ambient_frames(data, rate))
+        del data
+    n = min(len(b) for b in bands)
+    if n < 4:
+        return None
+    peak = max(max(b[:n]) for b in bands)
+    if peak <= 0:
+        return None
+    out = bytearray()
+    for band in bands:
+        for v in band[:n]:
+            out.append(min(255, int(((v / peak) ** .5) * 255)))
+    return {"frames": n, "fps": 1000 // AMBIENT_FRAME_MS, "bands": bytes(out)}
+
+
+def _ambient_file(key: str) -> str:
+    return os.path.join(AMBIENT_DIR, key + ".json")
+
+
+def ambient_cached(key: str):
+    """Уже посчитанные полосы: память, потом диск. Пустоту не считаем."""
+    if not _is_hex_key(key):
+        return None
+    if key in _AMBIENT:
+        return _AMBIENT[key] or None
+    try:
+        with open(_ambient_file(key), encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        return None
+    try:
+        res = {"frames": int(data["frames"]), "fps": int(data["fps"]),
+               "bands": base64.b64decode(data["bands"])}
+    except Exception:
+        return None
+    if len(_AMBIENT) >= MAX_AMBIENT:
+        _AMBIENT.clear()
+    _AMBIENT[key] = res
+    return res
+
+
+def _is_hex_key(key) -> bool:
+    """Ключ приходит из адреса: без проверки им можно было бы читать любые файлы."""
+    return isinstance(key, str) and len(key) == 16 and all(c in "0123456789abcdef" for c in key)
+
+
+def ambient_store(key: str, res: dict) -> None:
+    if len(_AMBIENT) >= MAX_AMBIENT:
+        _AMBIENT.clear()
+    _AMBIENT[key] = res
+    try:
+        os.makedirs(AMBIENT_DIR, exist_ok=True)
+        tmp = _ambient_file(key) + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump({"frames": res["frames"], "fps": res["fps"],
+                       "bands": base64.b64encode(res["bands"]).decode("ascii")}, fh)
+        os.replace(tmp, _ambient_file(key))
+        names = sorted((f for f in os.listdir(AMBIENT_DIR) if f.endswith(".json")),
+                       key=lambda f: os.path.getmtime(os.path.join(AMBIENT_DIR, f)))
+        for old in names[:-MAX_AMBIENT_FILES]:
+            try:
+                os.unlink(os.path.join(AMBIENT_DIR, old))
+            except OSError:
+                pass
+    except Exception:
+        pass
+
+
+async def ambient_for(path: str):
+    """Полосы текущего трека или None. Считаем один раз, дальше только читаем."""
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        key = _ambient_key(path)
+    except OSError:
+        return None
+    hit = ambient_cached(key)
+    if hit:
+        return hit
+    if key in _AMBIENT_BUSY:
+        return None
+    _AMBIENT_BUSY.add(key)
+    try:
+        res = await asyncio.to_thread(_ambient_of_file, path)
+    except Exception:
+        res = None
+    finally:
+        _AMBIENT_BUSY.discard(key)
+    if not res:
+        _AMBIENT[key] = {}
+        return None
+    ambient_store(key, res)
+    return res
+
+
+def ambient_key_of(path: str) -> str:
+    try:
+        return _ambient_key(path) if path and os.path.exists(path) else ""
+    except OSError:
+        return ""
 
 
 def _web_track(track: dict, guild, elapsed=None):
@@ -1153,7 +1319,7 @@ class MusicSettingsView(disnake.ui.View):
         panel = _chan_line(bot, guild, cfg["panel"])
         sections = [
             (f"{pc}  ГРОМКОСТЬ",
-             f"{live}\n{meg}  Шаг по 5% — «Тише» и «Громче» на панели крутят этот же звук"),
+             f"{live}\n{meg}  Шаг по 1% — «Тише» и «Громче» на панели крутят этот же звук"),
             (f"{train}  ОЧЕРЕДЬ", f"**{t['queue']}**\n{book}  Сколько треков ждут своей очереди"),
             (f"{meg}  КУЛДАУН ЗАКАЗА",
              f"**{t['cooldown']}**\n{bot_i}  Чтобы один человек не перекрывал всех подряд"),
@@ -1188,12 +1354,12 @@ class MusicSettingsView(disnake.ui.View):
     @disnake.ui.button(label="Тише", style=disnake.ButtonStyle.secondary,
                        custom_id="music:cfg:vol_down", row=0)
     async def v_down(self, button, inter: disnake.MessageInteraction):
-        await self._apply(inter, {"volume": max(5, _cfg(self.guild_id)["volume"] - 5)})
+        await self._apply(inter, {"volume": max(5, _cfg(self.guild_id)["volume"] - 1)})
 
     @disnake.ui.button(label="Громче", style=disnake.ButtonStyle.secondary,
                        custom_id="music:cfg:vol_up", row=0)
     async def v_up(self, button, inter: disnake.MessageInteraction):
-        await self._apply(inter, {"volume": min(100, _cfg(self.guild_id)["volume"] + 5)})
+        await self._apply(inter, {"volume": min(100, _cfg(self.guild_id)["volume"] + 1)})
 
     @disnake.ui.button(label="Очередь", style=disnake.ButtonStyle.secondary,
                        custom_id="music:cfg:queue", row=0)
@@ -1223,6 +1389,8 @@ class Music(commands.Cog):
         self._last_play: dict = {}
         # кто нажал «Закинуть»: id → (канал, когда)
         self._pending: dict = {}
+        # фоновые расчёты полос: задачи держим, иначе asyncio их молча соберёт мусор
+        self._ambient_tasks: set = set()
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -1670,6 +1838,7 @@ class Music(commands.Cog):
             "fx_by": (p.fx_by if p else "") or None,
             "cover": cover,
             "palette": palette_peek(cover_key) or [],
+            "ambient": self.web_ambient_state(guild),
             "history": [_web_track(t, guild)
                         for t in reversed(list(p.history)[-8:])][:8] if p else [],
             "current": _web_track((p.current if p else None) or {}, guild, elapsed),
@@ -1696,6 +1865,38 @@ class Music(commands.Cog):
             return None, []
         raw = await cover_bytes(key, kind, src)
         return raw, await palette_for(key, kind, src)
+
+    def web_ambient_state(self, guild: disnake.Guild) -> dict:
+        """Что страница знает о полосах текущего трека: ключ и готовность.
+
+        Считать ffmpeg'ом здесь не ждём: страница опрашивает плеер каждые две
+        секунды, и висеть из-за анализа она не должна. Заказывает расчёт в фоне и
+        в следующем опросе отдаёт ready=True.
+        """
+        _key, kind, src = self.web_cover_source(guild)
+        if kind != "file" or not src:
+            return {}
+        key = ambient_key_of(src)
+        if not key:
+            return {}
+        res = ambient_cached(key)
+        if not res and key not in _AMBIENT_BUSY:
+            try:
+                task = asyncio.ensure_future(ambient_for(src))
+            except RuntimeError:      # цикла нет — офлайн-тест: просто не считаем
+                return {"k": key, "ready": False, "fps": 0, "frames": 0}
+            self._ambient_tasks.add(task)
+            task.add_done_callback(self._ambient_tasks.discard)
+        return {"k": key, "ready": bool(res), "fps": (res or {}).get("fps", 0),
+                "frames": (res or {}).get("frames", 0)}
+
+    def web_ambient_bands(self, key: str) -> dict:
+        """Готовые полосы по ключу; None — если их ещё считает ffmpeg."""
+        res = ambient_cached(key)
+        if not res:
+            return None
+        return {"k": key, "fps": res["fps"], "frames": res["frames"],
+                "bands": base64.b64encode(res["bands"]).decode("ascii")}
 
     def web_library(self, query: str = "") -> dict:
         """Библиотека для живого поиска: имя, есть ли обложка, ничего лишнего."""
