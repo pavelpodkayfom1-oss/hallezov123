@@ -1805,114 +1805,66 @@ function artOrigin() {
   return [(r.left + r.width / 2) / Math.max(1, innerWidth) * AW,
           (r.top + r.height / 2) / Math.max(1, innerHeight) * AH];
 }
+let ORB = 0, ORG = null;   // ORB — фаза плавания пятен: идёт быстрее на громкой музыке
 function paintAmb(dt, t) {
   const cx = ambCx;
   cx.clearRect(0, 0, AW, AH);
   cx.globalCompositeOperation = "lighter";
   const seed = t / 1000;
-  /* внутренний такт (см. idleBands) остаётся только когда полос нет вовсе: ни с файла,
-     ни из канала. пока поток жив, волны ведёт именно он */
+  /* полос нет вовсе (поток, чужая ссылка) — фон не замирает, его ведёт внутренний такт */
   const IDLE = hasBands ? null : idleBands(seed);
   const bass = IDLE ? IDLE[0] : SM.l, mid = IDLE ? IDLE[1] : SM.m, hi = IDLE ? IDLE[2] : SM.h;
-  /* прыжок гребня берём из LIVE.hit, до сглаживания: иначе удар уже не виден */
   const hit = IDLE ? 0 : LIVE.hit;
-  /* гребень тянет вверх только всплеск — быстрая огибающая минус плавная. на плотном
-     бите плавная стоит высоко, и от одной неё экран просто залит светом, а волна стоит
-     на месте; полоса за вычетом её среднего уровня и есть сам удар */
+  /* удар = быстрая огибающая минус плавная: гребень тянет вверх только всплеск */
   const SLOW = [bass, mid, hi];
   const FAST = IDLE ? SLOW : [LIVE.l, LIVE.m, LIVE.h];
   const KICK = SLOW.map((v, i) => Math.min(1, .45 * v + 1.7 * Math.max(0, FAST[i] - v)));
   const energy = Math.min(1, (bass * 1.1 + mid * .8 + hi * .6) / 2);
-  /* общий тон экрана: смесь трёх цветов обложки, где побеждает сильнейшая сейчас полоса.
-     поэтому цвет фона плавно переливается вслед за тем, что звучит */
+  ORB += dt * (.1 + .55 * energy + .35 * hit);
+  const o = ORB;
+  /* общий тон экрана: смесь цветов обложки, где побеждает сильнейшая сейчас полоса */
   const wsum = bass + mid + hi + .45;
   const tint = [0, 1, 2].map((c) => Math.round(
     (PALB[0][c] * (bass + .15) + PALB[1][c] * (mid + .15) + PALB[2][c] * (hi + .15)) / wsum));
-  /* заливка на весь экран, а не только пятна по углам. свечения стало меньше
-     намеренно: на прежних цифрах список очереди тонул в розовом */
-  cx.fillStyle = rgba(tint, .03 + .1 * energy);
+  /* пол сцены: ровное свечение снизу вверх, его яркость идёт за общей громкостью */
+  const floor = cx.createLinearGradient(0, AH, 0, AH * .4);
+  floor.addColorStop(0, rgba(tint, .08 + .28 * energy));
+  floor.addColorStop(1, rgba(tint, 0));
+  cx.fillStyle = floor;
   cx.fillRect(0, 0, AW, AH);
-  /* большие мягкие пятна, которые медленно плывут по всему фону; у каждой полосы своё */
-  blob(cx, AW * (.18 + .1 * Math.sin(seed * .19)), AH * (.25 + .1 * Math.cos(seed * .15)),
-       AW * (.6 + .3 * bass), PALB[0], .1 + .2 * bass);
-  blob(cx, AW * (.82 + .08 * Math.cos(seed * .13)), AH * (.45 + .1 * Math.sin(seed * .17)),
-       AW * (.55 + .3 * mid), PALB[1], .08 + .19 * mid);
-  blob(cx, AW * (.5 + .2 * Math.sin(seed * .11)), AH * (.9 - .05 * Math.cos(seed * .21)),
-       AW * (.6 + .3 * hi), PALB[2], .08 + .19 * hi);
-  blob(cx, AW * (.5 + .25 * Math.cos(seed * .09)), AH * (.4 + .15 * Math.sin(seed * .12)),
-       AW * .8, tint, .03 + .13 * energy);
-  cx.lineCap = "round";
-  const step = Math.max(6, AW / 90);
-  for (let i = 0; i < WAVES.length; i++) {
-    const w = WAVES[i], e = SLOW[w.b], f = KICK[w.b];
-    const dir = w.top ? -1 : 1;
-    /* bob — спокойный ход вверх-вниз, который остаётся даже в полной тишине */
-    const bob = Math.sin(seed * w.sp * .7 + i * 1.9) * AH * .03;
-    /* энергия полосы и удар тянут гребень только вверх: вниз он возвращается сам,
-       по bob и по тому, как полоса отпускает — иначе на бите свет просто проваливается */
-    const y0 = AH * w.y + bob - (f * .13 + hit * .08) * AH;
-    const amp = AH * (w.amp + .075 * f);
-    let n = 0;
-    for (let x = 0; x <= AW + step; x += step) {
-      const p = x / AW * 6.2832 * w.len;
-      WPTS[n * 2] = x;
-      WPTS[n * 2 + 1] = y0 - (Math.sin(p + seed * w.sp * 1.6) * amp +
-                              Math.sin(p * 2.1 - seed * w.sp) * amp * .3) * dir;
-      n++;
-    }
-    const edge = w.top ? -2 : AH + 2;
-    const col = PALG[w.b];
-    cx.beginPath();
-    cx.moveTo(WPTS[0], edge);
-    for (let k = 0; k < n; k++) cx.lineTo(WPTS[k * 2], WPTS[k * 2 + 1]);
-    cx.lineTo(WPTS[(n - 1) * 2], edge);
-    cx.closePath();
-    const g = cx.createLinearGradient(0, y0, 0, edge);
-    g.addColorStop(0, rgba(col, w.a * (.55 + .6 * e + .5 * hit)));
-    g.addColorStop(.55, rgba(col, w.a * (.2 + .26 * e + .22 * hit)));
+  /* кольца вокруг обложки: дышат вместе с басом и верхами, без разовых вспышек */
+  if (tick % 30 === 0 || !ORG) ORG = artOrigin();
+  cx.lineWidth = 2;
+  cx.strokeStyle = rgba(PALG[0], .06 + .22 * KICK[0]);
+  cx.beginPath();
+  cx.arc(ORG[0], ORG[1], AW * (.2 + .07 * KICK[0]), 0, 6.2832);
+  cx.stroke();
+  cx.lineWidth = 1;
+  cx.strokeStyle = rgba(PALG[2], .04 + .16 * KICK[2]);
+  cx.beginPath();
+  cx.arc(ORG[0], ORG[1], AW * (.27 + .06 * KICK[2]), 0, 6.2832);
+  cx.stroke();
+  /* световые лучи снизу: тот же спектр, что считает бот. столбики мягкие, прозрачность
+     гаснет к верху экрана, поэтому читаются как свет софитов, а не как диаграмма */
+  const grads = PALG.map((col) => {
+    const g = cx.createLinearGradient(0, AH, 0, AH * .22);
+    g.addColorStop(0, rgba(col, .6));
     g.addColorStop(1, rgba(col, 0));
-    cx.fillStyle = g;
-    cx.fill();
-    /* светлый шов по гребню: без него на тихом месте волна не читается */
+    return g;
+  });
+  const N = 30, bw = AW / N;
+  for (let i = 0; i < N; i++) {
+    const p = i / (N - 1);
+    const w1 = Math.max(0, 1 - Math.abs(p - .12) / .3);
+    const w2 = Math.max(0, 1 - Math.abs(p - .5) / .34);
+    const w3 = Math.max(0, 1 - Math.abs(p - .88) / .32);
+    const e = (KICK[0] * w1 + KICK[1] * w2 + KICK[2] * w3) / Math.max(.001, w1 + w2 + w3);
+    const h = AH * (.04 + .5 * e * (.82 + .18 * Math.sin(o * 3 + i * .7)));
+    cx.fillStyle = grads[p < .34 ? 0 : (p < .7 ? 1 : 2)];
     cx.beginPath();
-    cx.moveTo(WPTS[0], WPTS[1]);
-    for (let k = 1; k < n; k++) cx.lineTo(WPTS[k * 2], WPTS[k * 2 + 1]);
-    cx.strokeStyle = rgba(col, .07 + .3 * e + .2 * hit);
-    cx.lineWidth = w.lw * (1 + .55 * f + .45 * hit);
-    cx.stroke();
-  }
-  /* пылинки: вспыхивают от удара баса и уплывают вверх — тот же ритм, что и гребни */
-  if (hit > .5 && parts.length < 34) {
-    parts.push({x: Math.random() * AW, y: AH * (.3 + .5 * Math.random()),
-                r: .8 + Math.random() * 2.2, v: 6 + Math.random() * 26 * (.4 + bass),
-                a: .5 + Math.random() * .5, c: PALG[Math.floor(Math.random() * 3)]});
-  }
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const p = parts[i];
-    p.y -= p.v * dt;
-    p.a -= dt * .34;
-    if (p.a <= .02 || p.y < -6) { parts.splice(i, 1); continue; }
-    cx.fillStyle = rgba(p.c, p.a * .5);
-    cx.beginPath();
-    cx.arc(p.x, p.y, p.r, 0, 6.2832);
+    if (cx.roundRect) cx.roundRect(i * bw + bw * .16, AH - h, bw * .68, h + 14, bw * .34);
+    else cx.rect(i * bw + bw * .16, AH - h, bw * .68, h + 14);
     cx.fill();
-  }
-  /* спектр по нижней кромке экрана */
-  {
-    const N = 40, bw = AW / N;
-    for (let i = 0; i < N; i++) {
-      const p = i / (N - 1);
-      const w1 = Math.max(0, 1 - Math.abs(p - .12) / .3);
-      const w2 = Math.max(0, 1 - Math.abs(p - .5) / .34);
-      const w3 = Math.max(0, 1 - Math.abs(p - .88) / .32);
-      const e = (bass * w1 + mid * w2 + hi * w3) / Math.max(.001, w1 + w2 + w3);
-      const h = AH * (.015 + .28 * e * (.8 + .2 * Math.sin(seed * 3 + i * .7)));
-      cx.fillStyle = rgba(p < .34 ? PALG[0] : (p < .7 ? PALG[1] : PALG[2]), .04 + .13 * e);
-      cx.beginPath();
-      if (cx.roundRect) cx.roundRect(i * bw + 2, AH - h, bw - 4, h + 12, 8);
-      else cx.rect(i * bw + 2, AH - h, bw - 4, h + 12);
-      cx.fill();
-    }
   }
   cx.globalCompositeOperation = "source-over";
 }
