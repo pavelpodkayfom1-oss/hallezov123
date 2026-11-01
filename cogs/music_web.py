@@ -369,7 +369,7 @@ PAGE_HTML = r"""
   --g1:#4b3a8f; --g2:#2e6b6b; --g3:#7a3f52;   /* эти три цвета берёт с обложки трека */
   --accent:var(--g1);
   --gold:#e6c384; --gold-soft:rgba(230,195,132,.42);
-  --pulse:0; --hit:0;   /*page: живой уровень полос и удар баса, подставляет скрипт*/
+  --pulse:0; --hit:0; --mid:0; --hi:0;   /*page: живой уровень полос и удар баса, подставляет скрипт*/
   --r-hero:30px 10px 30px 10px; --r-card:22px 8px 22px 8px; --r-soft:18px;
   --r-pill:999px; --r-chip:12px 4px 12px 4px; --r-circ:50%;
   --beat:1.15s;   /* такт фона: страница подставляет значение из ручки «Темп» */
@@ -890,6 +890,70 @@ a.send{text-decoration:none;display:inline-flex;align-items:center;gap:8px}
   .brand span{display:none}
   .band .nm{font-size:.6rem}
 }
+
+/* ═════════ бит-слой: всё светится и пульсирует в такт музыке ═════════
+   включается только пока у трека есть настоящий анализ (body.amb-on).
+   --pulse бас · --mid середина · --hi верха · --hit удар баса (0…1).
+   свечение сделано прозрачностью, а не анимацией размытия: дёшево для телефона */
+body.amb-on .sky{opacity:calc(.22 + .4 * var(--hit))}
+body.amb-on .veil{opacity:calc(1 - .45 * var(--hit))}
+body.amb-on .mesh{opacity:calc(.4 + .6 * var(--hit))}
+body.amb-on .hero::before,body.amb-on .dock::before{
+  opacity:calc(.4 + .5 * var(--pulse) + .22 * var(--hit));
+  transform:scale(calc(1 + .12 * var(--pulse) + .08 * var(--hit)))}
+
+/* большие плашки: контур вспыхивает цветом обложки на каждом ударе */
+body.amb-on .hero,body.amb-on .deck,body.amb-on .dock,body.amb-on .order,
+body.amb-on .eq,body.amb-on .mini{
+  outline:2px solid color-mix(in srgb,var(--accent) calc(var(--hit) * 85%),transparent);
+  outline-offset:-1px}
+
+/* кнопки, ручки, вкладки, поля: цветная рамка и свечение, яркость = удар баса */
+body.amb-on :is(.ctrl,.icon-btn,.tab,.mini-btn,.star,.vol,.field,.seg,.knob,.send){position:relative}
+body.amb-on :is(.ctrl,.icon-btn,.tab,.mini-btn,.star,.vol,.field,.seg,.knob,.send)::after{
+  content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;
+  border:1px solid var(--accent);
+  box-shadow:0 0 16px 1px var(--accent),inset 0 0 12px -4px var(--accent);
+  opacity:calc(.92 * var(--hit) + .16 * var(--pulse));will-change:opacity}
+/* три ручки пульта играют каждая со своей полосой: бас, середина, верха */
+.knob{--k:var(--hit)}
+#k-bass{--k:var(--pulse)}
+#k-mid{--k:var(--mid)}
+#k-high{--k:var(--hi)}
+body.amb-on #k-bass::after{opacity:calc(.08 + 1.1 * var(--pulse))}
+body.amb-on #k-mid::after{opacity:calc(.08 + 1.1 * var(--mid))}
+body.amb-on #k-high::after{opacity:calc(.08 + 1.3 * var(--hi))}
+
+/* ползунки: сам кружок светится в такт своей полосе */
+body.amb-on .range::-webkit-slider-thumb{
+  background:color-mix(in srgb,var(--text) calc(100% - 45% * var(--k,var(--hit))),var(--accent));
+  box-shadow:0 0 0 calc(2px + 5px * var(--k,var(--hit))) color-mix(in srgb,var(--accent) 45%,transparent),
+             0 0 calc(8px + 22px * var(--k,var(--hit))) var(--accent)}
+body.amb-on .range::-moz-range-thumb{
+  background:color-mix(in srgb,var(--text) calc(100% - 45% * var(--k,var(--hit))),var(--accent));
+  box-shadow:0 0 calc(8px + 22px * var(--k,var(--hit))) var(--accent)}
+
+/* большая кнопка play, обложка, заголовок, пластинка, точка «в эфире» */
+body.amb-on .big{filter:drop-shadow(0 0 calc(6px + 30px * var(--hit)) var(--accent));
+  scale:calc(1 + .09 * var(--hit))}
+body.amb-on .art{scale:calc(1 + .035 * var(--hit));
+  box-shadow:0 30px 70px -30px #000,0 0 0 1px var(--line) inset,
+             0 0 calc(14px + 80px * var(--pulse) + 30px * var(--hit)) calc(1px + 6px * var(--hit)) var(--accent)}
+body.amb-on .brand,body.amb-on .top .pill{filter:drop-shadow(0 1px 6px rgba(0,0,0,.65))}
+body.amb-on .title{text-shadow:0 0 calc(10px + 40px * var(--hit)) var(--accent)}
+/* подписи цвета обложки на ударе светлеют, иначе тонут в такой же вспышке */
+body.amb-on .lab{color:color-mix(in srgb,var(--accent) calc(100% - 85% * var(--hit)),#fff)}
+body.amb-on .brand b{background-image:linear-gradient(96deg,var(--text),color-mix(in srgb,var(--accent) calc(100% - 85% * var(--hit)),#fff) 55%,var(--text))}
+body.amb-on .vinyl .lbl{filter:brightness(calc(1 + .6 * var(--hit))) saturate(1.5)}
+body.amb-on .pill.live i{transform:scale(calc(1 + 1.1 * var(--hit)));
+  box-shadow:0 0 calc(4px + 24px * var(--hit)) rgba(87,224,168,.85)}
+
+/* полоса перемотки, столбики эквалайзера, включённые тумблеры */
+body.amb-on .track-bar i{filter:brightness(calc(1 + .5 * var(--hit)));
+  box-shadow:0 0 calc(8px + 34px * var(--pulse)) 0 var(--accent)}
+body.amb-on .band .meter i{filter:saturate(1.4) brightness(calc(1 + .35 * var(--hit)));
+  box-shadow:0 0 calc(10px + 44px * var(--pulse)) -1px var(--accent)}
+body.amb-on .switch[aria-checked="true"] i{box-shadow:0 0 calc(10px + 24px * var(--hit)) -4px var(--accent)}
 </style>
 </head>
 <body>
@@ -1197,6 +1261,16 @@ function toast(text, bad) {
 
 /* ── свет от обложки: три цвета правят фоном, гранями и подсветкой ── */
 let PAL = [[75, 58, 143], [46, 107, 107], [122, 63, 82]];   // rgb три пятна фона
+/* те же цвета, но насыщеннее и не темнее порога: на ударе фон играет ярче обложки */
+function boostColor(c) {
+  const m = (c[0] + c[1] + c[2]) / 3;
+  let o = c.map((v) => Math.max(0, Math.min(255, Math.round((m + (v - m) * 1.55) * 1.15))));
+  const mx = Math.max(o[0], o[1], o[2]);
+  if (mx > 0 && mx < 120) o = o.map((v) => Math.min(255, Math.round(v * 120 / mx)));
+  return o;
+}
+let PALB = PAL.map(boostColor);
+let rings = [], prevHit = 0;   // волны от обложки: рождаются на каждом ударе баса
 function toRgb(c) {
   const m = /^#([0-9a-f]{6})$/i.exec(c || "");
   if (m) { const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
@@ -1221,6 +1295,7 @@ function ambient(colors) {
   root.setProperty("--accent", pick(0, "#8f7bff"));
   // холст рисует те же цвета, что и стили: считываем их из тех же значений
   PAL = vals.map((c, i) => toRgb(c) || PAL[i]);
+  PALB = PAL.map(boostColor);
 }
 
 /* ═════════ опрос плеера ═════════ */
@@ -1461,55 +1536,112 @@ function blob(cx, x, y, r, col, alpha) {
   cx.arc(x, y, r, 0, 6.2832);
   cx.fill();
 }
+function artOrigin() {
+  const a = document.querySelector(".art");
+  if (!a) return [AW * .3, AH * .4];
+  const r = a.getBoundingClientRect();
+  return [(r.left + r.width / 2) / Math.max(1, innerWidth) * AW,
+          (r.top + r.height / 2) / Math.max(1, innerHeight) * AH];
+}
 function paintAmb(dt, t) {
   const cx = ambCx;
   cx.clearRect(0, 0, AW, AH);
   cx.globalCompositeOperation = "lighter";
   const bass = LIVE.l, mid = LIVE.m, hi = LIVE.h, hit = LIVE.hit;
   const seed = t / 1000;
-  /* три пятна: бас поднимает и расширяет, середина кружит, верх добавляет яркости */
+  const edge = hit - prevHit > .12;   // фронт удара: тут рождаются волны и искры
+  prevHit = hit;
+  /* пять пятен света: бас поднимает и раздувает, середина кружит, верх добавляет яркости,
+     два угловых пятна вспыхивают от самого удара — отсюда «цвета играют» */
   blob(cx, AW * (.22 + .07 * Math.sin(seed * .21)),
-           AH * (.3 + .09 * Math.cos(seed * .17) - .12 * bass),
-           AW * (.34 + .3 * bass + .07 * hit), PAL[0], .16 + .3 * bass + .1 * hi);
+           AH * (.3 + .09 * Math.cos(seed * .17) - .14 * bass),
+           AW * (.38 + .42 * bass + .16 * hit), PALB[0], .22 + .5 * bass + .18 * hi + .2 * hit);
   blob(cx, AW * (.76 + .06 * Math.cos(seed * .13)),
-           AH * (.42 + .08 * Math.sin(seed * .19) - .08 * mid),
-           AW * (.26 + .22 * mid), PAL[1], .12 + .26 * mid);
+           AH * (.42 + .08 * Math.sin(seed * .19) - .1 * mid),
+           AW * (.3 + .32 * mid), PALB[1], .16 + .42 * mid);
   blob(cx, AW * (.5 + .12 * Math.sin(seed * .11)),
            AH * (.86 - .06 * Math.cos(seed * .23)),
-           AW * (.22 + .2 * hi + .06 * hit), PAL[2], .1 + .24 * hi);
+           AW * (.26 + .3 * hi + .1 * hit), PALB[2], .14 + .4 * hi);
+  if (hit > .02) {
+    blob(cx, AW * .06, AH * .08, AW * (.2 + .3 * hit), PALB[2], .38 * hit);
+    blob(cx, AW * .96, AH * .94, AW * (.2 + .3 * hit), PALB[1], .38 * hit);
+    /* общая вспышка от обложки: мягкая и короткая, чтобы не слепила */
+    const o = artOrigin();
+    blob(cx, o[0], o[1], AW * (.3 + .4 * hit), PALB[0], Math.min(.34, .3 * hit * hit + .06 * hit));
+  }
+  if (edge) {
+    const o = artOrigin();
+    if (rings.length < 5) {
+      rings.push({x: o[0], y: o[1], r: AW * .05, a: Math.min(1, .55 + hit * .5),
+                  c: PALB[Math.floor(Math.random() * 3)]});
+    }
+    for (let k = 0; k < 12 && parts.length < 90; k++) {
+      const ang = Math.random() * 6.2832, sp = 20 + Math.random() * 60 * (.5 + bass);
+      parts.push({x: o[0], y: o[1], r: 1 + Math.random() * 2.6, a: .8 + Math.random() * .2,
+                  vx: Math.cos(ang) * sp, v: Math.sin(ang) * sp, c: PALB[Math.floor(Math.random() * 3)]});
+    }
+  }
+  /* волны от обложки */
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const g = rings[i];
+    g.r += dt * AW * (.55 + .5 * bass);
+    g.a -= dt * 1.25;
+    if (g.a <= .02) { rings.splice(i, 1); continue; }
+    cx.strokeStyle = rgba(g.c, g.a * .6);
+    cx.lineWidth = 1.5 + 7 * g.a;
+    cx.beginPath();
+    cx.arc(g.x, g.y, g.r, 0, 6.2832);
+    cx.stroke();
+  }
   /* вертикальные световые волны: их высота = настоящая энергия полосы */
   cx.lineCap = "round";
   for (let b = 0; b < 3; b++) {
     const e = [bass, mid, hi][b];
     if (e < .02) continue;
-    const col = PAL[b];
+    const col = PALB[b];
     cx.beginPath();
     for (let x = 0; x <= AW; x += 12) {
       const ph = x / AW * 6.283 + seed * (.6 + b * .35);
-      const y = AH * (.62 - b * .12) - Math.sin(ph) * AH * (.05 + .16 * e)
-                - Math.sin(ph * 2.3 + seed) * AH * .02 * e;
+      const y = AH * (.62 - b * .12) - Math.sin(ph) * AH * (.05 + .2 * e)
+                - Math.sin(ph * 2.3 + seed) * AH * .03 * e;
       if (x === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
     }
     const g = cx.createLinearGradient(0, AH * .2, 0, AH);
     g.addColorStop(0, rgba(col, 0));
-    g.addColorStop(.6, rgba(col, .1 + .3 * e));
+    g.addColorStop(.6, rgba(col, .16 + .5 * e));
     g.addColorStop(1, rgba(col, 0));
     cx.strokeStyle = g;
-    cx.lineWidth = 1.2 + 5 * e;
+    cx.lineWidth = 2 + 9 * e;
     cx.stroke();
   }
-  /* пылинки: вспыхивают от удара баса и медленно опускаются */
-  if (hit > .5 && parts.length < 34) {
+  /* спектр по нижней кромке экрана: те же три полосы, разложенные по ширине */
+  {
+    const N = 40, bw = AW / N;
+    for (let i = 0; i < N; i++) {
+      const p = i / (N - 1);
+      const w1 = Math.max(0, 1 - Math.abs(p - .12) / .3);
+      const w2 = Math.max(0, 1 - Math.abs(p - .5) / .34);
+      const w3 = Math.max(0, 1 - Math.abs(p - .88) / .32);
+      const e = (bass * w1 + mid * w2 + hi * w3) / Math.max(.001, w1 + w2 + w3);
+      const h = AH * (.02 + .3 * e * (.8 + .2 * Math.sin(seed * 3 + i * .7)));
+      cx.fillStyle = rgba(p < .34 ? PALB[0] : (p < .7 ? PALB[1] : PALB[2]), .12 + .24 * e);
+      cx.fillRect(i * bw + 1, AH - h, bw - 2, h);
+    }
+  }
+  /* искры: вспыхивают от удара баса, разлетаются от обложки и тянутся вверх */
+  if (hit > .4 && parts.length < 90) {
     parts.push({x: Math.random() * AW, y: AH * (.3 + .5 * Math.random()),
-                r: .8 + Math.random() * 2.2, v: 6 + Math.random() * 26 * (0.4 + bass),
-                a: .5 + Math.random() * .5, c: PAL[Math.floor(Math.random() * 3)]});
+                r: 1 + Math.random() * 3, v: 6 + Math.random() * 30 * (0.4 + bass), vx: 0,
+                a: .6 + Math.random() * .4, c: PALB[Math.floor(Math.random() * 3)]});
   }
   for (let i = parts.length - 1; i >= 0; i--) {
     const p = parts[i];
     p.y -= p.v * dt;
+    p.x += (p.vx || 0) * dt;
+    if (p.vx) p.vx *= 1 - Math.min(1, dt * 1.8);
     p.a -= dt * .34;
-    if (p.a <= .02 || p.y < -6) { parts.splice(i, 1); continue; }
-    cx.fillStyle = rgba(p.c, p.a * .5);
+    if (p.a <= .02 || p.y < -6 || p.y > AH + 6) { parts.splice(i, 1); continue; }
+    cx.fillStyle = rgba(p.c, p.a * .85);
     cx.beginPath();
     cx.arc(p.x, p.y, p.r, 0, 6.2832);
     cx.fill();
@@ -1533,7 +1665,7 @@ function paintViz(t) {
             Math.max(.001, w1 + w2 + w3);
     const wob = .86 + .14 * Math.sin(seed * 3.4 + i * .7);
     const h = Math.max(2, e * wob * H * .94 + 2);
-    const col = p < .34 ? PAL[0] : (p < .7 ? PAL[1] : PAL[2]);
+    const col = p < .34 ? PALB[0] : (p < .7 ? PALB[1] : PALB[2]);
     const g = cx.createLinearGradient(0, H - h, 0, H);
     g.addColorStop(0, rgba(col, .95));
     g.addColorStop(1, rgba(col, .22));
@@ -1545,10 +1677,18 @@ function paintViz(t) {
     cx.fill();
   }
 }
+const VAR_NAMES = ["--pulse", "--mid", "--hi", "--hit"], varLast = [-1, -1, -1, -1];
 function setVars() {
+  /* --pulse = бас, --mid = середина, --hi = верха, --hit = удар баса.
+     пишем только то, что заметно изменилось: меньше пересчётов стилей на телефоне */
   const root = document.documentElement.style;
-  root.setProperty("--pulse", LIVE.l.toFixed(3));
-  root.setProperty("--hit", LIVE.hit.toFixed(3));
+  const v = [LIVE.l, LIVE.m, LIVE.h, LIVE.hit];
+  for (let i = 0; i < 4; i++) {
+    if (Math.abs(v[i] - varLast[i]) > .006 || (v[i] === 0 && varLast[i] !== 0)) {
+      varLast[i] = v[i];
+      root.setProperty(VAR_NAMES[i], v[i].toFixed(3));
+    }
+  }
 }
 function eqLive() {
   const fx = (S && S.fx) || {};
