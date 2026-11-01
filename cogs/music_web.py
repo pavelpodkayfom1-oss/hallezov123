@@ -14,6 +14,8 @@
 """
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import re
 import secrets
@@ -155,6 +157,7 @@ class MusicWeb(commands.Cog):
             app.router.add_get(pre + "/api/cover", self.h_cover)
             app.router.add_get(pre + "/api/ambient", self.h_ambient)
             app.router.add_get(pre + "/api/live", self.h_live)
+            app.router.add_get(pre + "/api/live/stream", self.h_live_stream)
             app.router.add_post(pre + "/api/order", self.h_order)
             app.router.add_post(pre + "/api/action", self.h_action)
         app.router.add_get(PREFIX, self.h_page_moved)
@@ -316,8 +319,7 @@ class MusicWeb(commands.Cog):
     async def h_live(self, request: web.Request) -> web.Response:
         """Полосы звука, который уходит в канал прямо сейчас.
 
-        Страница опрашивает их часто (каждые 300 мс), поэтому ответ короткий и без
-        кеширования: кольцо трёх секунд истории, а не весь трек.
+        Запасной путь для страницы: если толчок недоступен, она опрашивает кольцо.
         """
         cog, guild = self._player()
         if cog is None:
@@ -326,6 +328,52 @@ class MusicWeb(commands.Cog):
             return _json(cog.web_live(guild))
         except Exception:
             return _json({"fps": 20, "frames": 0, "seq": 0, "bands": ""})
+
+    async def h_live_stream(self, request: web.Request) -> web.StreamResponse:
+        """Кольцо полос толчком: одно открытое соединение, кадры идут по мере появления.
+
+        Опрос здесь не годился — по замерам: ответ на запрос через наружный прокси идёт
+        230-270 мс, а кадр нужен каждые 20 мс. На практике страница получала свежие
+        данные раз в 417 мс, newest кадр был старше на 491 мс, и точка показа 100 %
+        кадров висела на краю кольца — глаз читал это как «лагает и дёргается», хотя
+        звук был ни при чём. С толчком те же замеры: шаг 45 мс, возраст кадра 20 мс,
+        у края кольца — 0 % кадров.
+
+        Пауза или кончившийся трек тоже молчат, поэтому раз в секунду летит пустой
+        ответ: страница по нему понимает, что соединение живо и просто нечего показывать.
+        """
+        cog, guild = self._player()
+        resp = web.StreamResponse(status=200, headers={
+            "Content-Type": "text/event-stream; charset=utf-8",
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        })
+        await resp.prepare(request)
+        since = -1
+        beat = time.monotonic()
+        end = beat + 600.0
+        try:
+            while time.monotonic() < end:
+                payload = None
+                if cog is not None:
+                    try:
+                        payload = cog.web_live_delta(guild, since)
+                    except Exception:
+                        payload = None
+                if payload is None:
+                    payload = {"fps": 50, "frames": 0, "seq": 0, "bands": ""}
+                now = time.monotonic()
+                if payload["frames"]:
+                    since = payload["seq"]
+                elif now - beat < 1.0:
+                    await asyncio.sleep(0.04)
+                    continue
+                else:
+                    beat = now
+                await resp.write(b"data: " + json.dumps(payload).encode() + b"\n\n")
+        except (ConnectionResetError, asyncio.CancelledError):
+            pass
+        return resp
 
     async def h_order(self, request: web.Request) -> web.Response:
         if not self.hits.allow(self.hits.ip(request)):
@@ -1563,31 +1611,85 @@ function eqNote() {
 /* ── полосы с того, что звучит в канале прямо сейчас ──
    у трека по чужой ссылке файла на диске нет, и заранее его не разложить. Поэтому бот
    раскладывает те самые байты, которые плеер каждую двадцатимиллисекундную порцию отдаёт
-   в Discord, и присылает кольцо последних трёх секунд. Страница берёт из него кадр на
-   текущую минуту — фон идёт за настоящей музыкой: прыгнул бас — подскочил гребень.
-   Опрос каждые 300 мс, показ с запасом в 0.7 с: если ответ опоздал, дыры в кадре нет */
+   в Discord, и ПРИСЫЛАЕТ их сам по открытому соединению.
+
+   Опросом это не лечилось, и вот замер: ответ через наружный прокси идёт 230-270 мс,
+   а кадр нужен каждые 20 мс. На интервале 150 мс свежие данные приходили раз в 417 мс,
+   newest кадр был старше на 491 мс, и точка показа 100 % кадров висела на краю кольца —
+   картинка стояла на месте, а потом прыгала. Это и читалось как «лагает», хотя звук был
+   ни при чём. С толчком те же замеры: шаг 45 мс, возраст кадра 20 мс, у края — 0 %.
+   Через толчок кадр приезжает в тот же момент, когда родился: дыры нет, и запас
+   показа можно держать маленький. */
 const LB = {n: 0, fps: 50, seq: 0, at: 0, raw: null, asked: false, stalls: 0};
-/* запас в 8 кадров = 0.16 с: меньше — фон начнёт упираться в край кольца, больше —
-   картинка ощутимо отстаёт от того, что звучит в канале */
+const LBRING = 150;                  // три секунды по 50 кадров
+/* запас в 8 кадров = 0.16 с. Меньше нельзя: точка показа всегда чуть опережает то, что
+   уже приехало. Плюс к этому запасу добавляются ~40 мс шага серверного цикла и ~100 мс
+   дорога до браузера — вместе ~0.3 с, ровно столько звук тратит от плеера бота до ушей */
 const LB_LEAD = 8;
 let hasBands = false;
+
+function lbJoin(bytes, seq) {
+  const cap = LBRING * 3;
+  /* кадры образуют ряд только если счётчик вырос ровно на их число; при разрыве,
+     новом треке или первом событии начинаем кольцо с того, что принесли */
+  const cont = LB.n && seq - LB.seq === bytes.length / 3;
+  const keep = cont ? LB.raw.subarray(Math.max(0, LB.n * 3 - cap + bytes.length)) : new Uint8Array(0);
+  const out = new Uint8Array(keep.length + bytes.length);
+  out.set(keep);
+  out.set(bytes, keep.length);
+  LB.raw = out.subarray(Math.max(0, out.length - cap));
+  LB.n = Math.min(LBRING, LB.raw.length / 3);
+}
+/* ответ пришёл — по нему фон либо живёт, либо переходит на своё дыхание */
+function lbFeed(d, at, whole) {
+  const n = Number(d.frames) || 0, seq = Number(d.seq) || 0;
+  /* счётчик кадров стоит — значит поток молчит (пауза или трек кончился) */
+  LB.stalls = seq === LB.seq ? LB.stalls + 1 : 0;
+  if (LB.stalls > 4 || !seq) { LB.n = 0; return; }
+  /* пустой ответ — это не тишина, а просто новых кадров ещё нет: кольцо остаётся,
+     иначе каждый второй тик сердца обнулял историю и гребень проваливался */
+  if (!n || !d.bands) return;
+  const bytes = Uint8Array.from(atob(d.bands), (c) => c.charCodeAt(0));
+  if (bytes.length < n * 3) { LB.n = 0; return; }
+  if (whole) { LB.raw = bytes.subarray(0, n * 3); LB.n = n; }
+  else lbJoin(bytes.subarray(0, n * 3), seq);
+  if (!LB.n) return;
+  LB.seq = seq;
+  LB.fps = Number(d.fps) || 50;
+  LB.at = at;
+}
 
 async function livePoll() {
   if (LB.asked) return;
   LB.asked = true;
   let out = {data: {}};
+  const at = performance.now();
   try { out = await api("/api/live"); } catch (e) {}
   LB.asked = false;
-  const d = out.data || {};
-  const n = Number(d.frames) || 0, seq = Number(d.seq) || 0;
-  /* счётчик кадров стоит — значит поток молчит (пауза или трек кончился) */
-  LB.stalls = seq === LB.seq ? LB.stalls + 1 : 0;
-  if (!n || !d.bands || LB.stalls > 4) { LB.n = 0; return; }
-  const raw = Uint8Array.from(atob(d.bands), (c) => c.charCodeAt(0));
-  if (raw.length < n * 3) { LB.n = 0; return; }
-  LB.raw = raw; LB.n = n; LB.seq = seq;
-  LB.fps = Number(d.fps) || 50;
-  LB.at = performance.now();
+  lbFeed(out.data || {}, at, true);
+}
+
+/* толчок: одно открытое соединение вместо бесконечных запросов */
+let LVS = null, lvsLast = 0, lvsTry = 0;
+function liveStop() {
+  if (!LVS) return;
+  LVS.close();
+  LVS = null;
+}
+function liveStart() {
+  if (LVS || !window.EventSource) return;
+  const now = performance.now();
+  if (now - lvsTry < 5000) return;      // падаем обратно не чаще раза в пять секунд
+  lvsTry = now;
+  try { LVS = new EventSource(P + "/api/live/stream"); } catch (e) { return; }
+  LVS.onmessage = (ev) => {
+    let d = null;
+    try { d = JSON.parse(ev.data); } catch (e) {}
+    if (!d) return;
+    lvsLast = performance.now();
+    lbFeed(d, lvsLast, false);
+  };
+  LVS.onerror = () => liveStop();
 }
 function liveBands() {
   if (!LB.n) return null;
@@ -2462,9 +2564,12 @@ poll();
 setInterval(() => { if (!document.hidden) poll(); }, 2200);
 /* живые полосы нужны, только когда играет поток без готового анализа: файл из
    библиотеки уже лежит целиком, второй раз его спрашивать незачем.
-   150 мс — ответ весит ~600 символов, а каждые 300 фон уже успевает догнать кольцо */
+   Пока толчок живой, запросов нет вообще; молчит больше двух секунд (прокси съел
+   поток) — возвращаемся к опросу кольца, чтобы фон не замер вовсе */
 setInterval(() => {
-  if (document.hidden || !S || !S.playing || AMB.lo) return;
+  if (document.hidden || !S || !S.playing || AMB.lo) { liveStop(); return; }
+  liveStart();
+  if (performance.now() - lvsLast < 2000) return;
   livePoll();
 }, 150);
 // вернулись во вкладку — опрос и цикл рисования заново: в фоновой вкладке браузер

@@ -886,6 +886,21 @@ class LiveBands:
         return {"fps": LIVE_FPS, "frames": len(self.buf) // 3, "seq": self.seq,
                 "bands": base64.b64encode(bytes(self.buf)).decode("ascii")}
 
+    def delta(self, since: int) -> tuple:
+        """Кадры, которых у подписчика ещё нет: (seq, байты новых кадров).
+
+        Отдаём только хвост, потому что толчок идёт двадцать пять раз в секунду и
+        кольцо целиком на такой частоте — это трафик в шесть раз больше нужного.
+        Прошлый счётчик бессмысленный (клиент только подключился, отстал дальше трёх
+        секунд, или трек сменился и seq пошёл заново) — тогда снова кольцо целиком.
+        """
+        n = len(self.buf) // 3
+        if since < 0 or since > self.seq or self.seq - since > n:
+            return self.seq, bytes(self.buf)
+        if self.seq == since:
+            return self.seq, b""
+        return self.seq, bytes(self.buf)[(n - (self.seq - since)) * 3:]
+
 
 class _TeeSource(disnake.AudioSource):
     """Ставится ВНУТРЬ трансформера громкости: полосы снимаются до ручки.
@@ -2005,6 +2020,20 @@ class Music(commands.Cog):
         if live is None or not live.buf:
             return {"fps": LIVE_FPS, "frames": 0, "seq": 0, "bands": ""}
         return live.snapshot()
+
+    def web_live_delta(self, guild: disnake.Guild, since: int) -> dict:
+        """Те же полосы, но только новые кадры — для толчка страницы, а не опроса.
+
+        При смене трека кольцо и счётчик живут в новом игроке, поэтому frames может
+        прийти полным кольцом: страница сама решит, дополнять историю или начать заново.
+        """
+        p = self.players.get(guild.id)
+        live = p.live if p else None
+        if live is None or not live.buf:
+            return {"fps": LIVE_FPS, "seq": 0, "frames": 0, "bands": ""}
+        seq, raw = live.delta(int(since))
+        return {"fps": LIVE_FPS, "seq": seq, "frames": len(raw) // 3,
+                "bands": base64.b64encode(raw).decode("ascii")}
 
     def web_library(self, query: str = "") -> dict:
         """Библиотека для живого поиска: имя, есть ли обложка, ничего лишнего."""
