@@ -356,26 +356,24 @@ PAGE_HTML = r"""
 <html lang="ru"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#09090c">
-<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#07070b">
 <meta name="robots" content="noindex">
 <title>HALLEZ · музыка семьи</title>
 <style nonce="__NONCE__">
-/* ═════════ база: графит и стекло; свет берётся с обложки, но всегда приглушённый ═════════ */
+/* ═════════ база: тёмный графит, свет берётся с обложки текущего трека ═════════ */
 :root{
-  color-scheme:dark;
-  --ink:#09090c; --ink-2:#0e0e13; --ink-3:#15151b;
-  --text:#f3f2ef; --text-2:rgba(243,242,239,.68); --text-3:rgba(243,242,239,.42);
-  --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.14);
-  --glass:rgba(255,255,255,.04); --glass-2:rgba(255,255,255,.075);
-  --g1:#5a5f8f; --g2:#3f6f78; --g3:#7a5a6b;   /* эти цвета берёт с обложки трека скрипт */
-  --accent:#a9acdc;
-  --gold:#e2c58f;
-  --ok:#6fd3a8; --warn:#e3b86a;
-  --pulse:0; --hit:0; --mid:0; --hi:0;   /* живой уровень полос и удар баса, подставляет скрипт */
-  --r-xl:30px; --r-lg:24px; --r-md:18px; --r-sm:14px; --r-pill:999px;
+  --ink:#07070b; --ink-2:#0c0c12; --ink-3:#12121a;
+  --text:#f4f1ea; --text-2:rgba(244,241,234,.68); --text-3:rgba(244,241,234,.42);
+  --line:rgba(244,241,234,.10); --line-2:rgba(244,241,234,.18);
+  --glass:rgba(255,255,255,.045); --glass-2:rgba(255,255,255,.075);
+  --g1:#4b3a8f; --g2:#2e6b6b; --g3:#7a3f52;   /* эти три цвета берёт с обложки трека */
+  --accent:var(--g1);
+  --gold:#e6c384; --gold-soft:rgba(230,195,132,.42);
+  --pulse:0; --hit:0;   /*page: живой уровень полос и удар баса, подставляет скрипт*/
+  --r-hero:30px 10px 30px 10px; --r-card:22px 8px 22px 8px; --r-soft:18px;
+  --r-pill:999px; --r-chip:12px 4px 12px 4px; --r-circ:50%;
   --beat:1.15s;   /* такт фона: страница подставляет значение из ручки «Темп» */
-  --shadow:0 30px 70px -34px rgba(0,0,0,.85);
+  --shadow:0 24px 60px rgba(0,0,0,.55);
   --ease:cubic-bezier(.22,.61,.36,1);
 }
 *{box-sizing:border-box}
@@ -383,31 +381,35 @@ html,body{margin:0;padding:0}
 html{scroll-behavior:smooth}
 body{
   min-height:100vh; background:var(--ink); color:var(--text);
-  font-family:"Inter","SF Pro Display","Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
-  font-size:16px; line-height:1.5; overflow-x:hidden;
+  font-family:"Segoe UI",Inter,system-ui,-apple-system,"Play",sans-serif;
+  font-size:16px; line-height:1.45; overflow-x:hidden;
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
 }
 button,input,select,textarea{font:inherit;color:inherit}
-button{cursor:pointer;border:0;background:none;padding:0}
+button{cursor:pointer;border:0;background:none}
 img{display:block;max-width:100%}
-h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.02em}
-:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 80%,#fff);outline-offset:3px;border-radius:10px}
+h1,h2,h3{margin:0;font-weight:800;letter-spacing:-.01em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
 
 /* ═════════ живой фон ═════════
    главный вариант — холст `#amb`: страница получает настоящие полосы частот
-   текущего трека и рисует мягкий свет по ним. пока анализа нет (поток, чужая ссылка,
-   первый кадр) — работает запасной вариант: три размытых пятна дышат тактом пульта */
+   текущего трека и рисует свет по ним. пока анализа нет (поток, чужая ссылка,
+   первый кадр) — работает запасной вариант: три мягких пятна дышат тактом пульта */
 .amb{position:fixed;inset:0;z-index:0;width:100%;height:100%;pointer-events:none;
   opacity:0;transition:opacity 1.2s var(--ease)}
 body.amb-on .amb{opacity:1}
-.sky{position:fixed;inset:-25%;z-index:0;pointer-events:none;filter:blur(100px) saturate(1.05);
-  opacity:.5;transform-origin:50% 55%;animation:breathe var(--beat) var(--ease) infinite}
-body.amb-on .sky{opacity:.16;animation:none}
-@keyframes breathe{0%{transform:scale(1);opacity:.4}
-  12%{transform:scale(1.04) translateY(-1vh);opacity:.62}
-  100%{transform:scale(1);opacity:.4}}
+body.amb-on .sky{opacity:.22;animation:none}
+body.amb-on .hero::before,body.amb-on .dock::before{animation:none;
+  opacity:calc(.32 + .26 * var(--pulse))}
+body.amb-on .mesh{opacity:calc(.34 + .3 * var(--hit))}
+.sky{position:fixed;inset:-25%;z-index:0;pointer-events:none;filter:blur(80px) saturate(1.25);
+  transform-origin:50% 55%;animation:breathe var(--beat) var(--ease) infinite}
+@keyframes breathe{0%{transform:scale(1);opacity:.84}
+  12%{transform:scale(1.042) translateY(-1vh);opacity:1}
+  100%{transform:scale(1);opacity:.84}}
 .orb{position:absolute;border-radius:50%;opacity:.55;
-  transition:background-color 1600ms var(--ease);will-change:transform}
+  transition:background-color 1600ms var(--ease),opacity 900ms linear,transform 900ms var(--ease);
+  will-change:transform}
 .orb-a{width:52vmax;height:52vmax;left:-8vmax;top:-6vmax;background-color:var(--g1);
   animation:float-a 26s ease-in-out infinite}
 .orb-b{width:44vmax;height:44vmax;right:-6vmax;top:22vmax;background-color:var(--g2);
@@ -418,338 +420,359 @@ body.amb-on .sky{opacity:.16;animation:none}
 @keyframes float-b{0%,100%{transform:translate3d(0,0,0) scale(1.06)}50%{transform:translate3d(-5vw,-6vh,0) scale(.94)}}
 @keyframes float-c{0%,100%{transform:translate3d(0,0,0) scale(.96)}50%{transform:translate3d(3vw,-5vh,0) scale(1.1)}}
 .veil{position:fixed;inset:0;z-index:1;pointer-events:none;
-  background:radial-gradient(120% 90% at 50% -10%,rgba(0,0,0,0) 35%,rgba(4,4,7,.72) 100%)}
+  background:radial-gradient(125% 95% at 50% -8%,rgba(0,0,0,0) 52%,rgba(0,0,0,.5) 100%)}
+.mesh{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.5;
+  background:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px) 0 0/100% 46px,
+             linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px) 0 0/46px 100%;
+  mask:radial-gradient(130% 80% at 50% 0%,#000 8%,transparent 72%)}
 body.paused .sky{animation:none}
-body.calm .sky{opacity:.3;animation:none}
+body.calm .sky,body.calm .mesh{opacity:.34;animation:none}
 body.calm .orb{animation:none}
 body.calm .amb{opacity:0}
 
-/* ═════════ знаки: один набор векторных иконок на все кнопки ═════════ */
+/* ═════════ знаки: один набор иконок на все кнопки ═════════
+   цветные эмодзи на премиальной странице выглядят дёшево, поэтому здесь только
+   векторные знаки одним штрихом — они красятся током кнопки и не текут на телефоне */
 .ic{width:1.15em;height:1.15em;display:block;fill:none;stroke:currentColor;stroke-width:1.7;
   stroke-linecap:round;stroke-linejoin:round;pointer-events:none;
   transition:transform .25s var(--ease)}
-.ic.sol{fill:currentColor;stroke-width:1.8}
+.ic.full{fill:currentColor;stroke:none}
+.big .ic{width:1.5rem;height:1.5rem}
 .ctrl .ic{width:1.2rem;height:1.2rem}
 .icon-btn .ic,.star .ic{width:17px;height:17px}
-.big .ic{width:1.7rem;height:1.7rem;fill:currentColor;stroke-width:2.6}
-.mini .ctrl .ic{width:1.05rem;height:1.05rem}
-.vol .ic,.order .grow .ic{width:17px;height:17px;color:var(--text-3)}
+.mini .ctrl .ic{width:15px;height:15px}
+.vol .ic,.order .grow .ic,.tabs .ic{width:17px;height:17px;color:var(--text-3)}
+.knob h3 .ic{width:14px;height:14px;vertical-align:-2px;display:inline-block;margin-right:5px}
 .sprite{position:absolute;width:0;height:0;overflow:hidden}
-button:hover .ic{transform:scale(1.07)}
+button:hover .ic{transform:scale(1.08)}
 
-/* ═════════ стеклянные поверхности ═════════ */
-.glass{position:relative;
-  background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.022));
-  border:1px solid var(--line);
-  -webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15);
-  box-shadow:var(--shadow),inset 0 1px 0 rgba(255,255,255,.06)}
+/* ═════════ остеклённые поверхности ═════════ */
+.glass{position:relative;background:var(--glass);border:1px solid var(--line);
+  -webkit-backdrop-filter:blur(20px) saturate(1.2);backdrop-filter:blur(20px) saturate(1.2);
+  box-shadow:var(--shadow)}
+.glass::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(150deg,rgba(255,255,255,.10),rgba(255,255,255,0) 42%);opacity:.7}
+/* тонкое золотое ребро сверху: стекло без него читается серым пластом */
+.glass::before{content:"";position:absolute;left:8%;right:8%;top:0;height:1px;border-radius:99px;
+  pointer-events:none;background:linear-gradient(90deg,transparent,var(--gold-soft),transparent);
+  opacity:.55}
 
 /* ═════════ шапка ═════════ */
-.wrap{position:relative;z-index:2;max-width:1160px;margin:0 auto;padding:22px clamp(14px,3vw,28px) 140px}
-.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:4px 0 22px}
-.brand{display:flex;align-items:baseline;gap:10px;font-weight:700;letter-spacing:.18em;
-  text-transform:uppercase;font-size:.8rem}
-.brand b{color:var(--text)}
-.brand span{color:var(--text-3);letter-spacing:.14em;font-weight:500}
-.pill{display:inline-flex;align-items:center;gap:8px;padding:7px 14px 7px 12px;border-radius:var(--r-pill);
+.wrap{position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:20px clamp(14px,3vw,28px) 132px}
+.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:6px 0 20px}
+.brand{display:flex;align-items:baseline;gap:10px;font-weight:800;letter-spacing:.16em;
+  text-transform:uppercase;font-size:.82rem}
+.brand b{background:linear-gradient(96deg,var(--text),var(--accent) 55%,var(--text));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  background-size:220% 100%;animation:sheen 9s var(--ease) infinite}
+@keyframes sheen{0%,100%{background-position:0% 0}50%{background-position:100% 0}}
+.brand span{color:var(--text-3);letter-spacing:.1em;font-weight:600}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:7px 14px;border-radius:var(--r-pill);
   border:1px solid var(--line);background:var(--glass);font-size:.78rem;color:var(--text-2);
   white-space:nowrap;transition:border-color .3s,color .3s}
-.pill i{width:7px;height:7px;border-radius:50%;background:var(--text-3);flex:none}
-.pill.live{color:var(--text)}
-.pill.live i{background:var(--ok);animation:beat 2.4s infinite}
-.pill.idle i{background:var(--warn)}
-body.amb-on .pill.live i{animation:none;transform:scale(calc(1 + .6 * var(--hit)));
-  box-shadow:0 0 calc(2px + 12px * var(--hit)) rgba(111,211,168,.6)}
-@keyframes beat{0%{box-shadow:0 0 0 0 rgba(111,211,168,.45)}70%{box-shadow:0 0 0 8px rgba(111,211,168,0)}
- 100%{box-shadow:0 0 0 0 rgba(111,211,168,0)}}
-@keyframes ping{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 50%,transparent)}
- 70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--text-3);flex:none}
+.pill.live i{background:#57e0a8;box-shadow:0 0 0 0 rgba(87,224,168,.55);animation:beat 2.4s infinite}
+.pill.live{color:var(--text);border-color:rgba(87,224,168,.4)}
+.pill.idle i{background:#e6b45c}
+/* настоящий indicator: на живом фоне точка дышит ударом баса, а не таймером */
+body.amb-on .pill.live i{animation:none;transform:scale(calc(1 + .75 * var(--hit)));
+  box-shadow:0 0 calc(2px + 16px * var(--hit)) rgba(87,224,168,.5)}
+@keyframes beat{0%{box-shadow:0 0 0 0 rgba(87,224,168,.5)}70%{box-shadow:0 0 0 9px rgba(87,224,168,0)}
+ 100%{box-shadow:0 0 0 0 rgba(87,224,168,0)}}
 .top .spacer{flex:1 1 24px}
-.field{display:flex;align-items:center;gap:8px;padding:4px 14px;border-radius:var(--r-pill);
-  border:1px solid var(--line);background:rgba(255,255,255,.035);
-  transition:border-color .3s,box-shadow .3s}
-.field:focus-within{border-color:color-mix(in srgb,var(--accent) 55%,transparent);
-  box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 12%,transparent)}
-.field label{font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--text-3)}
-.text-input{background:transparent;border:0;outline:0;min-width:0;width:clamp(96px,18vw,160px);
-  padding:7px 2px;font-size:.88rem}
-.text-input:focus-visible{outline:none}
+.field{display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;border-radius:var(--r-pill);
+  border:1px solid var(--line);background:rgba(0,0,0,.28);transition:border-color .3s,box-shadow .3s}
+.field:focus-within{border-color:var(--accent);box-shadow:0 0 22px -6px var(--g1)}
+.field label{font-size:.7rem;text-transform:uppercase;letter-spacing:.12em;color:var(--text-3)}
+.text-input{background:transparent;border:0;min-width:0;width:clamp(84px,18vw,150px);
+  padding:6px 2px;font-size:.86rem}
 .text-input::placeholder{color:var(--text-3)}
-.icon-btn{width:40px;height:40px;border-radius:var(--r-sm);border:1px solid var(--line);
-  background:var(--glass);color:var(--text-2);display:grid;place-items:center;
-  transition:transform .2s var(--ease),border-color .3s,color .3s,background-color .3s}
-.icon-btn:hover{color:var(--text);background:var(--glass-2);border-color:var(--line-2);transform:translateY(-1px)}
-.icon-btn:active{transform:scale(.93)}
-.icon-btn.on{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);
-  border-color:color-mix(in srgb,var(--accent) 36%,transparent)}
+.icon-btn{width:38px;height:38px;border-radius:var(--r-circ);border:1px solid var(--line);
+  background:var(--glass);color:var(--text-2);display:grid;place-items:center;font-size:1rem;
+  transition:transform .2s var(--ease),border-color .3s,color .3s,box-shadow .3s,background-color .3s}
+.icon-btn:hover{color:var(--gold);border-color:rgba(230,195,132,.45);transform:translateY(-2px);
+  box-shadow:0 10px 26px -14px var(--g1),0 0 20px -8px var(--gold-soft)}
+.icon-btn:active{transform:scale(.9)}
+.icon-btn.on{color:var(--ink);background:var(--text);border-color:transparent;
+  box-shadow:0 0 0 5px rgba(244,241,234,.07)}
 @media (max-width:640px){.top{gap:10px}.brand{font-size:.74rem}}
 
 /* ═════════ главный экран: сейчас играет ═════════ */
-.hero{border-radius:var(--r-xl);padding:clamp(18px,3vw,34px);display:grid;gap:clamp(22px,3.4vw,40px);
-  grid-template-columns:minmax(240px,370px) minmax(0,1fr);align-items:center;overflow:hidden;
-  transform-style:preserve-3d;transition:transform .3s var(--ease),border-color .6s}
-.hero::before{content:"";position:absolute;left:-8%;top:8%;width:60%;height:84%;border-radius:50%;
-  background:var(--accent);filter:blur(110px);opacity:.14;z-index:-1;pointer-events:none;
-  transition:background-color 1400ms var(--ease);animation:halo var(--beat) var(--ease) infinite}
-@keyframes halo{0%{opacity:.11;transform:scale(1)}12%{opacity:.22;transform:scale(1.04)}
-  100%{opacity:.11;transform:scale(1)}}
+.hero{border-radius:var(--r-hero);padding:clamp(18px,3vw,32px);display:grid;gap:clamp(20px,3vw,34px);
+  grid-template-columns:minmax(240px,360px) minmax(0,1fr);align-items:center;
+  border-left:2px solid var(--accent);
+  transform-style:preserve-3d;transition:transform .3s var(--ease),border-color .8s linear}
+.hero::before{content:"";position:absolute;left:-6%;top:12%;width:56%;height:76%;border-radius:50%;
+  background:var(--accent);filter:blur(90px);opacity:.4;z-index:-1;
+  transition:background-color 1400ms var(--ease);
+  animation:halo var(--beat) var(--ease) infinite}
+@keyframes halo{0%{opacity:.36;transform:scale(1)}12%{opacity:.52;transform:scale(1.045)}
+  100%{opacity:.36;transform:scale(1)}}
 body.paused .hero::before,body.calm .hero::before{animation:none}
-.art{position:relative;border-radius:var(--r-lg);overflow:hidden;aspect-ratio:1;
+.art{position:relative;border-radius:26px 8px 26px 8px;overflow:hidden;aspect-ratio:1;
   background:linear-gradient(150deg,var(--ink-3),var(--ink-2));
   box-shadow:0 30px 70px -30px #000,0 0 0 1px var(--line) inset,
-             0 0 calc(6px + 40px * var(--pulse)) -8px color-mix(in srgb,var(--accent) 70%,transparent);
-  transition:transform .4s var(--ease)}
-.hero:hover .art{transform:translateY(-3px) scale(1.01)}
+             0 0 calc(6px + 34px * var(--pulse)) -4px var(--accent);
+  transition:transform .4s var(--ease),box-shadow .6s}
+.hero:hover .art{transform:translateY(-4px) scale(1.012)}
 .art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;
   transition:opacity .7s var(--ease)}
 .art img.show{opacity:1}
 .art .mark{position:absolute;inset:0;display:grid;place-items:center;color:var(--text-3)}
-.art .mark .ic{width:26%;height:26%;opacity:.4}
+.art .mark .ic{width:26%;height:26%;opacity:.45}
 .art.flip{animation:flip .7s var(--ease)}
 @keyframes flip{0%{transform:rotateY(0) scale(1);opacity:.2}55%{transform:rotateY(-9deg) scale(1.03)}
  100%{transform:rotateY(0) scale(1);opacity:1}}
 
-/* ── винил: пластинка за обложкой. угол считает скрипт по позиции трека ── */
+/* ── винил: пластинка за обложкой. угол поворота считает скрипт по позиции трека,
+      поэтому на паузе диск докручивается плавно и встаёт, а не замирает рубком ── */
 .artwrap{position:relative}
 .vinyl{position:absolute;top:5%;right:-9%;width:90%;height:90%;z-index:0;pointer-events:none;
   opacity:0;transition:opacity .8s var(--ease)}
 body.has-vinyl .vinyl{opacity:1}
 .vinyl .disc{position:absolute;inset:0;border-radius:50%;
-  background:repeating-radial-gradient(circle at 50% 50%,rgba(255,255,255,.05) 0 1px,
+  background:repeating-radial-gradient(circle at 50% 50%,rgba(244,241,234,.06) 0 1px,
     rgba(0,0,0,0) 1px 4px),
-    conic-gradient(from 0deg,rgba(255,255,255,.11),rgba(255,255,255,0) 22%,
-    rgba(255,255,255,.05) 48%,rgba(255,255,255,0) 72%,rgba(255,255,255,.11)),
-    radial-gradient(circle at 50% 50%,#1d1d25 0 30%,#0c0c11 31% 100%);
-  box-shadow:0 26px 50px -26px #000,0 0 0 1px rgba(255,255,255,.08)}
+    conic-gradient(from 0deg,rgba(255,255,255,.13),rgba(255,255,255,0) 22%,
+    rgba(255,255,255,.06) 48%,rgba(255,255,255,0) 72%,rgba(255,255,255,.13)),
+    radial-gradient(circle at 50% 50%,#20202a 0 30%,#0e0e13 31% 100%);
+  box-shadow:0 26px 50px -26px #000,0 0 0 1px rgba(244,241,234,.1)}
 .vinyl .lbl{position:absolute;left:50%;top:50%;width:34%;height:34%;margin:-17% 0 0 -17%;
-  border-radius:50%;background:radial-gradient(circle at 40% 35%,var(--accent),rgba(0,0,0,.6) 130%);
-  box-shadow:0 0 0 3px rgba(0,0,0,.45)}
+  border-radius:50%;background:radial-gradient(circle at 40% 35%,var(--accent),rgba(0,0,0,.62) 130%);
+  box-shadow:0 0 0 3px rgba(0,0,0,.45);transition:background-color 1.2s var(--ease)}
 .vinyl .hole{position:absolute;left:50%;top:50%;width:3.6%;height:3.6%;margin:-1.8% 0 0 -1.8%;
-  border-radius:50%;background:var(--ink);box-shadow:0 0 0 1px rgba(255,255,255,.22)}
+  border-radius:50%;background:var(--ink);box-shadow:0 0 0 1px rgba(244,241,234,.25)}
 .artwrap .art{position:relative;z-index:1}
-.rays{position:absolute;inset:auto 0 -1px 0;height:40%;opacity:.45;pointer-events:none;
+.rays{position:absolute;inset:auto 0 -1px 0;height:44%;opacity:.5;pointer-events:none;
   background:linear-gradient(to top,var(--ink),transparent)}
-.lab{font-size:.68rem;text-transform:uppercase;letter-spacing:.2em;font-weight:700;
-  color:color-mix(in srgb,var(--accent) 85%,#fff);transition:color .9s linear}
-.title{font-size:clamp(1.7rem,4.6vw,3rem);line-height:1.05;margin:10px 0 8px;font-weight:800;
-  letter-spacing:-.03em;overflow-wrap:anywhere;
-  transition:opacity .5s var(--ease),transform .5s var(--ease)}
+.lab{font-size:.68rem;text-transform:uppercase;letter-spacing:.2em;color:var(--accent);
+  font-weight:700;transition:color .9s linear}
+.title{font-size:clamp(1.5rem,4.4vw,2.7rem);line-height:1.06;margin:8px 0 6px;
+  overflow-wrap:anywhere;transition:opacity .5s var(--ease),transform .5s var(--ease)}
 .title.out{opacity:0;transform:translateY(10px)}
-.hero .who{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--text-2);font-size:.92rem}
+.who{display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--text-2);font-size:.9rem}
 #trackWho{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
-#trackWho b{color:var(--text);font-weight:600}
+.who b{color:var(--text);font-weight:600}
 .dot{width:4px;height:4px;border-radius:50%;background:var(--text-3);flex:none}
 .time{font-variant-numeric:tabular-nums;color:var(--text-3);font-size:.84rem}
 
-/* ── спектр: холст, который рисует настоящие полосы трека ── */
-.viz{display:block;width:100%;height:58px;margin:18px 0 6px;pointer-events:none}
-body.paused .viz{opacity:.55}
+/* ── спектр: холст, который рисует настоящие полосы трека (низ/середина/верх).
+      пока бот их не посчитал — столбики стоят на минимуме, а не пляшут вразнобой ── */
+.viz{display:block;width:100%;height:58px;margin:16px 0 8px;pointer-events:none}
+body.paused .viz{opacity:.6}
 body.calm .viz{height:26px}
 
-/* ── перемотка ── */
-.seek{display:flex;align-items:center;gap:12px;margin-top:8px}
-.seek .t{font-size:.78rem;color:var(--text-2);font-variant-numeric:tabular-nums;min-width:44px}
+
+/* ── перемотка: полоса + ручка, всё по-настоящему ── */
+.seek{display:flex;align-items:center;gap:12px;margin-top:10px}
+.seek .t{font-size:.78rem;color:var(--text-2);font-variant-numeric:tabular-nums;min-width:44px;
+  letter-spacing:.02em}
 .seek .t.big-t{font-size:.98rem;color:var(--text);font-weight:700}
 .seek .t-end{text-align:right}
-.track-bar{position:relative;flex:1 1 0;height:30px;display:flex;align-items:center;min-width:0}
-.track-bar::before{content:"";position:absolute;left:0;right:0;height:5px;border-radius:99px;
-  background:rgba(255,255,255,.10)}
-.track-bar i{position:absolute;left:0;height:5px;border-radius:99px;width:0;
-  background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 55%,var(--ink)),var(--accent));
-  transition:width .25s linear;
-  box-shadow:0 0 calc(4px + 16px * var(--pulse)) -3px var(--accent)}
-
-/* ── ползунки: тонкая дорожка с заливкой цветом обложки (заливку считает скрипт) ── */
-.range{--a:0%;--b:0%;-webkit-appearance:none;appearance:none;background:transparent;margin:0;
-  width:100%;height:24px;display:block;cursor:pointer}
-.range::-webkit-slider-runnable-track{height:4px;border-radius:99px;
-  background:linear-gradient(90deg,transparent var(--a),var(--accent) var(--a),var(--accent) var(--b),transparent var(--b)),rgba(255,255,255,.14)}
-.range::-moz-range-track{height:4px;border-radius:99px;
-  background:linear-gradient(90deg,transparent var(--a),var(--accent) var(--a),var(--accent) var(--b),transparent var(--b)),rgba(255,255,255,.14)}
-.range::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-6px;border-radius:50%;
-  background:#fff;border:0;cursor:grab;
-  box-shadow:0 2px 8px rgba(0,0,0,.55),0 0 0 0 rgba(255,255,255,.12);
-  transition:box-shadow .25s,transform .2s}
-.range::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:#fff;border:0;cursor:grab;
-  box-shadow:0 2px 8px rgba(0,0,0,.55)}
-.range:hover::-webkit-slider-thumb{box-shadow:0 2px 8px rgba(0,0,0,.55),0 0 0 6px rgba(255,255,255,.10);
-  transform:scale(1.08)}
-.range:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.16)}
+.track-bar{position:relative;flex:1 1 0;height:34px;display:flex;align-items:center;min-width:0}
+.track-bar::before{content:"";position:absolute;left:0;right:0;height:6px;border-radius:99px;
+  background:rgba(244,241,234,.10);box-shadow:0 0 0 1px rgba(0,0,0,.3) inset}
+.track-bar i{position:absolute;left:0;height:6px;border-radius:99px;width:0;overflow:hidden;
+  background:linear-gradient(90deg,var(--g2),var(--accent));transition:width .25s linear,
+  background-color .9s linear;
+  box-shadow:0 0 calc(6px + 20px * var(--pulse)) -2px var(--accent)}
+/* бегущий блик внутри заполненной части: полоса не выглядит прогретой плашкой */
+.track-bar i::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent) 0 0/45% 100% no-repeat;
+  animation:glide 2.8s linear infinite}
+@keyframes glide{from{background-position:-45% 0}to{background-position:145% 0}}
+body.paused .track-bar i::after{animation-play-state:paused}
+.range{position:absolute;left:0;width:100%;height:34px;-webkit-appearance:none;appearance:none;
+  background:transparent;margin:0}
+.range::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+  background:var(--text);border:2px solid var(--ink);cursor:grab;
+  box-shadow:0 0 0 0 var(--accent),0 0 14px -2px var(--gold-soft);transition:box-shadow .25s,transform .2s}
+.range:hover::-webkit-slider-thumb{box-shadow:0 0 0 7px rgba(244,241,234,.08),
+  0 0 18px -2px var(--gold-soft);transform:scale(1.12)}
+.range:active::-webkit-slider-thumb{cursor:grabbing;transform:scale(1.2)}
+.range::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--text);
+  border:2px solid var(--ink);cursor:grab}
 .range.off{pointer-events:none;opacity:.4}
-/* перемотка: дорожку рисует `.track-bar`, сам ползунок только ловит нажатия */
-.track-bar .range{position:absolute;left:0;top:0;height:30px}
-.track-bar .range::-webkit-slider-runnable-track{height:30px;background:transparent}
-.track-bar .range::-moz-range-track{height:30px;background:transparent}
-.track-bar .range::-webkit-slider-thumb{margin-top:7px}
 
-/* ── транспорт: мягкое стекло, один отклик на нажатие ── */
-.row{display:flex;align-items:center;gap:14px 20px;flex-wrap:wrap;margin-top:22px}
-.grp{display:flex;align-items:center;gap:8px}
-.big{width:68px;height:68px;border-radius:50%;display:grid;place-items:center;
-  color:var(--ink);flex:none;position:relative;
-  background:linear-gradient(180deg,#ffffff,#e5e3de);
-  box-shadow:0 14px 34px -14px color-mix(in srgb,var(--accent) 85%,transparent),inset 0 1px 0 rgba(255,255,255,.8);
+/* ── транспорт: стекло, мягкое золотое свечение, единый отклик на нажатие ── */
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:20px}
+.big{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;
+  color:var(--ink);flex:none;position:relative;overflow:hidden;
+  background:radial-gradient(125% 125% at 30% 20%,#fffdf8,var(--text) 46%,#d8d2c4 100%);
+  box-shadow:0 18px 42px -18px var(--accent),0 0 0 1px rgba(244,241,234,.22) inset;
   transition:transform .2s var(--ease),box-shadow .35s}
-.big:hover{transform:scale(1.05)}
-.big:active{transform:scale(.94)}
-.ctrl{width:46px;height:46px;border-radius:16px;display:grid;place-items:center;
-  border:1px solid var(--line);color:var(--text-2);flex:none;
-  background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
-  transition:transform .2s var(--ease),color .25s,border-color .25s,background-color .3s}
-.ctrl:hover{color:var(--text);border-color:var(--line-2);background:rgba(255,255,255,.09);transform:translateY(-1px)}
-.ctrl:active{transform:scale(.93)}
-.ctrl.on{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent);
-  background:color-mix(in srgb,var(--accent) 16%,transparent)}
-.vol{display:flex;align-items:center;gap:10px;height:46px;padding:0 16px;border-radius:var(--r-pill);
-  flex:1 1 170px;min-width:0;max-width:300px;
-  border:1px solid var(--line);background:rgba(255,255,255,.03);transition:border-color .3s}
-.vol:hover{border-color:var(--line-2)}
-.vol .range{flex:1 1 60px;width:auto;min-width:50px}
+/* блик, который едет по кнопке: та же техника, что на большой стеклянной посуде */
+.big::after{content:"";position:absolute;inset:-40%;pointer-events:none;
+  background:linear-gradient(105deg,transparent 42%,rgba(255,255,255,.75) 50%,transparent 58%);
+  transform:translateX(-70%);transition:transform .7s var(--ease)}
+.big:hover::after{transform:translateX(70%)}
+.big:hover{transform:scale(1.06);
+  box-shadow:0 26px 54px -20px var(--accent),0 0 0 7px rgba(230,195,132,.1),
+  0 0 30px -8px var(--gold-soft)}
+.big:active{transform:scale(.93)}
+.ctrl{width:46px;height:46px;border-radius:var(--r-circ);display:grid;place-items:center;
+  border:1px solid var(--line);background:var(--glass);color:var(--text-2);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  transition:transform .2s var(--ease),color .25s,border-color .25s,background-color .6s,box-shadow .3s}
+.ctrl:hover{color:var(--gold);border-color:rgba(230,195,132,.4);transform:translateY(-2px);
+  box-shadow:0 12px 26px -16px var(--g1),0 0 22px -10px var(--gold-soft)}
+.ctrl:active{transform:translateY(0) scale(.92)}
+.ctrl.on{color:var(--ink);background:var(--text);border-color:transparent;
+  box-shadow:0 0 0 5px rgba(244,241,234,.06),0 14px 30px -18px var(--accent)}
+.ctrl small{font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;display:block}
+.vol{position:relative;display:flex;align-items:center;gap:9px;padding:7px 14px;border-radius:var(--r-pill);
+  border:1px solid var(--line);background:rgba(0,0,0,.26);transition:border-color .3s,box-shadow .3s}
+.vol:hover{border-color:rgba(230,195,132,.32);box-shadow:0 0 24px -14px var(--gold-soft)}
+.vol .range{position:relative;width:132px;height:24px}
+.vol .range::before{content:"";position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;
+  border-radius:99px;background:rgba(244,241,234,.16)}
 .vol b{font-size:.78rem;color:var(--text-2);min-width:38px;text-align:right;font-variant-numeric:tabular-nums}
-.kbd{margin-top:16px;font-size:.72rem;color:var(--text-3);text-align:right}
-.kbd kbd{border:1px solid var(--line);border-radius:6px;padding:1px 6px;background:rgba(255,255,255,.04);
+.kbd{margin-left:auto;font-size:.7rem;color:var(--text-3);letter-spacing:.04em}
+.kbd kbd{border:1px solid var(--line);border-radius:6px;padding:1px 6px;background:rgba(0,0,0,.3);
   font-family:inherit;font-size:.68rem;color:var(--text-2)}
 
 /* ═════════ пульт: ручки = фильтры ffmpeg, слышит весь канал ═════════ */
-.deck{border-radius:var(--r-xl);padding:clamp(18px,2.8vw,28px);margin-top:20px}
-.head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:16px;margin-bottom:18px;
-  border-bottom:1px solid var(--line)}
-.head h2{font-size:.78rem;text-transform:uppercase;letter-spacing:.18em;font-weight:700;margin-right:4px}
-.tag{font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-2);
-  border:1px solid var(--line);border-radius:var(--r-pill);padding:4px 11px;background:var(--glass)}
-.tag.who{color:color-mix(in srgb,var(--accent) 80%,#fff);
-  border-color:color-mix(in srgb,var(--accent) 35%,transparent);
-  background:color-mix(in srgb,var(--accent) 8%,transparent)}
-.head .reset{margin-left:auto;display:inline-flex;align-items:center;gap:7px;height:34px;padding:0 14px;
-  font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-2);
-  border:1px solid var(--line);border-radius:var(--r-pill);background:var(--glass);
-  transition:color .25s,border-color .25s,background-color .25s,transform .2s var(--ease)}
-.head .reset:hover{color:var(--text);background:var(--glass-2);border-color:var(--line-2)}
+.deck{border-radius:var(--r-card);padding:clamp(16px,2.6vw,26px);margin-top:22px;
+  border-right:2px solid var(--accent)}
+.head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:14px;
+  position:relative;margin-bottom:18px}
+.head::after{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;
+  background:linear-gradient(90deg,var(--line-2),transparent)}
+.head h2{font-size:.76rem;text-transform:uppercase;letter-spacing:.16em;font-weight:700}
+.tag{font-size:.64rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-2);
+  border:1px solid var(--line);border-radius:var(--r-pill);padding:3px 10px;background:var(--glass)}
+.tag.who{color:var(--accent);border-color:var(--accent)}
+.head .reset{margin-left:auto;display:inline-flex;align-items:center;gap:7px;
+  font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--text-3);border:1px solid var(--line);border-radius:var(--r-pill);padding:6px 14px;
+  transition:color .25s,border-color .25s,box-shadow .3s,transform .2s var(--ease)}
+.head .reset:hover{color:var(--gold);border-color:rgba(230,195,132,.4);
+  box-shadow:0 0 22px -10px var(--gold-soft)}
 .head .reset:active{transform:scale(.95)}
 .head .reset .ic{width:14px;height:14px}
-.knobs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-#k-filter,#k-echo{grid-column:span 2}
-.knob{position:relative;display:flex;flex-direction:column;gap:14px;padding:16px 16px 14px;
-  border-radius:var(--r-md);border:1px solid var(--line);background:rgba(255,255,255,.025);
-  transition:border-color .3s,background-color .3s}
-.knob:hover{background:rgba(255,255,255,.04);border-color:var(--line-2)}
-.knob h3{font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--text-3);
-  font-weight:700;display:flex;align-items:center;gap:7px}
-.knob h3 .ic{width:15px;height:15px}
-.knob .v{margin-left:auto;font-variant-numeric:tabular-nums;font-size:.76rem;color:var(--text);
-  letter-spacing:0;text-transform:none;font-weight:600}
+.knobs{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:14px}
+.knob{position:relative;display:flex;flex-direction:column;padding:14px 15px 16px;
+  border-radius:16px 6px 16px 6px;border:1px solid var(--line);
+  background:rgba(0,0,0,.24);transition:border-color .3s,transform .3s var(--ease),box-shadow .3s}
+.knob:hover{border-color:rgba(230,195,132,.3);transform:translateY(-3px);
+  box-shadow:0 18px 34px -24px #000,0 0 26px -18px var(--gold-soft)}
+.knob h3{font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--text-3);
+  font-weight:700;margin-bottom:8px;display:flex;align-items:center}
+.knob .v{float:right;margin-left:auto;font-variant-numeric:tabular-nums;font-size:.74rem;color:var(--text)}
+/* ручку прижимаем к нижнему краю плашки: карточки одной высоты, и пустота
+   между подписью и регулятором выглядит как место под пальцем, а не как дырка */
 .knob .range,.knob .seg,.knob .switch{margin-top:auto}
-.knob.live{border-color:color-mix(in srgb,var(--accent) 38%,transparent);
-  background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.knob .range{position:relative;width:100%;height:24px}
+.knob .range::before{content:"";position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;
+  border-radius:99px;background:rgba(244,241,234,.14)}
+.knob.live{border-color:var(--accent)}
 
-/* ── переключатель режима и эха ── */
-.seg{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:4px;border-radius:var(--r-sm);
-  border:1px solid var(--line);background:rgba(0,0,0,.25)}
-.seg button{padding:8px 6px;border-radius:10px;color:var(--text-3);font-size:.76rem;white-space:nowrap;
-  transition:color .25s,background-color .25s,box-shadow .3s,transform .2s var(--ease)}
+/* ── переключатель режима и эха: один стиль на оба ── */
+.seg{display:flex;gap:4px;flex-wrap:wrap;align-content:center;padding:4px;
+  border-radius:16px 6px 16px 6px;border:1px solid var(--line);background:rgba(0,0,0,.3)}
+.seg button{flex:1 1 0;min-width:44px;padding:7px 10px;border-radius:var(--r-pill);
+  border:1px solid transparent;background:transparent;color:var(--text-3);font-size:.72rem;
+  transition:color .25s,border-color .25s,background-color .25s,box-shadow .3s,transform .2s var(--ease)}
 .seg button:hover{color:var(--text)}
 .seg button:active{transform:scale(.95)}
 .seg button.on{color:var(--ink);background:var(--text);font-weight:700;
-  box-shadow:0 6px 16px -8px rgba(0,0,0,.7)}
-.switch{display:flex;align-items:center;gap:12px;width:100%;padding:4px 0;color:var(--text-2);
-  font-size:.82rem;transition:color .25s}
+  box-shadow:0 10px 22px -14px var(--accent)}
+.switch{display:flex;align-items:center;gap:10px;width:100%;padding:6px 4px;color:var(--text-2);
+  font-size:.78rem;transition:color .25s}
 .switch:hover{color:var(--text)}
-.switch i{position:relative;width:46px;height:28px;border-radius:99px;flex:none;
-  background:rgba(255,255,255,.10);border:1px solid var(--line);
-  transition:background-color .35s var(--ease),border-color .35s}
-.switch i::after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;
-  border-radius:50%;background:#fff;opacity:.7;box-shadow:0 2px 6px rgba(0,0,0,.45);
-  transition:transform .35s var(--ease),opacity .3s}
-.switch[aria-checked="true"] i{background:color-mix(in srgb,var(--accent) 72%,var(--ink));border-color:transparent}
-.switch[aria-checked="true"] i::after{transform:translateX(18px);opacity:1}
-.switch span{margin-left:auto;font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;
+.switch i{position:relative;width:46px;height:26px;border-radius:99px;flex:none;
+  background:rgba(0,0,0,.45);border:1px solid var(--line);
+  transition:background-color .35s var(--ease),border-color .35s,box-shadow .35s}
+.switch i::after{content:"";position:absolute;left:3px;top:3px;width:18px;height:18px;
+  border-radius:50%;background:var(--text-3);
+  transition:transform .35s var(--ease),background-color .35s}
+.switch[aria-checked="true"] i{background:var(--accent);border-color:transparent;
+  box-shadow:0 0 20px -6px var(--accent)}
+.switch[aria-checked="true"] i::after{transform:translateX(20px);background:var(--text)}
+.switch span{margin-left:auto;font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;
   color:var(--text-3)}
 
-/* ── эквалайзер: три полосы = те же срезы, что считает бот (≤160 / 160–1400 / >1400 Гц) ── */
-.eq{margin-top:12px;padding:18px 16px;border-radius:var(--r-md);border:1px solid var(--line);
-  background:rgba(255,255,255,.025)}
+/* ── эквалайзер: три полосы = те же срезы, что считает бот (≤160 / 160–1400 / >1400 Гц),
+      столбик растёт от настоящей энергии полосы, метка — от ручки в децибелах ── */
+.eq{margin-top:18px;padding:16px 15px;border-radius:18px 6px 18px 6px;border:1px solid var(--line);
+  background:rgba(0,0,0,.28)}
 .eq-head{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .eq-head h3{display:flex;align-items:center;gap:8px;
-  font-size:.68rem;text-transform:uppercase;letter-spacing:.14em;color:var(--text-3);font-weight:700}
-.eq-head h3 .ic{width:15px;height:15px}
+  font-size:.68rem;text-transform:uppercase;letter-spacing:.12em;color:var(--text-3);
+  font-weight:700}
 .eq-head .tag{margin-left:auto}
 .bands{display:flex;align-items:flex-end;gap:clamp(8px,2vw,16px);height:150px}
 .band{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:8px;height:100%}
 .band .meter{position:relative;flex:1 1 auto;width:min(100%,150px);border-radius:14px;
-  background:repeating-linear-gradient(to top,rgba(255,255,255,.06) 0 1px,transparent 1px 25%),
-    rgba(255,255,255,.05);
+  background:repeating-linear-gradient(to top,rgba(244,241,234,.07) 0 1px,transparent 1px 25%),
+    rgba(244,241,234,.08);
   overflow:hidden;box-shadow:0 0 0 1px var(--line) inset}
 .band .meter i{position:absolute;left:0;right:0;bottom:0;height:2%;border-radius:14px 14px 4px 4px;
-  background:linear-gradient(to top,color-mix(in srgb,var(--accent) 40%,var(--ink)),var(--accent));
+  background:linear-gradient(to top,var(--g3),var(--accent));
   transition:height .1s linear,background-color 1s var(--ease);
-  box-shadow:0 0 calc(4px + 18px * var(--pulse)) -2px var(--accent)}
+  box-shadow:0 0 calc(4px + 22px * var(--pulse)) -2px var(--accent)}
 .band .meter b{position:absolute;left:-2px;right:-2px;height:2px;border-radius:99px;
-  background:var(--text);opacity:.7;transition:bottom .3s var(--ease)}
+  background:var(--gold);opacity:.85;transition:bottom .3s var(--ease)}
 .band .lv{font-size:.66rem;color:var(--text-3);font-variant-numeric:tabular-nums;letter-spacing:.06em}
 .band .nm{font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text-2);
   text-align:center;line-height:1.2}
 .band .nm em{display:block;font-style:normal;color:var(--text-3);font-size:.6rem;letter-spacing:.06em}
 
 /* ═════════ вкладки и списки ═════════ */
-.tabs{display:flex;gap:4px;margin:28px 0 16px;position:sticky;top:10px;z-index:4;width:fit-content;
-  max-width:100%;overflow-x:auto;padding:5px;border-radius:20px;border:1px solid var(--line);
-  background:rgba(14,14,19,.62);-webkit-backdrop-filter:blur(18px) saturate(1.2);
-  backdrop-filter:blur(18px) saturate(1.2);scrollbar-width:none}
-.tabs::-webkit-scrollbar{display:none}
-.tab{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:15px;
-  color:var(--text-2);font-size:.84rem;white-space:nowrap;
-  transition:color .25s,background-color .25s,box-shadow .3s,transform .2s var(--ease)}
-.tab .ic{width:16px;height:16px;color:var(--text-3);transition:color .25s}
-.tab:hover{color:var(--text);background:rgba(255,255,255,.05)}
-.tab:active{transform:scale(.96)}
-.tab.on{color:var(--text);background:rgba(255,255,255,.10);box-shadow:inset 0 0 0 1px var(--line-2)}
-.tab.on .ic{color:var(--accent)}
-.tab em{font-style:normal;color:var(--text-3);font-size:.74rem;font-variant-numeric:tabular-nums}
-.tabs.flat{position:static;margin:16px 0 14px;background:rgba(0,0,0,.25);border-radius:16px}
-.tabs.flat .tab{font-size:.78rem;padding:7px 14px;border-radius:12px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:30px 0 16px;position:sticky;top:0;z-index:4;
+  padding:10px 0;background:linear-gradient(180deg,var(--ink) 62%,rgba(7,7,11,0));
+  -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.tab{padding:9px 18px;border-radius:var(--r-pill);border:1px solid var(--line);
+  background:var(--glass);color:var(--text-2);font-size:.82rem;white-space:nowrap;
+  transition:color .25s,border-color .25s,transform .2s var(--ease),box-shadow .3s,background-color .3s}
+.tab:hover{color:var(--gold);border-color:rgba(230,195,132,.35);transform:translateY(-2px);
+  box-shadow:0 0 24px -14px var(--gold-soft)}
+.tab:active{transform:translateY(0) scale(.96)}
+.tab.on{color:var(--ink);background:var(--text);border-color:transparent;font-weight:700;
+  box-shadow:0 14px 30px -18px var(--accent),0 0 0 5px rgba(244,241,234,.05)}
+.tab em{font-style:normal;color:var(--text-3);margin-left:7px;font-size:.74rem}
+.tab.on em{color:rgba(12,12,18,.55)}
 .pane{display:none}
 .pane.on{display:block;animation:rise .45s var(--ease)}
 @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-.cards{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr))}
-.card{border-radius:var(--r-md);padding:12px 14px;border:1px solid var(--line);
-  background:rgba(255,255,255,.03);display:flex;align-items:center;gap:12px;min-width:0;
-  transition:border-color .3s,background-color .3s,opacity .5s,transform .5s var(--ease),filter .5s}
-.card:hover{background:rgba(255,255,255,.055);border-color:var(--line-2)}
-.reveal{opacity:0;transform:translateY(16px);filter:blur(3px)}
+.cards{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(min(100%,318px),1fr))}
+.card{border-radius:var(--r-soft);padding:14px 16px;border:1px solid var(--line);
+  background:var(--glass);display:flex;align-items:center;gap:13px;min-width:0;
+  transition:transform .3s var(--ease),border-color .3s,box-shadow .3s,opacity .5s,filter .5s}
+.card:hover{transform:translateY(-3px);border-color:var(--line-2);
+  box-shadow:0 22px 44px -30px var(--g1)}
+.reveal{opacity:0;transform:translateY(18px);filter:blur(3px)}
 .reveal.in{opacity:1;transform:none;filter:none}
 .num{width:34px;flex:none;text-align:center;font-variant-numeric:tabular-nums;color:var(--text-3);
   font-size:.82rem}
-.num .ic{width:16px;height:16px;margin:0 auto}
 .card .txt{min-width:0;flex:1 1 auto}
 .card .txt strong{display:block;font-weight:600;font-size:.92rem;overflow-wrap:anywhere}
 .card .txt span{display:block;color:var(--text-3);font-size:.76rem;margin-top:2px}
-.card .acts{display:flex;gap:6px;flex:none;align-items:center}
-.mini-btn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 14px;
-  border-radius:var(--r-pill);border:1px solid var(--line);background:var(--glass);
-  color:var(--text-2);font-size:.76rem;font-weight:600;white-space:nowrap;
-  transition:color .25s,border-color .25s,background-color .25s,transform .2s var(--ease)}
+.card .acts{display:flex;gap:6px;flex:none}
+.mini-btn{padding:7px 13px;border-radius:var(--r-pill);border:1px solid var(--line);
+  color:var(--text-2);font-size:.74rem;background:rgba(0,0,0,.22);display:inline-flex;
+  align-items:center;gap:6px;transition:color .25s,border-color .25s,transform .2s,box-shadow .3s}
 .mini-btn .ic{width:14px;height:14px}
-.mini-btn:hover{color:var(--text);background:var(--glass-2);border-color:var(--line-2)}
+.mini-btn:hover{color:var(--gold);border-color:rgba(230,195,132,.4);transform:translateY(-1px);
+  box-shadow:0 0 22px -12px var(--gold-soft)}
 .mini-btn:active{transform:scale(.95)}
-.mini-btn.go{color:var(--text);background:color-mix(in srgb,var(--accent) 18%,transparent);
-  border-color:color-mix(in srgb,var(--accent) 34%,transparent)}
-.mini-btn.go:hover{background:color-mix(in srgb,var(--accent) 30%,transparent)}
-.star{width:34px;height:34px;border-radius:12px;border:1px solid var(--line);color:var(--text-3);
-  display:grid;place-items:center;transition:color .25s,border-color .25s,background-color .25s,transform .2s}
-.star:hover{color:var(--gold);border-color:rgba(226,197,143,.4);background:rgba(226,197,143,.06)}
+.mini-btn.go{background:var(--text);color:var(--ink);border-color:transparent;font-weight:700}
+.mini-btn.go:hover{color:var(--ink);box-shadow:0 12px 26px -16px var(--accent)}
+.star{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);color:var(--text-3);
+  display:grid;place-items:center;transition:color .25s,border-color .25s,transform .2s,box-shadow .3s}
+.star:hover{transform:scale(1.1);color:var(--gold);border-color:rgba(230,195,132,.45);
+  box-shadow:0 0 20px -8px var(--gold-soft)}
 .star:active{transform:scale(.9)}
-.star.on{color:var(--gold);border-color:rgba(226,197,143,.45);background:rgba(226,197,143,.10)}
-.star.on .ic{fill:currentColor}
-.now{width:9px;height:9px;border-radius:50%;flex:none;background:var(--accent);margin:0 12px 0 8px;
-  animation:ping 2.2s infinite}
+.star.on{color:var(--gold);border-color:rgba(240,207,122,.5)}
+.now{width:9px;height:9px;border-radius:50%;flex:none;background:var(--accent);
+  box-shadow:0 0 12px var(--accent);animation:beat 2.2s infinite}
 .bar-line{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
-.bar-line .grow{flex:1 1 200px;min-width:0;color:var(--text-2);font-size:.86rem}
-.hint{color:var(--text-3);font-size:.78rem;padding:11px 14px;border-radius:var(--r-sm);
-  border:1px dashed var(--line);background:rgba(255,255,255,.02);margin-top:14px}
+.bar-line .grow{flex:1 1 200px;min-width:0}
+.hint{color:var(--text-3);font-size:.78rem;padding:11px 14px;border-radius:var(--r-chip);
+  border:1px dashed var(--line);background:rgba(0,0,0,.22);margin-top:14px}
 .hint b{color:var(--text-2);font-weight:600}
 .empty{padding:34px 18px;text-align:center;color:var(--text-3);border:1px dashed var(--line);
-  border-radius:var(--r-md);background:rgba(255,255,255,.02)}
+  border-radius:var(--r-soft);background:rgba(0,0,0,.18)}
 .empty b{display:block;color:var(--text-2);font-size:1rem;margin-bottom:6px}
 .spin{width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);
   border-top-color:var(--accent);display:inline-block;vertical-align:-3px;
@@ -757,102 +780,76 @@ body.calm .viz{height:26px}
 @keyframes sp{to{transform:rotate(360deg)}}
 
 /* ═════════ заказ ═════════ */
-.order{border-radius:var(--r-xl);padding:clamp(18px,2.8vw,28px);margin-top:26px}
-.order form{display:grid;gap:12px;grid-template-columns:minmax(0,1fr) auto}
-.order .grow{display:flex;align-items:center;gap:10px;padding:0 18px;
-  border-radius:var(--r-pill);border:1px solid var(--line);background:rgba(255,255,255,.035);
-  transition:border-color .3s,box-shadow .3s}
-.order .grow:focus-within{border-color:color-mix(in srgb,var(--accent) 55%,transparent);
-  box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 12%,transparent)}
-.order input{flex:1 1 0;min-width:0;background:transparent;border:0;outline:0;padding:15px 0;font-size:.95rem}
-.order input::placeholder{color:var(--text-3)}
-.send{height:50px;padding:0 26px;border-radius:var(--r-pill);color:var(--ink);display:inline-flex;
+.order{border-radius:var(--r-hero);padding:clamp(16px,2.6vw,26px);margin-top:26px}
+.order form{display:grid;gap:12px;grid-template-columns:minmax(0,1fr) minmax(0,220px) auto}
+.order .grow{position:relative;display:flex;align-items:center;gap:10px;padding:0 14px;
+  border-radius:var(--r-soft);border:1px solid var(--line);background:rgba(0,0,0,.3)}
+.order .grow:focus-within{border-color:var(--accent);box-shadow:0 0 26px -10px var(--g1)}
+.order input{flex:1 1 0;min-width:0;background:transparent;border:0;padding:14px 0;font-size:.94rem}
+.send{padding:13px 28px;border-radius:var(--r-pill);color:var(--ink);display:inline-flex;
   align-items:center;justify-content:center;gap:9px;
-  background:linear-gradient(180deg,#ffffff,#e5e3de);
-  font-weight:700;letter-spacing:.01em;white-space:nowrap;
-  box-shadow:0 12px 28px -16px color-mix(in srgb,var(--accent) 90%,transparent),inset 0 1px 0 rgba(255,255,255,.8);
+  background:linear-gradient(140deg,#fffdf8,var(--text) 42%,#d7d1c3);
+  font-weight:800;letter-spacing:.04em;box-shadow:0 14px 32px -20px var(--accent);
   transition:transform .2s var(--ease),box-shadow .35s,opacity .2s}
-.send .ic{width:16px;height:16px;color:var(--ink);fill:currentColor}
-.send:hover{transform:translateY(-1px);
-  box-shadow:0 18px 36px -16px color-mix(in srgb,var(--accent) 100%,transparent),inset 0 1px 0 rgba(255,255,255,.8)}
+.send .ic{width:16px;height:16px;color:var(--ink)}
+.send:hover{transform:translateY(-2px);
+  box-shadow:0 24px 46px -20px var(--accent),0 0 0 6px rgba(230,195,132,.09),
+  0 0 26px -8px var(--gold-soft)}
 .send:active{transform:scale(.97)}
 .send[disabled]{opacity:.5;cursor:progress}
-a.send{text-decoration:none}
+@media (max-width:720px){.order form{grid-template-columns:minmax(0,1fr) auto}}
+.tabs.flat{position:static;background:none;padding:0;margin:16px 0 14px;backdrop-filter:none;
+  -webkit-backdrop-filter:none}
+.tabs.flat{gap:4px;width:fit-content;max-width:100%;padding:4px;border-radius:var(--r-pill);
+  border:1px solid var(--line);background:rgba(0,0,0,.3)}
+.tabs.flat .tab{font-size:.76rem;padding:7px 14px;border-color:transparent;background:transparent}
+.tabs.flat .tab:hover{transform:none}
+.tabs.flat .tab.on{background:var(--text)}
 
-/* ═════════ низ страницы: ссылка на музыку ═════════ */
-.dock{overflow:hidden;margin-top:26px;padding:clamp(20px,3vw,32px);border-radius:var(--r-xl)}
-.dock::before{content:"";position:absolute;right:-8%;top:-45%;width:52%;height:170%;border-radius:50%;
-  background:var(--accent);filter:blur(100px);opacity:.12;pointer-events:none;z-index:-1;
+/* ═════════ низ страницы: ссылка на музыку — крупно, одним движением ═════════ */
+.dock{position:relative;overflow:hidden;margin-top:30px;padding:clamp(18px,3vw,30px);
+  border-radius:var(--r-hero);border-bottom:2px solid var(--accent)}
+.dock::before{content:"";position:absolute;left:auto;right:-8%;top:-45%;width:52%;height:170%;border-radius:50%;
+  background:var(--accent);filter:blur(74px);opacity:.36;pointer-events:none;
   animation:halo var(--beat) var(--ease) infinite;transition:background-color 1400ms var(--ease)}
+body.amb-on .dock::before{transform:scale(calc(1 + .05 * var(--pulse)))}
 body.paused .dock::before,body.calm .dock::before{animation:none}
-.dock h2{font-size:clamp(1.1rem,2.6vw,1.45rem);margin:8px 0;position:relative}
+.dock h2{font-size:clamp(1.06rem,2.6vw,1.42rem);margin:6px 0 8px;position:relative}
 .dock p{margin:0 0 16px;color:var(--text-2);font-size:.9rem;max-width:60ch;position:relative}
 .addr{display:flex;align-items:center;gap:12px;min-width:0;position:relative;
-  padding:13px 16px;border-radius:var(--r-sm);border:1px solid var(--line);
-  background:rgba(0,0,0,.28);transition:border-color .3s}
-.addr:hover{border-color:var(--line-2)}
+  padding:13px 16px;border-radius:var(--r-pill);border:1px dashed var(--line-2);
+  background:rgba(0,0,0,.36);transition:border-color .3s}
+.addr:hover{border-color:var(--accent)}
 .addr em{font-style:normal;font-size:.66rem;text-transform:uppercase;letter-spacing:.14em;
   color:var(--text-3);flex:none}
 .addr span{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;font-size:.92rem;font-weight:600;
   color:var(--text);font-variant-numeric:tabular-nums}
 .dock-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px;position:relative}
-.dock-acts .mini-btn{height:50px;padding:0 20px;font-size:.82rem}
+a.send{text-decoration:none;display:inline-flex;align-items:center;gap:8px}
+.dock-acts .mini-btn{padding:12px 20px;font-size:.8rem}
 
 /* ═════════ мини-плеер и тост ═════════ */
-.mini{position:fixed;left:50%;transform:translate(-50%,140%);bottom:16px;z-index:6;
-  width:min(900px,calc(100vw - 24px));display:flex;align-items:center;gap:12px;
-  padding:10px 12px;border-radius:24px;
+.mini{position:fixed;left:50%;transform:translate(-50%,140%);bottom:18px;z-index:6;
+  width:min(940px,calc(100vw - 28px));display:flex;align-items:center;gap:12px;
+  padding:10px 14px;border-radius:22px 8px 22px 8px;
   transition:transform .5s var(--ease);pointer-events:none}
 .mini.up{transform:translate(-50%,0);pointer-events:auto}
-.mini .thumb{width:48px;height:48px;border-radius:14px;overflow:hidden;flex:none;
+.mini .thumb{width:46px;height:46px;border-radius:12px 4px 12px 4px;overflow:hidden;flex:none;
   background:var(--ink-3)}
 .mini .thumb img{width:100%;height:100%;object-fit:cover}
 .mini .txt{min-width:0;flex:1 1 auto}
-.mini .txt strong{display:block;font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .txt strong{display:block;font-size:.86rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mini .txt span{font-size:.72rem;color:var(--text-3)}
-.mini .ctrl{width:42px;height:42px;border-radius:14px}
+.mini .ctrl{width:40px;height:40px;font-size:.95rem}
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,26px);z-index:7;
-  padding:12px 20px;border-radius:var(--r-pill);background:rgba(28,28,35,.94);color:var(--text);
-  border:1px solid var(--line-2);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+  padding:12px 18px;border-radius:var(--r-pill);background:var(--text);color:var(--ink);
   font-size:.86rem;font-weight:600;opacity:0;pointer-events:none;max-width:min(92vw,560px);
   box-shadow:0 22px 44px -18px #000;transition:opacity .3s,transform .35s var(--ease)}
-.toast.bad{color:#ffd3d3;border-color:rgba(229,138,138,.4)}
+.toast.bad{background:#2b1216;color:#ffd9d9;border:1px solid rgba(255,120,120,.35)}
 .toast.up{opacity:1;transform:translate(-50%,0)}
-.skel{height:58px;border-radius:var(--r-md);background:linear-gradient(90deg,var(--glass),
+.skel{height:58px;border-radius:var(--r-soft);background:linear-gradient(90deg,var(--glass),
   var(--glass-2),var(--glass));background-size:220% 100%;animation:sk 1.3s linear infinite}
 @keyframes sk{to{background-position:-220% 0}}
-/* ссылка на музыку — плашка в шапке */
-.linkchip{display:flex;align-items:center;gap:6px;height:42px;padding:0 5px 0 14px;min-width:0;max-width:100%;
-  border-radius:var(--r-pill);border:1px solid var(--line);background:rgba(255,255,255,.04);
-  transition:border-color .3s}
-.linkchip:hover{border-color:var(--line-2)}
-.linkchip>.ic{width:16px;height:16px;color:var(--accent);flex:none}
-.linkchip .url{font-size:.82rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis;min-width:0;max-width:250px;padding:0 6px 0 2px}
-.chip-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;min-width:32px;
-  padding:0 11px;border-radius:var(--r-pill);color:var(--text-2);font-size:.76rem;font-weight:600;
-  background:rgba(255,255,255,.06);text-decoration:none;white-space:nowrap;
-  transition:color .25s,background-color .25s,transform .2s var(--ease)}
-.chip-btn .ic{width:15px;height:15px}
-.chip-btn:hover{color:var(--ink);background:var(--text)}
-.chip-btn:active{transform:scale(.94)}
-.chip-btn.go{color:var(--text);background:color-mix(in srgb,var(--accent) 22%,transparent)}
-.chip-btn.go:hover{color:var(--ink);background:var(--text)}
-.chip-btn[hidden]{display:none}
-/* карточки треков: превью и подсветка играющего */
-.cover{position:relative;width:60px;height:44px;border-radius:11px;overflow:hidden;flex:none;
-  background:var(--ink-3);display:grid;place-items:center;color:var(--text-3);
-  box-shadow:0 0 0 1px var(--line) inset}
-.cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.cover .ic{width:18px;height:18px}
-.cover.none img{display:none}
-.card.playing{background:color-mix(in srgb,var(--accent) 9%,transparent);
-  border-color:color-mix(in srgb,var(--accent) 32%,transparent)}
-.card .txt strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-@media (max-width:640px){
-  .linkchip{order:5;flex:1 1 100%}
-  .linkchip .url{flex:1 1 auto;max-width:none}
-}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;
   transition-duration:.001ms !important}
@@ -860,83 +857,39 @@ body.paused .dock::before,body.calm .dock::before{animation:none}
 }
 
 /* ═════════ адаптив: телефон, планшет, ноутбук ═════════ */
-@media (max-width:980px){
-  .knobs{grid-template-columns:repeat(2,minmax(0,1fr))}
-}
 @media (max-width:940px){
   .hero{grid-template-columns:minmax(0,1fr)}
-  /* ширину задаём явно: у плашки все дети абсолютные, и без width она схлопывается в 0 */
-  .hero .artwrap{width:min(100%,420px);max-width:420px;margin-inline:auto}
+  /* обложка по центру: иначе под ней пустой угол, а текст остаётся слева — так читается.
+     ширину задаём явно: у плашки все дети абсолютные, и без width она схлопывается в 0 */
+  .hero .artwrap{width:min(100%,440px);max-width:440px;margin-inline:auto}
 }
 @media (max-width:640px){
   .wrap{padding-bottom:150px}
-  .hero{border-radius:26px}
-  .hero .artwrap{max-width:230px}
+  .hero{border-radius:24px 8px 24px 8px}
+  .hero .artwrap{max-width:210px}
   .vinyl{right:-13%;width:86%;height:86%}
   .top .spacer{display:none}
   .field{flex:1 1 150px;min-width:0}
   .text-input{width:100%;flex:1 1 auto}
   .viz{height:40px}
-  .big{width:62px;height:62px}
-  .row{gap:12px}
+  .big{width:56px;height:56px}
+  .row{gap:8px}
   .kbd{display:none}
-  .vol{order:5;flex:1 1 100%;justify-content:space-between;padding:0 18px}
+  .vol{order:5;flex:1 1 100%;justify-content:space-between;padding:8px 16px}
   .vol .range{flex:1 1 auto;width:auto;min-width:0}
   .tabs{margin-top:22px}
   .card{padding:12px}
+  .knobs{grid-template-columns:repeat(auto-fit,minmax(128px,1fr))}
   .bands{height:122px}
-  .knob{padding:14px 13px 12px}
-  .knob h3{letter-spacing:.08em;font-size:.64rem;gap:5px;white-space:nowrap}
-  .knob .v{white-space:nowrap}
-  .dock{border-radius:26px}
+  .dock{border-radius:24px 8px 24px 8px}
   .addr{padding:11px 13px}
-  .dock-acts .mini-btn,.dock-acts .send{flex:1 1 auto;justify-content:center}
-  .order form{grid-template-columns:minmax(0,1fr)}
-  .send{width:100%}
+  .dock-acts .mini-btn{flex:1 1 auto;text-align:center}
 }
 @media (max-width:420px){
-  .mini{border-radius:20px;padding:8px 10px}
+  .mini{border-radius:18px 6px 18px 6px;padding:8px 10px}
   .brand span{display:none}
   .band .nm{font-size:.6rem}
-  .seg button{font-size:.7rem;padding:8px 2px}
 }
-
-/* ═════════ бит-слой: тихие вспышки в такт музыке ═════════
-   включается только пока у трека есть настоящий анализ (body.amb-on).
-   --pulse бас · --mid середина · --hi верха · --hit удар баса (0…1).
-   Контуры и рамки у плашек остаются спокойными: играет свет фона, обложка,
-   кнопка play, полоса времени, спектр и три ручки своих частот */
-body.amb-on .hero::before,body.amb-on .dock::before{
-  opacity:calc(.12 + .34 * var(--pulse) + .16 * var(--hit));
-  transform:scale(calc(1 + .1 * var(--pulse) + .06 * var(--hit)))}
-body.amb-on .hero{border-color:color-mix(in srgb,var(--accent) calc(var(--hit) * 28%),var(--line))}
-body.amb-on .art{scale:calc(1 + .022 * var(--hit));
-  box-shadow:0 30px 70px -30px #000,0 0 0 1px var(--line) inset,
-             0 0 calc(14px + 70px * var(--pulse) + 20px * var(--hit)) calc(4px * var(--hit))
-             color-mix(in srgb,var(--accent) calc(25% + 40% * var(--pulse)),transparent)}
-body.amb-on .big{scale:calc(1 + .05 * var(--hit));
-  box-shadow:0 14px 34px -14px color-mix(in srgb,var(--accent) 85%,transparent),
-             0 0 calc(8px + 40px * var(--hit)) -6px var(--accent),inset 0 1px 0 rgba(255,255,255,.8)}
-body.amb-on .title{text-shadow:0 0 calc(8px + 30px * var(--hit)) color-mix(in srgb,var(--accent) 40%,transparent)}
-body.amb-on .vinyl .lbl{filter:brightness(calc(1 + .4 * var(--hit))) saturate(1.2)}
-body.amb-on .track-bar i{filter:brightness(calc(1 + .3 * var(--hit)));
-  box-shadow:0 0 calc(6px + 26px * var(--pulse)) -2px var(--accent)}
-body.amb-on .band .meter i{filter:brightness(calc(1 + .25 * var(--hit)));
-  box-shadow:0 0 calc(8px + 32px * var(--pulse)) -2px var(--accent)}
-/* три ручки пульта играют каждая со своей полосой: бас, середина, верха */
-.knob{--k:var(--hit)}
-#k-bass{--k:var(--pulse)}
-#k-mid{--k:var(--mid)}
-#k-high{--k:var(--hi)}
-body.amb-on .knob{border-color:color-mix(in srgb,var(--accent) calc(var(--k) * 42%),var(--line))}
-body.amb-on .knob.live{border-color:color-mix(in srgb,var(--accent) calc(38% + var(--k) * 30%),transparent)}
-body.amb-on .range::-webkit-slider-thumb{
-  box-shadow:0 2px 8px rgba(0,0,0,.55),
-             0 0 calc(2px + 14px * var(--k,var(--hit))) color-mix(in srgb,var(--accent) 85%,transparent)}
-body.amb-on .range::-moz-range-thumb{
-  box-shadow:0 2px 8px rgba(0,0,0,.55),
-             0 0 calc(2px + 14px * var(--k,var(--hit))) color-mix(in srgb,var(--accent) 85%,transparent)}
-body.amb-on .switch[aria-checked="true"] i{box-shadow:0 0 calc(4px + 16px * var(--hit)) -4px var(--accent)}
 </style>
 </head>
 <body>
@@ -967,11 +920,10 @@ body.amb-on .switch[aria-checked="true"] i{box-shadow:0 0 calc(4px + 16px * var(
 <symbol id="i-high" viewBox="0 0 24 24"><path d="M3 13.2c1.1-4.6 2.2-4.6 3.3 0s2.2 4.6 3.3 0 2.2-4.6 3.3 0 2.2 4.6 3.3 0 2.2-4.6 3.3 0"/></symbol>
 <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6.6h10.4M9 12h10.4M9 17.4h10.4"/><circle cx="5" cy="6.6" r="1.1"/><circle cx="5" cy="12" r="1.1"/><circle cx="5" cy="17.4" r="1.1"/></symbol>
 <symbol id="i-history" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.6"/><path d="M12 7.6V12l3.2 1.9"/></symbol>
-<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
-<symbol id="i-out" viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></symbol>
 </defs></svg>
 <canvas id="amb" class="amb" aria-hidden="true"></canvas>
 <div class="sky" aria-hidden="true"><i class="orb orb-a"></i><i class="orb orb-b"></i><i class="orb orb-c"></i></div>
+<div class="mesh" aria-hidden="true"></div>
 <div class="veil" aria-hidden="true"></div>
 
 <div class="wrap">
@@ -979,13 +931,6 @@ body.amb-on .switch[aria-checked="true"] i{box-shadow:0 0 calc(4px + 16px * var(
     <div class="brand"><b>Hallez</b><span>музыка семьи</span></div>
     <div class="pill idle" id="statusPill"><i></i><span id="statusText">подключаюсь…</span></div>
     <div class="spacer"></div>
-    <div class="linkchip" id="linkChip" title="Ссылка на эту страницу — перешли семье">
-      <svg class="ic" aria-hidden="true"><use href="#i-link"></use></svg>
-      <span class="url" id="dockUrl">…</span>
-      <button class="chip-btn go" id="dockCopy" type="button" aria-label="Скопировать ссылку"><svg class="ic" aria-hidden="true"><use href="#i-copy"></use></svg><span>Копировать</span></button>
-      <button class="chip-btn" id="dockShare" type="button" hidden aria-label="Поделиться"><svg class="ic" aria-hidden="true"><use href="#i-share"></use></svg></button>
-      <a class="chip-btn" id="dockOpen" href="#" target="_blank" rel="noopener" aria-label="Открыть в новой вкладке"><svg class="ic" aria-hidden="true"><use href="#i-out"></use></svg></a>
-    </div>
     <div class="field"><label>я</label><input class="text-input" id="nickInput" maxlength="32"
       placeholder="как вас подписать" autocomplete="nickname"></div>
     <button class="icon-btn" id="motionBtn" title="Анимации: включить/выключить"
@@ -1011,25 +956,21 @@ body.amb-on .switch[aria-checked="true"] i{box-shadow:0 0 calc(4px + 16px * var(
         <span class="t t-end" id="tEnd">—</span>
       </div>
       <div class="row">
-        <div class="grp">
-          <button class="ctrl" id="prevBtn" title="Предыдущий трек" aria-label="Назад"><svg class="ic sol" aria-hidden="true"><use href="#i-prev"></use></svg></button>
-          <button class="big" id="playBtn" title="Пауза / играть" aria-label="Пауза или играть"><svg class="ic" aria-hidden="true"><use href="#i-play"></use></svg></button>
-          <button class="ctrl" id="skipBtn" title="Пропустить" aria-label="Пропустить"><svg class="ic sol" aria-hidden="true"><use href="#i-next"></use></svg></button>
-        </div>
-        <div class="grp">
-          <button class="ctrl" id="shuffleBtn" title="Перемешать очередь" aria-label="Перемешать"><svg class="ic" aria-hidden="true"><use href="#i-shuffle"></use></svg></button>
-          <button class="ctrl" id="repeatBtn" title="Повтор" aria-label="Повтор"><svg class="ic" aria-hidden="true"><use href="#i-repeat"></use></svg></button>
-          <button class="ctrl" id="djBtn" title="Авто-диджей: брать треки из библиотеки сам"
-            aria-label="Авто-диджей"><svg class="ic" aria-hidden="true"><use href="#i-auto"></use></svg></button>
-          <button class="ctrl" id="stopBtn" title="Остановить и очистить очередь"
-            aria-label="Остановить"><svg class="ic sol" aria-hidden="true"><use href="#i-stop"></use></svg></button>
-        </div>
+        <button class="ctrl" id="prevBtn" title="Предыдущий трек" aria-label="Назад"><svg class="ic" aria-hidden="true"><use href="#i-prev"></use></svg></button>
+        <button class="big" id="playBtn" title="Пауза / играть" aria-label="Пауза или играть"><svg class="ic" aria-hidden="true"><use href="#i-play"></use></svg></button>
+        <button class="ctrl" id="skipBtn" title="Пропустить" aria-label="Пропустить"><svg class="ic" aria-hidden="true"><use href="#i-next"></use></svg></button>
+        <button class="ctrl" id="shuffleBtn" title="Перемешать очередь" aria-label="Перемешать"><svg class="ic" aria-hidden="true"><use href="#i-shuffle"></use></svg></button>
+        <button class="ctrl" id="repeatBtn" title="Повтор" aria-label="Повтор"><svg class="ic" aria-hidden="true"><use href="#i-repeat"></use></svg></button>
         <span class="vol"><svg class="ic" aria-hidden="true"><use href="#i-volume"></use></svg>
           <input class="range" type="range" id="volRange" min="5" max="100" step="1" value="40"
                  aria-label="Громкость, проценты"><b id="volVal">40%</b></span>
+        <button class="ctrl" id="djBtn" title="Авто-диджей: брать треки из библиотеки сам"
+          aria-label="Авто-диджей"><svg class="ic" aria-hidden="true"><use href="#i-auto"></use></svg></button>
+        <button class="ctrl" id="stopBtn" title="Остановить и очистить очередь"
+          aria-label="Остановить"><svg class="ic" aria-hidden="true"><use href="#i-stop"></use></svg></button>
+        <span class="kbd"><kbd>Space</kbd> пауза · <kbd>←</kbd><kbd>→</kbd> 5 сек ·
+          <kbd>↑</kbd><kbd>↓</kbd> громкость по 1%</span>
       </div>
-      <div class="kbd"><kbd>Space</kbd> пауза · <kbd>←</kbd><kbd>→</kbd> 5 сек ·
-        <kbd>↑</kbd><kbd>↓</kbd> громкость по 1%</div>
     </div>
   </section>
 
@@ -1157,14 +1098,26 @@ body.amb-on .switch[aria-checked="true"] i{box-shadow:0 0 calc(4px + 16px * var(
       с одного адреса — <b id="coolVal">15</b> секунд.</p>
   </section>
 
+  <footer class="dock glass" id="dock">
+    <span class="lab">эта страница</span>
+    <h2>Ссылка на музыку — сохрани или перешли семье</h2>
+    <p>Адрес не меняется, вход не нужен. Открой со своего телефона и заказывай в общий
+      голосовой канал, пока кто-то другой слушает.</p>
+    <div class="addr"><em>адрес</em><span id="dockUrl">…</span></div>
+    <div class="dock-acts">
+      <a class="send" id="dockOpen" href="#" target="_blank" rel="noopener"><svg class="ic" aria-hidden="true"><use href="#i-headphones"></use></svg><span>Открыть музыку</span></a>
+      <button class="mini-btn" id="dockCopy" type="button"><svg class="ic" aria-hidden="true"><use href="#i-copy"></use></svg>Скопировать ссылку</button>
+      <button class="mini-btn" id="dockShare" type="button" hidden><svg class="ic" aria-hidden="true"><use href="#i-share"></use></svg>Поделиться</button>
+    </div>
+  </footer>
 </div>
 
 <div class="mini glass" id="mini" aria-label="Мини-плеер">
   <span class="thumb"><img id="miniImg" alt=""></span>
   <span class="txt"><strong id="miniTitle">—</strong><span id="miniSub">—</span></span>
-  <button class="ctrl" id="miniPrev" aria-label="Назад"><svg class="ic sol" aria-hidden="true"><use href="#i-prev"></use></svg></button>
-  <button class="ctrl" id="miniPlay" aria-label="Пауза или играть"><svg class="ic sol" aria-hidden="true"><use href="#i-play"></use></svg></button>
-  <button class="ctrl" id="miniSkip" aria-label="Пропустить"><svg class="ic sol" aria-hidden="true"><use href="#i-next"></use></svg></button>
+  <button class="ctrl" id="miniPrev" aria-label="Назад"><svg class="ic" aria-hidden="true"><use href="#i-prev"></use></svg></button>
+  <button class="ctrl" id="miniPlay" aria-label="Пауза или играть"><svg class="ic" aria-hidden="true"><use href="#i-play"></use></svg></button>
+  <button class="ctrl" id="miniSkip" aria-label="Пропустить"><svg class="ic" aria-hidden="true"><use href="#i-next"></use></svg></button>
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -1216,21 +1169,6 @@ function setIcon(el, id) {
   else el.replaceChildren(iconEl(id));
 }
 
-/* заливка ползунка: у громкости и темпа от левого края, у бас/середина/верха — от нуля */
-function fillRange(el) {
-  const min = Number(el.min) || 0, max = Number(el.max) || 100, v = Number(el.value) || 0;
-  const p = max > min ? (v - min) / (max - min) * 100 : 0;
-  const pos = (q) => "calc(" + q.toFixed(2) + "% + " + ((.5 - q / 100) * 16).toFixed(2) + "px)";
-  const bi = min < 0;
-  el.style.setProperty("--a", pos(bi ? Math.min(50, p) : 0));
-  el.style.setProperty("--b", pos(bi ? Math.max(50, p) : p));
-}
-function fillAll() { document.querySelectorAll(".knob .range, #volRange").forEach(fillRange); }
-document.addEventListener("input", (e) => {
-  const t = e.target;
-  if (t && t.matches && t.matches(".knob .range, #volRange")) fillRange(t);
-});
-
 async function api(path, body) {
   const opt = {headers: {"X-Requested-With": "hz-music"}};
   if (body) {
@@ -1258,54 +1196,7 @@ function toast(text, bad) {
 }
 
 /* ── свет от обложки: три цвета правят фоном, гранями и подсветкой ── */
-const DEF_PAL = ["#5a5f8f", "#3f6f78", "#7a5a6b"];
-function rgbToHsl(c) {
-  const r = c[0] / 255, g = c[1] / 255, b = c[2] / 255;
-  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
-  let h = 0;
-  if (d) {
-    if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
-    h *= 60;
-    if (h < 0) h += 360;
-  }
-  const l = (mx + mn) / 2;
-  const s = d ? d / (1 - Math.abs(2 * l - 1)) : 0;
-  return [h, s, l];
-}
-function hslToRgb(h, s, l) {
-  h = ((h % 360) + 360) % 360;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n) => {
-    const k = (n + h / 30) % 12;
-    return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-  };
-  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
-}
-/* цвета обложки приводим к спокойной палитре: насыщенность и яркость зажаты, а оттенки
-   двух других пятен уходят от главного не дальше чем на 38°. Любая обложка даёт
-   гармоничный приглушённый свет, а не радугу */
-function calmPalette(list) {
-  const base = (list || []).slice(0, 3).map(toRgb).filter(Boolean);
-  while (base.length < 3) base.push(toRgb(DEF_PAL[base.length]));
-  const hs = base.map(rgbToHsl);
-  let ref = hs[0];
-  hs.forEach((x) => { if (x[1] > ref[1]) ref = x; });
-  const mk = (i, s, l) => {
-    const x = hs[i];
-    let d = ((x[0] - ref[0] + 540) % 360) - 180;
-    d = Math.max(-38, Math.min(38, d));
-    const sv = x[1] < .08 ? x[1] : Math.max(.24, Math.min(x[1], s));
-    return hslToRgb(ref[0] + d, sv, l);
-  };
-  return {
-    blob: [mk(0, .4, .42), mk(1, .36, .38), mk(2, .34, .36)],    // пятна фона
-    glow: [mk(0, .46, .64), mk(1, .42, .62), mk(2, .4, .6)],     // волны, искры, столбики
-    accent: mk(0, .48, .74)                                      // кнопки, ползунки, подписи
-  };
-}
-const PAL0 = calmPalette([]);
-let PALB = PAL0.blob, PALG = PAL0.glow;
-let rings = [], prevHit = 0;   // волны от обложки: рождаются на каждом ударе баса
+let PAL = [[75, 58, 143], [46, 107, 107], [122, 63, 82]];   // rgb три пятна фона
 function toRgb(c) {
   const m = /^#([0-9a-f]{6})$/i.exec(c || "");
   if (m) { const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
@@ -1314,16 +1205,22 @@ function toRgb(c) {
   return null;
 }
 function ambient(colors) {
-  const pal = calmPalette(colors);
+  const list = (colors && colors.length) ? colors.slice(0, 3) : [];
   const root = document.documentElement.style;
-  const css = (c) => "rgb(" + c.join(",") + ")";
-  root.setProperty("--g1", css(pal.blob[0]));
-  root.setProperty("--g2", css(pal.blob[1]));
-  root.setProperty("--g3", css(pal.blob[2]));
-  root.setProperty("--accent", css(pal.accent));
-  // холст рисует те же цвета, что и стили
-  PALB = pal.blob;
-  PALG = pal.glow;
+  const shade = (hex, k) => {
+    if (!/^#[0-9a-f]{6}$/i.test(hex)) return hex;
+    const n = parseInt(hex.slice(1), 16);
+    const v = [16, 8, 0].map((s) => Math.round(((n >> s) & 255) * k));
+    return "rgb(" + v.join(",") + ")";
+  };
+  const pick = (i, def) => (list[i] || list[i % list.length] || def);
+  const vals = [pick(0, "#3b2f6b"), shade(pick(1, "#245b5b"), .9), shade(pick(2, "#5e2f42"), .75)];
+  root.setProperty("--g1", vals[0]);
+  root.setProperty("--g2", vals[1]);
+  root.setProperty("--g3", vals[2]);
+  root.setProperty("--accent", pick(0, "#8f7bff"));
+  // холст рисует те же цвета, что и стили: считываем их из тех же значений
+  PAL = vals.map((c, i) => toRgb(c) || PAL[i]);
 }
 
 /* ═════════ опрос плеера ═════════ */
@@ -1379,7 +1276,6 @@ function paint() {
   document.body.classList.toggle("has-vinyl", !!S.current);
   paintQueue();
   if (currentTab() === "history") paintHistory();
-  fillAll();
 }
 
 /* ═════════ пульт: значения с сервера, отправка — debounce ═════════ */
@@ -1477,9 +1373,6 @@ function setBeat(speed) {
    позиции трека и нарисовать свет. Анимация честно идёт за музыкой, а не вразноброд */
 const AMB = {k: "", fps: 20, frames: 0, lo: null, mid: null, hi: null, note: ""};
 const LIVE = {l: 0, m: 0, h: 0, hit: 0, spin: 0, vel: 0};
-/* SM — те же уровни, но сглаженные: по ним дышит весь фон и свет интерфейса.
-   LIVE быстрый и остаётся только для столбиков спектра */
-const SM = {l: 0, m: 0, h: 0, hit: 0};
 let posBase = 0, posAt = 0, posSpeed = 1, isPlaying = false;
 let raf = null, lastT = 0, tick = 0, asking = false, retryAt = 0;
 let ambCv = null, ambCx = null, vizCv = null, vizCx = null, AW = 0, AH = 0, parts = [];
@@ -1542,16 +1435,16 @@ function eqNote() {
   if (el) el.textContent = AMB.note || "живой спектр трека";
 }
 
-/* ── фон: мягкие пятна света, вертикальные волны и пылинки, всё на одном холсте.
-      холст маленький (до 720 px) и растягивается стилями: свет размытый по задумке,
-      а на телефоне это решает вопрос с частотой кадров ── */
+/* ── холст фона маленький (до 720 px) и растягивается стилями: свет размытый
+      по задумке, а на телефоне это решает вопрос с частотой кадров ── */
 function fitCanvases() {
   const w = Math.min(innerWidth, 720);
   const h = Math.round(w * innerHeight / Math.max(1, innerWidth));
   if (!ambCv) return;
   if (AW !== w || AH !== h) {
     AW = ambCv.width = w; AH = ambCv.height = h;
-    syncViz();
+    vizCv.width = Math.min(vizCv.clientWidth || 320, 520);
+    vizCv.height = Math.round((vizCv.clientHeight || 58) * 2);
     parts = [];
   }
 }
@@ -1567,93 +1460,94 @@ function blob(cx, x, y, r, col, alpha) {
   cx.arc(x, y, r, 0, 6.2832);
   cx.fill();
 }
-function artOrigin() {
-  const a = document.querySelector(".art");
-  if (!a) return [AW * .3, AH * .4];
-  const r = a.getBoundingClientRect();
-  return [(r.left + r.width / 2) / Math.max(1, innerWidth) * AW,
-          (r.top + r.height / 2) / Math.max(1, innerHeight) * AH];
-}
+/* ── фон: свет лежит на всей странице, а не только вокруг обложки.
+      четыре волны тянутся через весь экран: в тихих местах они медленно ходят
+      вверх-вниз сами по себе, а от бита гребень подпрыгивает. высота гребня и
+      яркость — из реальной энергии полосы, ничего случайного тут нет ── */
+const WAVES = [
+  {b: 1, y: .13, amp: .030, len: 1.4, sp: .45, a: .20, lw: 1.2, top: 1},
+  {b: 0, y: .50, amp: .058, len: 1.0, sp: .55, a: .36, lw: 2.2, top: 0},
+  {b: 1, y: .66, amp: .044, len: 1.7, sp: .80, a: .28, lw: 1.7, top: 0},
+  {b: 2, y: .81, amp: .032, len: 2.6, sp: 1.1, a: .24, lw: 1.3, top: 0}
+];
+const WPTS = new Float32Array(256);
 function paintAmb(dt, t) {
   const cx = ambCx;
   cx.clearRect(0, 0, AW, AH);
   cx.globalCompositeOperation = "lighter";
-  const bass = SM.l, mid = SM.m, hi = SM.h;
+  const bass = LIVE.l, mid = LIVE.m, hi = LIVE.h, hit = LIVE.hit;
   const seed = t / 1000;
-  const energy = Math.min(1, (bass * 1.1 + mid * .8 + hi * .6) / 2);
-  /* общий тон экрана: смесь трёх цветов обложки, где побеждает сильнейшая сейчас полоса.
-     поэтому цвет фона плавно переливается вслед за тем, что звучит */
-  const wsum = bass + mid + hi + .45;
-  const tint = [0, 1, 2].map((c) => Math.round(
-    (PALB[0][c] * (bass + .15) + PALB[1][c] * (mid + .15) + PALB[2][c] * (hi + .15)) / wsum));
-  /* заливка на весь экран, а не только пятна по углам */
-  cx.fillStyle = rgba(tint, .04 + .15 * energy);
-  cx.fillRect(0, 0, AW, AH);
-  /* большие мягкие пятна, которые медленно плывут по всему фону; у каждой полосы своё */
-  blob(cx, AW * (.18 + .1 * Math.sin(seed * .19)), AH * (.25 + .1 * Math.cos(seed * .15)),
-       AW * (.6 + .3 * bass), PALB[0], .12 + .32 * bass);
-  blob(cx, AW * (.82 + .08 * Math.cos(seed * .13)), AH * (.45 + .1 * Math.sin(seed * .17)),
-       AW * (.55 + .3 * mid), PALB[1], .1 + .3 * mid);
-  blob(cx, AW * (.5 + .2 * Math.sin(seed * .11)), AH * (.9 - .05 * Math.cos(seed * .21)),
-       AW * (.6 + .3 * hi), PALB[2], .1 + .3 * hi);
-  blob(cx, AW * (.5 + .25 * Math.cos(seed * .09)), AH * (.4 + .15 * Math.sin(seed * .12)),
-       AW * .8, tint, .04 + .2 * energy);
-  /* световые волны: их высота = плавная энергия полосы */
+  const E = [bass, mid, hi];
+  /* мягкие пятна: держат палитру трека и поднимаются вместе с басом */
+  blob(cx, AW * (.2 + .08 * Math.sin(seed * .21)),
+           AH * (.26 + .1 * Math.cos(seed * .17) - .1 * bass),
+           AW * (.55 + .35 * bass + .1 * hit), PAL[0], .1 + .18 * bass + .05 * hi);
+  blob(cx, AW * (.8 + .06 * Math.cos(seed * .13)),
+           AH * (.5 + .08 * Math.sin(seed * .19) - .06 * mid),
+           AW * (.45 + .25 * mid), PAL[1], .08 + .15 * mid);
+  blob(cx, AW * (.5 + .14 * Math.sin(seed * .11)),
+           AH * (.95 - .05 * Math.cos(seed * .23)),
+           AW * (.4 + .25 * hi + .1 * hit), PAL[2], .07 + .14 * hi);
   cx.lineCap = "round";
-  for (let b = 0; b < 3; b++) {
-    const e = [bass, mid, hi][b];
-    if (e < .02) continue;
-    const col = PALG[b];
-    cx.beginPath();
-    for (let x = 0; x <= AW; x += 12) {
-      const ph = x / AW * 6.283 + seed * (.6 + b * .35);
-      const y = AH * (.62 - b * .12) - Math.sin(ph) * AH * (.05 + .2 * e)
-                - Math.sin(ph * 2.3 + seed) * AH * .03 * e;
-      if (x === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+  const step = Math.max(6, AW / 90);
+  for (let i = 0; i < WAVES.length; i++) {
+    const w = WAVES[i], e = E[w.b];
+    const dir = w.top ? -1 : 1;
+    /* bob — тот самый спокойный ход вверх-вниз, когда бита нет */
+    const bob = Math.sin(seed * w.sp * .7 + i * 1.9) * AH * .022;
+    const lift = (e * .13 + hit * .05) * AH * dir;
+    const y0 = AH * w.y + bob + lift;
+    const amp = AH * (w.amp + .09 * e);
+    let n = 0;
+    for (let x = 0; x <= AW + step; x += step) {
+      const p = x / AW * 6.2832 * w.len;
+      WPTS[n * 2] = x;
+      WPTS[n * 2 + 1] = y0 - (Math.sin(p + seed * w.sp * 1.6) * amp +
+                              Math.sin(p * 2.1 - seed * w.sp) * amp * .3) * dir;
+      n++;
     }
-    const g = cx.createLinearGradient(0, AH * .2, 0, AH);
-    g.addColorStop(0, rgba(col, 0));
-    g.addColorStop(.6, rgba(col, .08 + .3 * e));
-    g.addColorStop(1, rgba(col, 0));
-    cx.strokeStyle = g;
-    cx.lineWidth = 1.5 + 5 * e;
+    const edge = w.top ? -2 : AH + 2;
+    cx.beginPath();
+    cx.moveTo(WPTS[0], edge);
+    for (let k = 0; k < n; k++) cx.lineTo(WPTS[k * 2], WPTS[k * 2 + 1]);
+    cx.lineTo(WPTS[(n - 1) * 2], edge);
+    cx.closePath();
+    const g = cx.createLinearGradient(0, y0, 0, edge);
+    g.addColorStop(0, rgba(PAL[w.b], w.a * (.7 + .9 * e)));
+    g.addColorStop(.55, rgba(PAL[w.b], w.a * (.24 + .34 * e)));
+    g.addColorStop(1, rgba(PAL[w.b], 0));
+    cx.fillStyle = g;
+    cx.fill();
+    /* светлый шов по гребню: без него на тихом месте волна не читается */
+    cx.beginPath();
+    cx.moveTo(WPTS[0], WPTS[1]);
+    for (let k = 1; k < n; k++) cx.lineTo(WPTS[k * 2], WPTS[k * 2 + 1]);
+    cx.strokeStyle = rgba(PAL[w.b], .1 + .5 * e);
+    cx.lineWidth = w.lw * (1 + 1.5 * e);
     cx.stroke();
   }
-  /* спектр по нижней кромке экрана */
-  {
-    const N = 40, bw = AW / N;
-    for (let i = 0; i < N; i++) {
-      const p = i / (N - 1);
-      const w1 = Math.max(0, 1 - Math.abs(p - .12) / .3);
-      const w2 = Math.max(0, 1 - Math.abs(p - .5) / .34);
-      const w3 = Math.max(0, 1 - Math.abs(p - .88) / .32);
-      const e = (bass * w1 + mid * w2 + hi * w3) / Math.max(.001, w1 + w2 + w3);
-      const h = AH * (.015 + .28 * e * (.8 + .2 * Math.sin(seed * 3 + i * .7)));
-      cx.fillStyle = rgba(p < .34 ? PALG[0] : (p < .7 ? PALG[1] : PALG[2]), .04 + .13 * e);
-      cx.beginPath();
-      if (cx.roundRect) cx.roundRect(i * bw + 2, AH - h, bw - 4, h + 12, 8);
-      else cx.rect(i * bw + 2, AH - h, bw - 4, h + 12);
-      cx.fill();
-    }
+  /* пылинки: вспыхивают от удара баса и медленно опускаются */
+  if (hit > .5 && parts.length < 34) {
+    parts.push({x: Math.random() * AW, y: AH * (.3 + .5 * Math.random()),
+                r: .8 + Math.random() * 2.2, v: 6 + Math.random() * 26 * (0.4 + bass),
+                a: .5 + Math.random() * .5, c: PAL[Math.floor(Math.random() * 3)]});
+  }
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    p.y -= p.v * dt;
+    p.a -= dt * .34;
+    if (p.a <= .02 || p.y < -6) { parts.splice(i, 1); continue; }
+    cx.fillStyle = rgba(p.c, p.a * .5);
+    cx.beginPath();
+    cx.arc(p.x, p.y, p.r, 0, 6.2832);
+    cx.fill();
   }
   cx.globalCompositeOperation = "source-over";
 }
-/* ── столбики под названием трека: те же три полосы, но разложенные по ширине.
-      в тишине это ряд ровных точек, на музыке они вытягиваются в капсулы ── */
-function syncViz() {
-  if (!vizCv) return;
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const w = Math.round((vizCv.clientWidth || 320) * dpr);
-  const h = Math.round((vizCv.clientHeight || 58) * dpr);
-  if (vizCv.width !== w) vizCv.width = w;
-  if (vizCv.height !== h) vizCv.height = h;
-}
+/* ── столбики под названием трека: те же три полосы, но разложенные по ширине ── */
 function paintViz(t) {
-  const cx = vizCx, W = vizCv.width, H = vizCv.height;
-  const k = W / Math.max(1, vizCv.clientWidth || W);
-  const bw = 3 * k, N = Math.max(16, Math.floor(W / (k * 8)));
-  const gap = (W - bw * N) / (N - 1);
-  cx.globalAlpha = (S && S.current) ? 1 : .28;
+  const cx = vizCx, W = vizCv.width, H = vizCv.height, N = 26, gap = 2;
+  const bw = (W - gap * (N - 1)) / N;
   cx.clearRect(0, 0, W, H);
   const seed = t / 1000;
   for (let i = 0; i < N; i++) {
@@ -1663,34 +1557,26 @@ function paintViz(t) {
     const w1 = Math.max(0, 1 - Math.abs(p - .12) / .3);
     const w2 = Math.max(0, 1 - Math.abs(p - .5) / .34);
     const w3 = Math.max(0, 1 - Math.abs(p - .88) / .32);
-    const e = (LIVE.l * w1 + LIVE.m * w2 + LIVE.h * w3) / Math.max(.001, w1 + w2 + w3);
+    let e = (LIVE.l * w1 + LIVE.m * w2 + LIVE.h * w3) /
+            Math.max(.001, w1 + w2 + w3);
     const wob = .86 + .14 * Math.sin(seed * 3.4 + i * .7);
-    const h = Math.min(H, Math.max(bw, e * wob * H * .94 + bw));
-    const col = p < .34 ? PALG[0] : (p < .7 ? PALG[1] : PALG[2]);
+    const h = Math.max(2, e * wob * H * .94 + 2);
+    const col = p < .34 ? PAL[0] : (p < .7 ? PAL[1] : PAL[2]);
     const g = cx.createLinearGradient(0, H - h, 0, H);
     g.addColorStop(0, rgba(col, .95));
-    g.addColorStop(1, rgba(col, .3));
+    g.addColorStop(1, rgba(col, .22));
     cx.fillStyle = g;
-    const x = i * (bw + gap), y = H - h;
+    const x = i * (bw + gap), y = H - h, r = Math.min(bw / 2, 3);
     cx.beginPath();
-    if (cx.roundRect) cx.roundRect(x, y, bw, h, bw / 2);
+    if (cx.roundRect) cx.roundRect(x, y, bw, h, [r, r, 0, 0]);
     else cx.rect(x, y, bw, h);
     cx.fill();
   }
-  cx.globalAlpha = 1;
 }
-const VAR_NAMES = ["--pulse", "--mid", "--hi", "--hit"], varLast = [-1, -1, -1, -1];
 function setVars() {
-  /* --pulse = бас, --mid = середина, --hi = верха, --hit = удар баса.
-     пишем только то, что заметно изменилось: меньше пересчётов стилей на телефоне */
   const root = document.documentElement.style;
-  const v = [SM.l, SM.m, SM.h, SM.hit];
-  for (let i = 0; i < 4; i++) {
-    if (Math.abs(v[i] - varLast[i]) > .006 || (v[i] === 0 && varLast[i] !== 0)) {
-      varLast[i] = v[i];
-      root.setProperty(VAR_NAMES[i], v[i].toFixed(3));
-    }
-  }
+  root.setProperty("--pulse", LIVE.l.toFixed(3));
+  root.setProperty("--hit", LIVE.hit.toFixed(3));
 }
 function eqLive() {
   const fx = (S && S.fx) || {};
@@ -1716,13 +1602,6 @@ function frame(t) {
     LIVE[k] += (v - LIVE[k]) * Math.min(1, dt * (v > LIVE[k] ? 26 : 5.5));
   });
   LIVE.hit = Math.min(1, Math.max(0, LIVE.hit - dt * 2.6) + (jump > .06 ? jump * 2.4 : 0));
-  /* плавная версия: нарастает за ~0.15 с, уходит за ~0.5 с — свет волной идёт за звуком,
-     а не включается и выключается */
-  ["l", "m", "h"].forEach((k, i) => {
-    SM[k] += (tgt[i] - SM[k]) * Math.min(1, dt * (tgt[i] > SM[k] ? 7 : 2.2));
-  });
-  const th = LIVE.hit * .6;
-  SM.hit += (th - SM.hit) * Math.min(1, dt * (th > SM.hit ? 9 : 2.4));
   /* пластинка: крутится, пока играет, и докручивается по инерции на паузе */
   const want = isPlaying ? 118 : 0;
   LIVE.vel += (want - LIVE.vel) * Math.min(1, dt * 2.4);
@@ -1736,7 +1615,6 @@ function frame(t) {
   setVars();
   tick++;
   if (tick % 8 === 0) eqLive();
-  if (tick % 30 === 1) syncViz();
 }
 function startLoop() {
   if (raf !== null || document.body.classList.contains("calm") || !ambCv) return;
@@ -1750,7 +1628,7 @@ function stopLoop() {
     ambCx.clearRect(0, 0, AW, AH);
     vizCx.clearRect(0, 0, vizCv.width, vizCv.height);
   }
-  ["l", "m", "h", "hit"].forEach((k) => { LIVE[k] = 0; SM[k] = 0; });
+  ["l", "m", "h", "hit"].forEach((k) => { LIVE[k] = 0; });
   LIVE.vel = 0;
   setVars();
   eqLive();
@@ -1840,7 +1718,6 @@ $("fxReset").addEventListener("click", () => {
   document.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("on", b.dataset.v === "0"));
   setEcho(0);
   setBeat(1);
-  fillAll();
   sendFx();
   toast("Пульт вернулся в чистый звук");
 });
@@ -1882,29 +1759,10 @@ $("seekRange").addEventListener("input", () => {
 }));
 
 /* ═════════ очередь ═════════ */
-/* заказ ссылкой в списках: вместо длинного адреса — превью и короткая подпись */
-function linkInfo(s) {
-  s = String(s || "").trim();
-  if (!/^https?:\/\//i.test(s)) return null;
-  let u;
-  try { u = new URL(s); } catch (e) { return null; }
-  const host = u.hostname.replace(/^www\.|^m\./, "");
-  let id = "";
-  if (host === "youtu.be") id = u.pathname.slice(1);
-  else if (/(^|\.)youtube\.com$/.test(host)) {
-    id = u.searchParams.get("v") || (u.pathname.match(/^\/(?:shorts|embed|live)\/([\w-]{11})/) || [])[1] || "";
-  }
-  if (/^[\w-]{11}$/.test(id)) {
-    return {name: "Видео на YouTube", short: "youtu.be/" + id,
-            thumb: "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg"};
-  }
-  const path = (u.pathname + u.search).replace(/\/$/, "");
-  return {name: "Ссылка · " + host, short: host + (path.length > 24 ? path.slice(0, 24) + "…" : path), thumb: ""};
-}
 function trackCard(t, opts) {
   opts = opts || {};
   const card = document.createElement("div");
-  card.className = "card reveal" + (opts.now ? " playing" : "");
+  card.className = "card reveal";
   if (opts.now) {
     const dot = document.createElement("span");
     dot.className = "now";
@@ -1921,26 +1779,13 @@ function trackCard(t, opts) {
     n.textContent = opts.num;
     card.append(n);
   }
-  const info = linkInfo(t.title);
-  if (info && info.thumb) {
-    const cv = document.createElement("span");
-    cv.className = "cover";
-    const im = document.createElement("img");
-    im.alt = "";
-    im.loading = "lazy";
-    im.referrerPolicy = "no-referrer";
-    im.addEventListener("error", () => cv.classList.add("none"));
-    im.src = info.thumb;
-    cv.append(iconEl("i-note"), im);
-    card.append(cv);
-  }
   const txt = document.createElement("span");
   txt.className = "txt";
   const strong = document.createElement("strong");
-  strong.textContent = info ? info.name : t.title;
+  strong.textContent = t.title;
   const sub = document.createElement("span");
-  const base = opts.sub || [t.who, t.duration ? fmt(t.duration) : ""].filter(Boolean).join(" · ");
-  sub.textContent = info ? [info.short, base].filter(Boolean).join(" · ") : (base || "в очереди");
+  sub.textContent = opts.sub || [t.who, t.duration ? fmt(t.duration) : ""].
+    filter(Boolean).join(" · ") || "в очереди";
   txt.append(strong, sub);
   card.append(txt);
   const acts = document.createElement("span");
@@ -2043,7 +1888,7 @@ function paintHistory() {
   box.innerHTML = "";
   hist.forEach((t) => box.append(trackCard(t, {order: true, orderBtn: "Повторить"})));
   recent.filter((r) => !hist.some((h) => favKey(h.title) === favKey(r))).forEach((r) => {
-    box.append(trackCard({title: r, who: "твой заказ"},
+    box.append(trackCard({title: r, who: "ты заказывал(а) со страницы"},
                          {order: true, orderBtn: "Снова"}));
   });
   if (!hist.length && !recent.length) {
@@ -2231,7 +2076,6 @@ window.addEventListener("keydown", (e) => {
     const v = Math.max(5, Math.min(100, Number($("volRange").value) + step));
     $("volRange").value = v;
     $("volVal").textContent = v + "%";
-    fillRange($("volRange"));
     later("vol", () => act("volume", v), 260);
   }
   else if (k === "s") act("shuffle");
@@ -2278,7 +2122,7 @@ if (ambCv && vizCv && ambCv.getContext) {
 
 /* ═════════ низ страницы: адрес, копирование и шеринг — всё по-настоящему ═════════ */
 const MUSIC_URL = location.origin + location.pathname;
-$("dockUrl").textContent = MUSIC_URL.replace(/^https?:\/\//, "").replace(/\/$/, "");
+$("dockUrl").textContent = MUSIC_URL;
 $("dockOpen").href = MUSIC_URL;
 function copyUrl() {
   const done = () => toast("Ссылка скопирована — можно кидать в чат");
@@ -2320,7 +2164,6 @@ $("queueList").append((() => {
 openTab(read(KEY.tab, "queue"));
 $("l-low").textContent = $("l-mid").textContent = $("l-high").textContent = "—";
 eqNote();
-fillAll();
 poll();
 setInterval(() => { if (!document.hidden) poll(); }, 2200);
 // вернулись во вкладку — опрос и цикл рисования заново: в фоновой вкладке браузер
