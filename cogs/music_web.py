@@ -1413,11 +1413,12 @@ function calmPalette(list) {
   return {
     blob: [mk(0, .4, .42), mk(1, .36, .38), mk(2, .34, .36)],    // пятна фона
     glow: [mk(0, .46, .64), mk(1, .42, .62), mk(2, .4, .6)],     // волны, искры, столбики
+    vivid: [mk(0, .85, .6), mk(1, .8, .58), mk(2, .8, .56)],     // горящие лучи и кольца
     accent: mk(0, .48, .74)                                      // кнопки, ползунки, подписи
   };
 }
 const PAL0 = calmPalette([]);
-let PALB = PAL0.blob, PALG = PAL0.glow;
+let PALB = PAL0.blob, PALG = PAL0.glow, PALV = PAL0.vivid;
 let rings = [], prevHit = 0;   // волны от обложки: рождаются на каждом ударе баса
 function toRgb(c) {
   const m = /^#([0-9a-f]{6})$/i.exec(c || "");
@@ -1437,6 +1438,7 @@ function ambient(colors) {
   // холст рисует те же цвета, что и стили
   PALB = pal.blob;
   PALG = pal.glow;
+  PALV = pal.vivid;
 }
 
 /* ═════════ опрос плеера ═════════ */
@@ -1827,8 +1829,10 @@ function paintAmb(dt, t) {
   const tint = [0, 1, 2].map((c) => Math.round(
     (PALB[0][c] * (bass + .15) + PALB[1][c] * (mid + .15) + PALB[2][c] * (hi + .15)) / wsum));
   /* пол сцены: ровное свечение снизу вверх, его яркость идёт за общей громкостью */
+  const vt = [0, 1, 2].map((c) => Math.round(
+    (PALV[0][c] * (bass + .15) + PALV[1][c] * (mid + .15) + PALV[2][c] * (hi + .15)) / wsum));
   const floor = cx.createLinearGradient(0, AH, 0, AH * .4);
-  floor.addColorStop(0, rgba(tint, .08 + .28 * energy));
+  floor.addColorStop(0, rgba(vt, .1 + .34 * energy));
   floor.addColorStop(1, rgba(tint, 0));
   cx.fillStyle = floor;
   cx.fillRect(0, 0, AW, AH);
@@ -1836,26 +1840,23 @@ function paintAmb(dt, t) {
   if (tick % 30 === 0 || !ORG) ORG = artOrigin();
   const K = AW / Math.max(1, innerWidth);   // пикселей холста в одном css-пикселе
   cx.lineWidth = 2 * K;
-  cx.strokeStyle = rgba(PALG[0], .06 + .22 * KICK[0]);
+  cx.strokeStyle = rgba(PALV[0], .08 + .3 * KICK[0]);
   cx.beginPath();
   cx.arc(ORG[0], ORG[1], AW * (.2 + .07 * KICK[0]), 0, 6.2832);
   cx.stroke();
   cx.lineWidth = 1 * K;
-  cx.strokeStyle = rgba(PALG[2], .04 + .16 * KICK[2]);
+  cx.strokeStyle = rgba(PALV[2], .05 + .22 * KICK[2]);
   cx.beginPath();
   cx.arc(ORG[0], ORG[1], AW * (.27 + .06 * KICK[2]), 0, 6.2832);
   cx.stroke();
-  /* световые лучи снизу: тонкие капсулы по спектру бота (бас слева, верха справа).
-     у каждой мягкое гало, светлый колпачок и «висящий» пик, который медленно оседает:
-     так читается как дорогой эквалайзер, а не как залитые столбики. холст рисуется
-     в полном разрешении экрана, поэтому края чёткие */
-  const grads = PALG.map((col) => {
-    const g = cx.createLinearGradient(0, AH, 0, AH * .2);
-    g.addColorStop(0, rgba(col, .6));
-    g.addColorStop(1, rgba(col, 0));
-    return g;
-  });
-  const caps = PALG.map((c) => c.map((v) => Math.min(255, Math.round(v + (255 - v) * .55))));
+  /* цвет лучей плывёт по ширине: бас → середина → верха, из цветов обложки.
+     каждый луч — неоновая трубка: у основания цвет, к кончику раскаляется почти до белого,
+     чем сильнее удар, тем жарче; вокруг двойное свечение, которое складывается у соседей */
+  const mixc = (p) => {
+    const a = p < .5 ? PALV[0] : PALV[1], b = p < .5 ? PALV[1] : PALV[2];
+    const q = p < .5 ? p * 2 : (p - .5) * 2;
+    return [0, 1, 2].map((c) => Math.round(a[c] + (b[c] - a[c]) * q));
+  };
   const bw = 5 * K, N = Math.max(24, Math.floor(AW / (9 * K))), step = AW / N;
   if (PEAKS.length !== N) PEAKS = new Float32Array(N);
   const pill = (x, y, w, h, r) => {
@@ -1870,18 +1871,23 @@ function paintAmb(dt, t) {
     const w3 = Math.max(0, 1 - Math.abs(p - .88) / .32);
     const e = (KICK[0] * w1 + KICK[1] * w2 + KICK[2] * w3) / Math.max(.001, w1 + w2 + w3);
     const h = AH * (.035 + .55 * e * (.82 + .18 * Math.sin(o * 3 + i * .7)));
-    const gi = p < .34 ? 0 : (p < .7 ? 1 : 2);
+    const col = mixc(p);
+    const hot = col.map((v) => Math.min(255, Math.round(v + (255 - v) * (.3 + .55 * e))));
     const x = i * step + (step - bw) / 2;
     PEAKS[i] = Math.max(h, PEAKS[i] - dt * AH * .22);
-    cx.fillStyle = grads[gi];
-    cx.globalAlpha = .22;                                   // гало
+    cx.fillStyle = rgba(col, .05 + .13 * e);                // дальнее свечение
+    pill(x - bw * 2.6, AH - h - bw, bw * 6.2, h + bw * 2, bw * 3);
+    cx.fillStyle = rgba(col, .1 + .26 * e);                 // ближнее свечение
     pill(x - bw * .9, AH - h, bw * 2.8, h + bw, bw * 1.4);
-    cx.globalAlpha = 1;                                     // тело
+    const g = cx.createLinearGradient(0, AH, 0, AH - h - bw);
+    g.addColorStop(0, rgba(col, .5 + .4 * e));
+    g.addColorStop(1, rgba(hot, .95));
+    cx.fillStyle = g;                                       // тело
     pill(x, AH - h, bw, h + bw, bw / 2);
-    cx.fillStyle = rgba(caps[gi], .35 + .6 * e);            // колпачок
+    cx.fillStyle = rgba(hot, .5 + .5 * e);                  // раскалённый кончик
     pill(x, AH - h, bw, bw * 1.1, bw / 2);
     if (PEAKS[i] > h + 6 * K) {                             // висящий пик
-      cx.fillStyle = rgba(caps[gi], .55);
+      cx.fillStyle = rgba(hot, .65);
       pill(x, AH - PEAKS[i] - 5 * K, bw, 2 * K, K);
     }
   }
