@@ -821,6 +821,38 @@ body.paused .dock::before,body.calm .dock::before{animation:none}
 .skel{height:58px;border-radius:var(--r-md);background:linear-gradient(90deg,var(--glass),
   var(--glass-2),var(--glass));background-size:220% 100%;animation:sk 1.3s linear infinite}
 @keyframes sk{to{background-position:-220% 0}}
+/* ссылка на музыку — плашка в шапке */
+.linkchip{display:flex;align-items:center;gap:6px;height:42px;padding:0 5px 0 14px;min-width:0;max-width:100%;
+  border-radius:var(--r-pill);border:1px solid var(--line);background:rgba(255,255,255,.04);
+  transition:border-color .3s}
+.linkchip:hover{border-color:var(--line-2)}
+.linkchip>.ic{width:16px;height:16px;color:var(--accent);flex:none}
+.linkchip .url{font-size:.82rem;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;min-width:0;max-width:250px;padding:0 6px 0 2px}
+.chip-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;min-width:32px;
+  padding:0 11px;border-radius:var(--r-pill);color:var(--text-2);font-size:.76rem;font-weight:600;
+  background:rgba(255,255,255,.06);text-decoration:none;white-space:nowrap;
+  transition:color .25s,background-color .25s,transform .2s var(--ease)}
+.chip-btn .ic{width:15px;height:15px}
+.chip-btn:hover{color:var(--ink);background:var(--text)}
+.chip-btn:active{transform:scale(.94)}
+.chip-btn.go{color:var(--text);background:color-mix(in srgb,var(--accent) 22%,transparent)}
+.chip-btn.go:hover{color:var(--ink);background:var(--text)}
+.chip-btn[hidden]{display:none}
+/* карточки треков: превью и подсветка играющего */
+.cover{position:relative;width:60px;height:44px;border-radius:11px;overflow:hidden;flex:none;
+  background:var(--ink-3);display:grid;place-items:center;color:var(--text-3);
+  box-shadow:0 0 0 1px var(--line) inset}
+.cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cover .ic{width:18px;height:18px}
+.cover.none img{display:none}
+.card.playing{background:color-mix(in srgb,var(--accent) 9%,transparent);
+  border-color:color-mix(in srgb,var(--accent) 32%,transparent)}
+.card .txt strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+@media (max-width:640px){
+  .linkchip{order:5;flex:1 1 100%}
+  .linkchip .url{flex:1 1 auto;max-width:none}
+}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;
   transition-duration:.001ms !important}
@@ -874,7 +906,6 @@ body.paused .dock::before,body.calm .dock::before{animation:none}
    --pulse бас · --mid середина · --hi верха · --hit удар баса (0…1).
    Контуры и рамки у плашек остаются спокойными: играет свет фона, обложка,
    кнопка play, полоса времени, спектр и три ручки своих частот */
-body.amb-on .veil{opacity:calc(1 - .3 * var(--hit))}
 body.amb-on .hero::before,body.amb-on .dock::before{
   opacity:calc(.12 + .34 * var(--pulse) + .16 * var(--hit));
   transform:scale(calc(1 + .1 * var(--pulse) + .06 * var(--hit)))}
@@ -936,6 +967,8 @@ body.amb-on .switch[aria-checked="true"] i{box-shadow:0 0 calc(4px + 16px * var(
 <symbol id="i-high" viewBox="0 0 24 24"><path d="M3 13.2c1.1-4.6 2.2-4.6 3.3 0s2.2 4.6 3.3 0 2.2-4.6 3.3 0 2.2 4.6 3.3 0 2.2-4.6 3.3 0"/></symbol>
 <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6.6h10.4M9 12h10.4M9 17.4h10.4"/><circle cx="5" cy="6.6" r="1.1"/><circle cx="5" cy="12" r="1.1"/><circle cx="5" cy="17.4" r="1.1"/></symbol>
 <symbol id="i-history" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.6"/><path d="M12 7.6V12l3.2 1.9"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+<symbol id="i-out" viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></symbol>
 </defs></svg>
 <canvas id="amb" class="amb" aria-hidden="true"></canvas>
 <div class="sky" aria-hidden="true"><i class="orb orb-a"></i><i class="orb orb-b"></i><i class="orb orb-c"></i></div>
@@ -946,6 +979,13 @@ body.amb-on .switch[aria-checked="true"] i{box-shadow:0 0 calc(4px + 16px * var(
     <div class="brand"><b>Hallez</b><span>музыка семьи</span></div>
     <div class="pill idle" id="statusPill"><i></i><span id="statusText">подключаюсь…</span></div>
     <div class="spacer"></div>
+    <div class="linkchip" id="linkChip" title="Ссылка на эту страницу — перешли семье">
+      <svg class="ic" aria-hidden="true"><use href="#i-link"></use></svg>
+      <span class="url" id="dockUrl">…</span>
+      <button class="chip-btn go" id="dockCopy" type="button" aria-label="Скопировать ссылку"><svg class="ic" aria-hidden="true"><use href="#i-copy"></use></svg><span>Копировать</span></button>
+      <button class="chip-btn" id="dockShare" type="button" hidden aria-label="Поделиться"><svg class="ic" aria-hidden="true"><use href="#i-share"></use></svg></button>
+      <a class="chip-btn" id="dockOpen" href="#" target="_blank" rel="noopener" aria-label="Открыть в новой вкладке"><svg class="ic" aria-hidden="true"><use href="#i-out"></use></svg></a>
+    </div>
     <div class="field"><label>я</label><input class="text-input" id="nickInput" maxlength="32"
       placeholder="как вас подписать" autocomplete="nickname"></div>
     <button class="icon-btn" id="motionBtn" title="Анимации: включить/выключить"
@@ -1117,18 +1157,6 @@ body.amb-on .switch[aria-checked="true"] i{box-shadow:0 0 calc(4px + 16px * var(
       с одного адреса — <b id="coolVal">15</b> секунд.</p>
   </section>
 
-  <footer class="dock glass" id="dock">
-    <span class="lab">эта страница</span>
-    <h2>Ссылка на музыку — сохрани или перешли семье</h2>
-    <p>Адрес не меняется, вход не нужен. Открой со своего телефона и заказывай в общий
-      голосовой канал, пока кто-то другой слушает.</p>
-    <div class="addr"><em>адрес</em><span id="dockUrl">…</span></div>
-    <div class="dock-acts">
-      <a class="send" id="dockOpen" href="#" target="_blank" rel="noopener"><svg class="ic" aria-hidden="true"><use href="#i-headphones"></use></svg><span>Открыть музыку</span></a>
-      <button class="mini-btn" id="dockCopy" type="button"><svg class="ic" aria-hidden="true"><use href="#i-copy"></use></svg>Скопировать ссылку</button>
-      <button class="mini-btn" id="dockShare" type="button" hidden><svg class="ic" aria-hidden="true"><use href="#i-share"></use></svg>Поделиться</button>
-    </div>
-  </footer>
 </div>
 
 <div class="mini glass" id="mini" aria-label="Мини-плеер">
@@ -1449,6 +1477,9 @@ function setBeat(speed) {
    позиции трека и нарисовать свет. Анимация честно идёт за музыкой, а не вразноброд */
 const AMB = {k: "", fps: 20, frames: 0, lo: null, mid: null, hi: null, note: ""};
 const LIVE = {l: 0, m: 0, h: 0, hit: 0, spin: 0, vel: 0};
+/* SM — те же уровни, но сглаженные: по ним дышит весь фон и свет интерфейса.
+   LIVE быстрый и остаётся только для столбиков спектра */
+const SM = {l: 0, m: 0, h: 0, hit: 0};
 let posBase = 0, posAt = 0, posSpeed = 1, isPlaying = false;
 let raf = null, lastT = 0, tick = 0, asking = false, retryAt = 0;
 let ambCv = null, ambCx = null, vizCv = null, vizCx = null, AW = 0, AH = 0, parts = [];
@@ -1547,55 +1578,27 @@ function paintAmb(dt, t) {
   const cx = ambCx;
   cx.clearRect(0, 0, AW, AH);
   cx.globalCompositeOperation = "lighter";
-  const bass = LIVE.l, mid = LIVE.m, hi = LIVE.h, hit = LIVE.hit;
+  const bass = SM.l, mid = SM.m, hi = SM.h;
   const seed = t / 1000;
-  const edge = hit - prevHit > .12;   // фронт удара: здесь рождаются волна и искры
-  prevHit = hit;
-  let org = null;
-  const origin = () => org || (org = artOrigin());
-  /* три больших мягких пятна: в тишине едва заметны, на ударе раздуваются и светлеют.
-     цвета спокойные (см. calmPalette), поэтому «играет» яркость и размер, а не радуга */
-  blob(cx, AW * (.2 + .06 * Math.sin(seed * .21)),
-           AH * (.3 + .08 * Math.cos(seed * .17) - .12 * bass),
-           AW * (.4 + .34 * bass + .12 * hit), PALB[0], .09 + .34 * bass + .1 * hi + .12 * hit);
-  blob(cx, AW * (.78 + .05 * Math.cos(seed * .13)),
-           AH * (.4 + .07 * Math.sin(seed * .19) - .1 * mid),
-           AW * (.3 + .32 * mid), PALB[1], .07 + .28 * mid);
-  blob(cx, AW * (.5 + .12 * Math.sin(seed * .11)),
-           AH * (.88 - .05 * Math.cos(seed * .23)),
-           AW * (.26 + .3 * hi + .08 * hit), PALB[2], .06 + .26 * hi);
-  if (hit > .02) {
-    blob(cx, AW * .04, AH * .06, AW * (.2 + .28 * hit), PALB[2], .18 * hit);
-    blob(cx, AW * .97, AH * .95, AW * (.2 + .28 * hit), PALB[1], .18 * hit);
-    /* вспышка от обложки: мягкая и короткая, чтобы не слепила */
-    const o = origin();
-    blob(cx, o[0], o[1], AW * (.28 + .34 * hit), PALB[0], Math.min(.22, .2 * hit * hit + .04 * hit));
-  }
-  if (edge) {
-    const o = origin();
-    if (rings.length < 3) {
-      rings.push({x: o[0], y: o[1], r: AW * .06, a: Math.min(.9, .5 + hit * .4),
-                  c: PALG[Math.floor(Math.random() * 3)]});
-    }
-    for (let k = 0; k < 6 && parts.length < 48; k++) {
-      const ang = Math.random() * 6.2832, sp = 20 + Math.random() * 50 * (.5 + bass);
-      parts.push({x: o[0], y: o[1], r: 1 + Math.random() * 2, a: .7 + Math.random() * .25,
-                  vx: Math.cos(ang) * sp, v: Math.sin(ang) * sp, c: PALG[Math.floor(Math.random() * 3)]});
-    }
-  }
-  /* тонкие волны от обложки */
-  for (let i = rings.length - 1; i >= 0; i--) {
-    const g = rings[i];
-    g.r += dt * AW * (.5 + .45 * bass);
-    g.a -= dt * 1.3;
-    if (g.a <= .02) { rings.splice(i, 1); continue; }
-    cx.strokeStyle = rgba(g.c, g.a * .35);
-    cx.lineWidth = 1 + 3 * g.a;
-    cx.beginPath();
-    cx.arc(g.x, g.y, g.r, 0, 6.2832);
-    cx.stroke();
-  }
-  /* световые волны: их высота = настоящая энергия полосы */
+  const energy = Math.min(1, (bass * 1.1 + mid * .8 + hi * .6) / 2);
+  /* общий тон экрана: смесь трёх цветов обложки, где побеждает сильнейшая сейчас полоса.
+     поэтому цвет фона плавно переливается вслед за тем, что звучит */
+  const wsum = bass + mid + hi + .45;
+  const tint = [0, 1, 2].map((c) => Math.round(
+    (PALB[0][c] * (bass + .15) + PALB[1][c] * (mid + .15) + PALB[2][c] * (hi + .15)) / wsum));
+  /* заливка на весь экран, а не только пятна по углам */
+  cx.fillStyle = rgba(tint, .04 + .15 * energy);
+  cx.fillRect(0, 0, AW, AH);
+  /* большие мягкие пятна, которые медленно плывут по всему фону; у каждой полосы своё */
+  blob(cx, AW * (.18 + .1 * Math.sin(seed * .19)), AH * (.25 + .1 * Math.cos(seed * .15)),
+       AW * (.6 + .3 * bass), PALB[0], .12 + .32 * bass);
+  blob(cx, AW * (.82 + .08 * Math.cos(seed * .13)), AH * (.45 + .1 * Math.sin(seed * .17)),
+       AW * (.55 + .3 * mid), PALB[1], .1 + .3 * mid);
+  blob(cx, AW * (.5 + .2 * Math.sin(seed * .11)), AH * (.9 - .05 * Math.cos(seed * .21)),
+       AW * (.6 + .3 * hi), PALB[2], .1 + .3 * hi);
+  blob(cx, AW * (.5 + .25 * Math.cos(seed * .09)), AH * (.4 + .15 * Math.sin(seed * .12)),
+       AW * .8, tint, .04 + .2 * energy);
+  /* световые волны: их высота = плавная энергия полосы */
   cx.lineCap = "round";
   for (let b = 0; b < 3; b++) {
     const e = [bass, mid, hi][b];
@@ -1616,7 +1619,7 @@ function paintAmb(dt, t) {
     cx.lineWidth = 1.5 + 5 * e;
     cx.stroke();
   }
-  /* спектр по нижней кромке экрана: те же три полосы, разложенные по ширине */
+  /* спектр по нижней кромке экрана */
   {
     const N = 40, bw = AW / N;
     for (let i = 0; i < N; i++) {
@@ -1633,24 +1636,6 @@ function paintAmb(dt, t) {
       cx.fill();
     }
   }
-  /* искры: вспыхивают от удара баса и тянутся вверх */
-  if (hit > .4 && parts.length < 48) {
-    parts.push({x: Math.random() * AW, y: AH * (.3 + .5 * Math.random()),
-                r: 1 + Math.random() * 2, v: 6 + Math.random() * 26 * (0.4 + bass), vx: 0,
-                a: .5 + Math.random() * .4, c: PALG[Math.floor(Math.random() * 3)]});
-  }
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const p = parts[i];
-    p.y -= p.v * dt;
-    p.x += (p.vx || 0) * dt;
-    if (p.vx) p.vx *= 1 - Math.min(1, dt * 1.8);
-    p.a -= dt * .34;
-    if (p.a <= .02 || p.y < -6 || p.y > AH + 6) { parts.splice(i, 1); continue; }
-    cx.fillStyle = rgba(p.c, p.a * .7);
-    cx.beginPath();
-    cx.arc(p.x, p.y, p.r, 0, 6.2832);
-    cx.fill();
-  }
   cx.globalCompositeOperation = "source-over";
 }
 /* ── столбики под названием трека: те же три полосы, но разложенные по ширине.
@@ -1664,10 +1649,11 @@ function syncViz() {
   if (vizCv.height !== h) vizCv.height = h;
 }
 function paintViz(t) {
-  const cx = vizCx, W = vizCv.width, H = vizCv.height, N = 30;
+  const cx = vizCx, W = vizCv.width, H = vizCv.height;
   const k = W / Math.max(1, vizCv.clientWidth || W);
-  const gap = 4 * k;
-  const bw = (W - gap * (N - 1)) / N;
+  const bw = 3 * k, N = Math.max(16, Math.floor(W / (k * 8)));
+  const gap = (W - bw * N) / (N - 1);
+  cx.globalAlpha = (S && S.current) ? 1 : .28;
   cx.clearRect(0, 0, W, H);
   const seed = t / 1000;
   for (let i = 0; i < N; i++) {
@@ -1691,13 +1677,14 @@ function paintViz(t) {
     else cx.rect(x, y, bw, h);
     cx.fill();
   }
+  cx.globalAlpha = 1;
 }
 const VAR_NAMES = ["--pulse", "--mid", "--hi", "--hit"], varLast = [-1, -1, -1, -1];
 function setVars() {
   /* --pulse = бас, --mid = середина, --hi = верха, --hit = удар баса.
      пишем только то, что заметно изменилось: меньше пересчётов стилей на телефоне */
   const root = document.documentElement.style;
-  const v = [LIVE.l, LIVE.m, LIVE.h, LIVE.hit];
+  const v = [SM.l, SM.m, SM.h, SM.hit];
   for (let i = 0; i < 4; i++) {
     if (Math.abs(v[i] - varLast[i]) > .006 || (v[i] === 0 && varLast[i] !== 0)) {
       varLast[i] = v[i];
@@ -1729,6 +1716,13 @@ function frame(t) {
     LIVE[k] += (v - LIVE[k]) * Math.min(1, dt * (v > LIVE[k] ? 26 : 5.5));
   });
   LIVE.hit = Math.min(1, Math.max(0, LIVE.hit - dt * 2.6) + (jump > .06 ? jump * 2.4 : 0));
+  /* плавная версия: нарастает за ~0.15 с, уходит за ~0.5 с — свет волной идёт за звуком,
+     а не включается и выключается */
+  ["l", "m", "h"].forEach((k, i) => {
+    SM[k] += (tgt[i] - SM[k]) * Math.min(1, dt * (tgt[i] > SM[k] ? 7 : 2.2));
+  });
+  const th = LIVE.hit * .6;
+  SM.hit += (th - SM.hit) * Math.min(1, dt * (th > SM.hit ? 9 : 2.4));
   /* пластинка: крутится, пока играет, и докручивается по инерции на паузе */
   const want = isPlaying ? 118 : 0;
   LIVE.vel += (want - LIVE.vel) * Math.min(1, dt * 2.4);
@@ -1756,7 +1750,7 @@ function stopLoop() {
     ambCx.clearRect(0, 0, AW, AH);
     vizCx.clearRect(0, 0, vizCv.width, vizCv.height);
   }
-  ["l", "m", "h", "hit"].forEach((k) => { LIVE[k] = 0; });
+  ["l", "m", "h", "hit"].forEach((k) => { LIVE[k] = 0; SM[k] = 0; });
   LIVE.vel = 0;
   setVars();
   eqLive();
@@ -1888,10 +1882,29 @@ $("seekRange").addEventListener("input", () => {
 }));
 
 /* ═════════ очередь ═════════ */
+/* заказ ссылкой в списках: вместо длинного адреса — превью и короткая подпись */
+function linkInfo(s) {
+  s = String(s || "").trim();
+  if (!/^https?:\/\//i.test(s)) return null;
+  let u;
+  try { u = new URL(s); } catch (e) { return null; }
+  const host = u.hostname.replace(/^www\.|^m\./, "");
+  let id = "";
+  if (host === "youtu.be") id = u.pathname.slice(1);
+  else if (/(^|\.)youtube\.com$/.test(host)) {
+    id = u.searchParams.get("v") || (u.pathname.match(/^\/(?:shorts|embed|live)\/([\w-]{11})/) || [])[1] || "";
+  }
+  if (/^[\w-]{11}$/.test(id)) {
+    return {name: "Видео на YouTube", short: "youtu.be/" + id,
+            thumb: "https://i.ytimg.com/vi/" + id + "/mqdefault.jpg"};
+  }
+  const path = (u.pathname + u.search).replace(/\/$/, "");
+  return {name: "Ссылка · " + host, short: host + (path.length > 24 ? path.slice(0, 24) + "…" : path), thumb: ""};
+}
 function trackCard(t, opts) {
   opts = opts || {};
   const card = document.createElement("div");
-  card.className = "card reveal";
+  card.className = "card reveal" + (opts.now ? " playing" : "");
   if (opts.now) {
     const dot = document.createElement("span");
     dot.className = "now";
@@ -1908,13 +1921,26 @@ function trackCard(t, opts) {
     n.textContent = opts.num;
     card.append(n);
   }
+  const info = linkInfo(t.title);
+  if (info && info.thumb) {
+    const cv = document.createElement("span");
+    cv.className = "cover";
+    const im = document.createElement("img");
+    im.alt = "";
+    im.loading = "lazy";
+    im.referrerPolicy = "no-referrer";
+    im.addEventListener("error", () => cv.classList.add("none"));
+    im.src = info.thumb;
+    cv.append(iconEl("i-note"), im);
+    card.append(cv);
+  }
   const txt = document.createElement("span");
   txt.className = "txt";
   const strong = document.createElement("strong");
-  strong.textContent = t.title;
+  strong.textContent = info ? info.name : t.title;
   const sub = document.createElement("span");
-  sub.textContent = opts.sub || [t.who, t.duration ? fmt(t.duration) : ""].
-    filter(Boolean).join(" · ") || "в очереди";
+  const base = opts.sub || [t.who, t.duration ? fmt(t.duration) : ""].filter(Boolean).join(" · ");
+  sub.textContent = info ? [info.short, base].filter(Boolean).join(" · ") : (base || "в очереди");
   txt.append(strong, sub);
   card.append(txt);
   const acts = document.createElement("span");
@@ -2017,7 +2043,7 @@ function paintHistory() {
   box.innerHTML = "";
   hist.forEach((t) => box.append(trackCard(t, {order: true, orderBtn: "Повторить"})));
   recent.filter((r) => !hist.some((h) => favKey(h.title) === favKey(r))).forEach((r) => {
-    box.append(trackCard({title: r, who: "ты заказывал(а) со страницы"},
+    box.append(trackCard({title: r, who: "твой заказ"},
                          {order: true, orderBtn: "Снова"}));
   });
   if (!hist.length && !recent.length) {
@@ -2252,7 +2278,7 @@ if (ambCv && vizCv && ambCv.getContext) {
 
 /* ═════════ низ страницы: адрес, копирование и шеринг — всё по-настоящему ═════════ */
 const MUSIC_URL = location.origin + location.pathname;
-$("dockUrl").textContent = MUSIC_URL;
+$("dockUrl").textContent = MUSIC_URL.replace(/^https?:\/\//, "").replace(/\/$/, "");
 $("dockOpen").href = MUSIC_URL;
 function copyUrl() {
   const done = () => toast("Ссылка скопирована — можно кидать в чат");
