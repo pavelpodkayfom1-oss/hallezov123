@@ -154,6 +154,7 @@ class MusicWeb(commands.Cog):
             app.router.add_get(pre + "/api/playlists", self.h_playlists)
             app.router.add_get(pre + "/api/cover", self.h_cover)
             app.router.add_get(pre + "/api/ambient", self.h_ambient)
+            app.router.add_get(pre + "/api/live", self.h_live)
             app.router.add_post(pre + "/api/order", self.h_order)
             app.router.add_post(pre + "/api/action", self.h_action)
         app.router.add_get(PREFIX, self.h_page_moved)
@@ -311,6 +312,20 @@ class MusicWeb(commands.Cog):
         resp = web.json_response(data)
         resp.headers["Cache-Control"] = "public, max-age=3600"
         return resp
+
+    async def h_live(self, request: web.Request) -> web.Response:
+        """Полосы звука, который уходит в канал прямо сейчас.
+
+        Страница опрашивает их часто (каждые 300 мс), поэтому ответ короткий и без
+        кеширования: кольцо трёх секунд истории, а не весь трек.
+        """
+        cog, guild = self._player()
+        if cog is None:
+            return _json({"fps": 20, "frames": 0, "seq": 0, "bands": ""})
+        try:
+            return _json(cog.web_live(guild))
+        except Exception:
+            return _json({"fps": 20, "frames": 0, "seq": 0, "bands": ""})
 
     async def h_order(self, request: web.Request) -> web.Response:
         if not self.hits.allow(self.hits.ip(request)):
@@ -1531,7 +1546,7 @@ function syncAmbient() {
   const a = (S && S.ambient) || {};
   if (!a.k) {
     if (AMB.k) dropAmb();
-    AMB.note = S && S.current ? "полосы считаем только для файлов из библиотеки" : "";
+    AMB.note = S && S.current ? (LB.n ? "" : "ждём полосы из канала…") : "";
     eqNote();
     return;
   }
@@ -1543,6 +1558,43 @@ function syncAmbient() {
 function eqNote() {
   const el = $("eqNote");
   if (el) el.textContent = AMB.note || "живой спектр трека";
+}
+
+/* ── полосы с того, что звучит в канале прямо сейчас ──
+   у трека по чужой ссылке файла на диске нет, и заранее его не разложить. Поэтому бот
+   раскладывает те самые байты, которые плеер каждую двадцатимиллисекундную порцию отдаёт
+   в Discord, и присылает кольцо последних трёх секунд. Страница берёт из него кадр на
+   текущую минуту — фон идёт за настоящей музыкой: прыгнул бас — подскочил гребень.
+   Опрос каждые 300 мс, показ с запасом в 0.7 с: если ответ опоздал, дыры в кадре нет */
+const LB = {n: 0, fps: 50, seq: 0, at: 0, raw: null, asked: false, stalls: 0};
+const LB_LEAD = 35;
+let hasBands = false;
+
+async function livePoll() {
+  if (LB.asked) return;
+  LB.asked = true;
+  let out = {data: {}};
+  try { out = await api("/api/live"); } catch (e) {}
+  LB.asked = false;
+  const d = out.data || {};
+  const n = Number(d.frames) || 0, seq = Number(d.seq) || 0;
+  /* счётчик кадров стоит — значит поток молчит (пауза или трек кончился) */
+  LB.stalls = seq === LB.seq ? LB.stalls + 1 : 0;
+  if (!n || !d.bands || LB.stalls > 4) { LB.n = 0; return; }
+  const raw = Uint8Array.from(atob(d.bands), (c) => c.charCodeAt(0));
+  if (raw.length < n * 3) { LB.n = 0; return; }
+  LB.raw = raw; LB.n = n; LB.seq = seq;
+  LB.fps = Number(d.fps) || 50;
+  LB.at = performance.now();
+}
+function liveBands() {
+  if (!LB.n) return null;
+  const f = (performance.now() - LB.at) * LB.fps / 1000 + (LB.n - 1 - LB_LEAD);
+  const i = Math.floor(f);
+  if (i < 0 || i + 1 >= LB.n) return null;
+  const r = f - i;
+  const mix = (o) => (LB.raw[i * 3 + o] + (LB.raw[(i + 1) * 3 + o] - LB.raw[i * 3 + o]) * r) / 255;
+  return [mix(0), mix(1), mix(2)];
 }
 
 /* ── фон: мягкие пятна света, вертикальные волны и пылинки, всё на одном холсте.
@@ -1603,11 +1655,18 @@ function paintAmb(dt, t) {
   cx.clearRect(0, 0, AW, AH);
   cx.globalCompositeOperation = "lighter";
   const seed = t / 1000;
-  /* полос по треку нет — волны ведёт внутренний такт (см. idleBands), ударов тут не бывает */
-  const IDLE = AMB.lo ? null : idleBands(seed);
+  /* внутренний такт (см. idleBands) остаётся только когда полос нет вовсе: ни с файла,
+     ни из канала. пока поток жив, волны ведёт именно он */
+  const IDLE = hasBands ? null : idleBands(seed);
   const bass = IDLE ? IDLE[0] : SM.l, mid = IDLE ? IDLE[1] : SM.m, hi = IDLE ? IDLE[2] : SM.h;
   /* прыжок гребня берём из LIVE.hit, до сглаживания: иначе удар уже не виден */
   const hit = IDLE ? 0 : LIVE.hit;
+  /* гребень тянет вверх только всплеск — быстрая огибающая минус плавная. на плотном
+     бите плавная стоит высоко, и от одной неё экран просто залит светом, а волна стоит
+     на месте; полоса за вычетом её среднего уровня и есть сам удар */
+  const SLOW = [bass, mid, hi];
+  const FAST = IDLE ? SLOW : [LIVE.l, LIVE.m, LIVE.h];
+  const KICK = SLOW.map((v, i) => Math.min(1, .45 * v + 1.7 * Math.max(0, FAST[i] - v)));
   const energy = Math.min(1, (bass * 1.1 + mid * .8 + hi * .6) / 2);
   /* общий тон экрана: смесь трёх цветов обложки, где побеждает сильнейшая сейчас полоса.
      поэтому цвет фона плавно переливается вслед за тем, что звучит */
@@ -1627,17 +1686,16 @@ function paintAmb(dt, t) {
   blob(cx, AW * (.5 + .25 * Math.cos(seed * .09)), AH * (.4 + .15 * Math.sin(seed * .12)),
        AW * .8, tint, .04 + .2 * energy);
   cx.lineCap = "round";
-  const E = [bass, mid, hi];
   const step = Math.max(6, AW / 90);
   for (let i = 0; i < WAVES.length; i++) {
-    const w = WAVES[i], e = E[w.b];
+    const w = WAVES[i], e = SLOW[w.b], f = KICK[w.b];
     const dir = w.top ? -1 : 1;
     /* bob — спокойный ход вверх-вниз, который остаётся даже в полной тишине */
     const bob = Math.sin(seed * w.sp * .7 + i * 1.9) * AH * .03;
     /* энергия полосы и удар тянут гребень только вверх: вниз он возвращается сам,
        по bob и по тому, как полоса отпускает — иначе на бите свет просто проваливается */
-    const y0 = AH * w.y + bob - (e * .12 + hit * .08) * AH;
-    const amp = AH * (w.amp + .09 * e);
+    const y0 = AH * w.y + bob - (f * .18 + hit * .12) * AH;
+    const amp = AH * (w.amp + .11 * f);
     let n = 0;
     for (let x = 0; x <= AW + step; x += step) {
       const p = x / AW * 6.2832 * w.len;
@@ -1664,7 +1722,7 @@ function paintAmb(dt, t) {
     cx.moveTo(WPTS[0], WPTS[1]);
     for (let k = 1; k < n; k++) cx.lineTo(WPTS[k * 2], WPTS[k * 2 + 1]);
     cx.strokeStyle = rgba(col, .1 + .5 * e + .35 * hit);
-    cx.lineWidth = w.lw * (1 + 1.5 * e + 1.2 * hit);
+    cx.lineWidth = w.lw * (1 + 1.5 * f + 1.2 * hit);
     cx.stroke();
   }
   /* пылинки: вспыхивают от удара баса и уплывают вверх — тот же ритм, что и гребни */
@@ -1763,21 +1821,25 @@ function eqLive() {
     const fill = $("f-" + k), lab = $("l-" + k), mark = $("g-" + k);
     if (!fill) return;
     fill.style.height = Math.max(2, Math.min(100, e * 104)).toFixed(1) + "%";
-    if (lab) lab.textContent = AMB.lo ? Math.round(e * 100) + "%" : "—";
+    if (lab) lab.textContent = (AMB.lo || LB.n) ? Math.round(e * 100) + "%" : "—";
     if (mark) mark.style.bottom = (((Number(db) || 0) + 12) / 24 * 100).toFixed(1) + "%";
   });
 }
 function frame(t) {
   raf = requestAnimationFrame(frame);
   const dt = Math.min(.06, Math.max(.004, (t - lastT) / 1000)); lastT = t;
-  const band = trackBands(position());
+  /* файл из библиотеки даёт точные полосы по секунде трека; всё остальное — живое
+     кольцо кадров, которое бот снимает прямо с потока */
+  const band = trackBands(position()) || liveBands();
+  hasBands = !!band;
   const tgt = band || [0, 0, 0];
   /* удар ловим ДО сглаживания: после него прыжок уже не виден */
   const jump = tgt[0] - LIVE.l;
-  /* атака быстрая, отпускание медленное: удар видно сразу, а свет уходит плавно */
+  /* атака быстрая, отпускание тоже: удар видно сразу и он успевает отпустить между
+     битами — иначе на плотном треке огибающая стоит на максимуму и прыжка не видно */
   ["l", "m", "h"].forEach((k, i) => {
     const v = tgt[i];
-    LIVE[k] += (v - LIVE[k]) * Math.min(1, dt * (v > LIVE[k] ? 26 : 5.5));
+    LIVE[k] += (v - LIVE[k]) * Math.min(1, dt * (v > LIVE[k] ? 26 : 9));
   });
   LIVE.hit = Math.min(1, Math.max(0, LIVE.hit - dt * 2.6) + (jump > .06 ? jump * 2.4 : 0));
   /* плавная версия: нарастает за ~0.15 с, уходит за ~0.5 с — свет волной идёт за звуком,
@@ -2387,6 +2449,12 @@ eqNote();
 fillAll();
 poll();
 setInterval(() => { if (!document.hidden) poll(); }, 2200);
+/* живые полосы нужны, только когда играет поток без готового анализа: файл из
+   библиотеки уже лежит целиком, второй раз его спрашивать незачем */
+setInterval(() => {
+  if (document.hidden || !S || !S.playing || AMB.lo) return;
+  livePoll();
+}, 300);
 // вернулись во вкладку — опрос и цикл рисования заново: в фоновой вкладке браузер
 // сам заглушает requestAnimationFrame, и догонять это нужно сразу
 document.addEventListener("visibilitychange", () => {

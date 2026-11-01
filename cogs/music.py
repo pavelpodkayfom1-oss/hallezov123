@@ -14,6 +14,7 @@ import base64
 import hashlib
 import io
 import json
+import math
 import os
 import random
 import re
@@ -26,6 +27,13 @@ from urllib.parse import unquote, urlparse
 
 import disnake
 from disnake.ext import commands
+
+try:
+    # в 3.13 модуль убрали из стандартной библиотеки, но он обязателен самому disnake:
+    # без audioop громкость не крутится, значит на хосте он точно есть
+    import audioop
+except ImportError:
+    audioop = None
 
 from utils import brand, cdn_assets
 from utils.checks import get_text, is_admin, load_config
@@ -818,6 +826,92 @@ def ambient_key_of(path: str) -> str:
         return ""
 
 
+# ══════════════════ живые полосы того, что звучит прямо сейчас ══════════════════
+# Файл из библиотеки ffmpeg успевает разложить на полосы заранее. У трека с YouTube
+# файла на диске нет, зато есть те же байты, которые плеер каждую двадцатимиллисекундную
+# порцию отдаёт в канал: их раскладываем на ходу, без второго декодирования.
+# В audioop фильтров нет (avg возвращает число, а ratecv интерполирует без
+# антиалайзинга и роняет верх в бас — проверено на чистых тонах), поэтому бас и середина
+# — однополюсные фильтры по отсчётам, а верх это разность общей мощности и середины.
+# Замер на реальном PCM: 216 мкс на чанк = ~1.1% одного ядра, биты видны как скачки баса.
+LIVE_FPS = 50                    # кадр на каждый чанк плеера (20 мс)
+LIVE_FRAMES = 150                # 3 секунды истории: страницу не обрывает на опросе
+LIVE_FLOOR = 300.0               # ниже этого полоса — шум, а не музыка
+A_BASS = 1 - math.exp(-2 * math.pi * 150 / 24000)
+A_MID = 1 - math.exp(-2 * math.pi * 2000 / 24000)
+
+
+class LiveBands:
+    """Три полосы энергии с PCM, который плеер читает для голосового канала."""
+
+    __slots__ = ("buf", "b", "m", "peak", "seq")
+
+    def __init__(self):
+        self.buf = bytearray()
+        self.b = 0.0
+        self.m = 0.0
+        self.peak = [1.0, 1.0, 1.0]
+        self.seq = 0
+
+    def push(self, pcm: bytes) -> None:
+        mono = audioop.tomono(pcm, 2, 0.5, 0.5)
+        full = audioop.rms(mono, 2)
+        a = array.array("h")
+        a.frombytes(mono)
+        b, m, sb, sm = self.b, self.m, 0.0, 0.0
+        n = 0
+        for i in range(0, len(a) - 1, 2):
+            x = (a[i] + a[i + 1]) * 0.5      # пара отсчётов = простейший фильтр на 24 кГц
+            b += A_BASS * (x - b)
+            m += A_MID * (x - m)
+            sb += b * b
+            sm += m * m
+            n += 1
+        self.b, self.m = b, m
+        p_lo = sb / max(1, n)
+        p_mid = sm / max(1, n)
+        levels = (p_lo ** 0.5, max(0.0, p_mid - p_lo) ** 0.5,
+                  max(0.0, full * full - p_mid) ** 0.5)
+        # нормировка по собственному пику последних секунд: ручка громкости не должна
+        # гасить фон — на 14% волна обязана прыгать так же, как на 100%
+        for i, v in enumerate(levels):
+            self.peak[i] = max(v, self.peak[i] * 0.995, LIVE_FLOOR)
+            self.buf.append(255 if v >= self.peak[i] else int(255 * v / self.peak[i]))
+        cap = LIVE_FRAMES * 3
+        if len(self.buf) > cap:
+            del self.buf[:len(self.buf) - cap]
+        self.seq += 1
+
+    def snapshot(self) -> dict:
+        return {"fps": LIVE_FPS, "frames": len(self.buf) // 3, "seq": self.seq,
+                "bands": base64.b64encode(bytes(self.buf)).decode("ascii")}
+
+
+class _TeeSource(disnake.AudioSource):
+    """Ставится ВНУТРЬ трансформера громкости: полосы снимаются до ручки.
+
+    Так фон живёт и на тихом канале, и сама ручка остаётся у трансформера — обёртка
+    её не прячет.
+    """
+
+    def __init__(self, original, live: LiveBands):
+        self.original = original
+        self.live = live
+
+    def read(self) -> bytes:
+        data = self.original.read()
+        if data:
+            try:
+                self.live.push(data)
+            except Exception:
+                # фон не имеет права оборвать звук в канале
+                pass
+        return data
+
+    def cleanup(self) -> None:
+        self.original.cleanup()
+
+
 def _web_track(track: dict, guild, elapsed=None):
     """Трек для страницы: только то, что можно показать человеку без Discord.
 
@@ -847,6 +941,8 @@ class GuildPlayer:
         self.queue: deque = deque()
         self.current = None
         self.source = None
+        # 🌊 живые полосы того, что уходит в канал; вешается на источник
+        self.live = None
         self.volume = cfg["volume"] / 100.0
         self.text_channel = None
         # 🔁 авто-диджей: когда очередь пустеет, берём случайный трек из библиотеки
@@ -1898,6 +1994,18 @@ class Music(commands.Cog):
         return {"k": key, "fps": res["fps"], "frames": res["frames"],
                 "bands": base64.b64encode(res["bands"]).decode("ascii")}
 
+    def web_live(self, guild: disnake.Guild) -> dict:
+        """Полосы звука, который идёт в канал прямо сейчас.
+
+        Страница опрашивает их часто и дорого, поэтому отвечаем только кольцом
+        последних кадров; если источника нет — frames: 0, и фон сам решит, чем дышать.
+        """
+        p = self.players.get(guild.id)
+        live = p.live if p else None
+        if live is None or not live.buf:
+            return {"fps": LIVE_FPS, "frames": 0, "seq": 0, "bands": ""}
+        return live.snapshot()
+
     def web_library(self, query: str = "") -> dict:
         """Библиотека для живого поиска: имя, есть ли обложка, ничего лишнего."""
         want = re.sub(r"\s+", " ", str(query or "")).strip().lower()
@@ -2269,12 +2377,12 @@ class Music(commands.Cog):
         chain = _fx_chain(fx or {})
         opts = f"{FFMPEG_OPTS} -af {chain}" if chain else FFMPEG_OPTS
         try:
-            src = disnake.PCMVolumeTransformer(
-                disnake.FFmpegPCMAudio(track["stream_url"], executable=_ffmpeg_exe() or "ffmpeg",
-                                       before_options=_before_options(track["stream_url"], at),
-                                       options=opts, stderr=err),
-                volume=volume,
-            )
+            raw = disnake.FFmpegPCMAudio(track["stream_url"], executable=_ffmpeg_exe() or "ffmpeg",
+                                         before_options=_before_options(track["stream_url"], at),
+                                         options=opts, stderr=err)
+            pcm = _TeeSource(raw, LiveBands()) if audioop else raw
+            src = disnake.PCMVolumeTransformer(pcm, volume=volume)
+            src.live = getattr(pcm, "live", None)
         except Exception:
             err.close()
             raise
@@ -2331,6 +2439,7 @@ class Music(commands.Cog):
                 pass
             return
         p.source = source
+        p.live = getattr(source, "live", None)
         p.stopping = False
         p.mark = 0.0 if was_paused else time.monotonic()
         vc.play(source, after=self._make_after(p, p.current or {}, guild, err_file))
@@ -2427,6 +2536,7 @@ class Music(commands.Cog):
             else:
                 p.current = None
                 p.source = None
+                p.live = None
                 return
 
         track = p.queue.popleft()
@@ -2453,6 +2563,7 @@ class Music(commands.Cog):
         p.votes.clear()
         p.current = track
         p.source = source
+        p.live = getattr(source, "live", None)
         p.base = 0
         p.mark = time.monotonic()
         p.stopping = False
