@@ -1756,7 +1756,7 @@ function liveBands() {
       холст маленький (до 720 px) и растягивается стилями: свет размытый по задумке,
       а на телефоне это решает вопрос с частотой кадров ── */
 function fitCanvases() {
-  const w = Math.min(innerWidth, 560);
+  const w = Math.round(Math.min(innerWidth * Math.min(2, window.devicePixelRatio || 1), 1600));
   const h = Math.round(w * innerHeight / Math.max(1, innerWidth));
   if (!ambCv) return;
   if (AW !== w || AH !== h) {
@@ -1805,7 +1805,7 @@ function artOrigin() {
   return [(r.left + r.width / 2) / Math.max(1, innerWidth) * AW,
           (r.top + r.height / 2) / Math.max(1, innerHeight) * AH];
 }
-let ORB = 0, ORG = null;   // ORB — фаза плавания пятен: идёт быстрее на громкой музыке
+let ORB = 0, ORG = null, PEAKS = new Float32Array(0);   // ORB — фаза плавания пятен: идёт быстрее на громкой музыке
 function paintAmb(dt, t) {
   const cx = ambCx;
   cx.clearRect(0, 0, AW, AH);
@@ -1834,37 +1834,56 @@ function paintAmb(dt, t) {
   cx.fillRect(0, 0, AW, AH);
   /* кольца вокруг обложки: дышат вместе с басом и верхами, без разовых вспышек */
   if (tick % 30 === 0 || !ORG) ORG = artOrigin();
-  cx.lineWidth = 2;
+  const K = AW / Math.max(1, innerWidth);   // пикселей холста в одном css-пикселе
+  cx.lineWidth = 2 * K;
   cx.strokeStyle = rgba(PALG[0], .06 + .22 * KICK[0]);
   cx.beginPath();
   cx.arc(ORG[0], ORG[1], AW * (.2 + .07 * KICK[0]), 0, 6.2832);
   cx.stroke();
-  cx.lineWidth = 1;
+  cx.lineWidth = 1 * K;
   cx.strokeStyle = rgba(PALG[2], .04 + .16 * KICK[2]);
   cx.beginPath();
   cx.arc(ORG[0], ORG[1], AW * (.27 + .06 * KICK[2]), 0, 6.2832);
   cx.stroke();
-  /* световые лучи снизу: тот же спектр, что считает бот. столбики мягкие, прозрачность
-     гаснет к верху экрана, поэтому читаются как свет софитов, а не как диаграмма */
+  /* световые лучи снизу: тонкие капсулы по спектру бота (бас слева, верха справа).
+     у каждой мягкое гало, светлый колпачок и «висящий» пик, который медленно оседает:
+     так читается как дорогой эквалайзер, а не как залитые столбики. холст рисуется
+     в полном разрешении экрана, поэтому края чёткие */
   const grads = PALG.map((col) => {
-    const g = cx.createLinearGradient(0, AH, 0, AH * .22);
+    const g = cx.createLinearGradient(0, AH, 0, AH * .2);
     g.addColorStop(0, rgba(col, .6));
     g.addColorStop(1, rgba(col, 0));
     return g;
   });
-  const N = 30, bw = AW / N;
+  const caps = PALG.map((c) => c.map((v) => Math.min(255, Math.round(v + (255 - v) * .55))));
+  const bw = 5 * K, N = Math.max(24, Math.floor(AW / (9 * K))), step = AW / N;
+  if (PEAKS.length !== N) PEAKS = new Float32Array(N);
+  const pill = (x, y, w, h, r) => {
+    cx.beginPath();
+    if (cx.roundRect) cx.roundRect(x, y, w, h, r); else cx.rect(x, y, w, h);
+    cx.fill();
+  };
   for (let i = 0; i < N; i++) {
     const p = i / (N - 1);
     const w1 = Math.max(0, 1 - Math.abs(p - .12) / .3);
     const w2 = Math.max(0, 1 - Math.abs(p - .5) / .34);
     const w3 = Math.max(0, 1 - Math.abs(p - .88) / .32);
     const e = (KICK[0] * w1 + KICK[1] * w2 + KICK[2] * w3) / Math.max(.001, w1 + w2 + w3);
-    const h = AH * (.04 + .5 * e * (.82 + .18 * Math.sin(o * 3 + i * .7)));
-    cx.fillStyle = grads[p < .34 ? 0 : (p < .7 ? 1 : 2)];
-    cx.beginPath();
-    if (cx.roundRect) cx.roundRect(i * bw + bw * .16, AH - h, bw * .68, h + 14, bw * .34);
-    else cx.rect(i * bw + bw * .16, AH - h, bw * .68, h + 14);
-    cx.fill();
+    const h = AH * (.035 + .55 * e * (.82 + .18 * Math.sin(o * 3 + i * .7)));
+    const gi = p < .34 ? 0 : (p < .7 ? 1 : 2);
+    const x = i * step + (step - bw) / 2;
+    PEAKS[i] = Math.max(h, PEAKS[i] - dt * AH * .22);
+    cx.fillStyle = grads[gi];
+    cx.globalAlpha = .22;                                   // гало
+    pill(x - bw * .9, AH - h, bw * 2.8, h + bw, bw * 1.4);
+    cx.globalAlpha = 1;                                     // тело
+    pill(x, AH - h, bw, h + bw, bw / 2);
+    cx.fillStyle = rgba(caps[gi], .35 + .6 * e);            // колпачок
+    pill(x, AH - h, bw, bw * 1.1, bw / 2);
+    if (PEAKS[i] > h + 6 * K) {                             // висящий пик
+      cx.fillStyle = rgba(caps[gi], .55);
+      pill(x, AH - PEAKS[i] - 5 * K, bw, 2 * K, K);
+    }
   }
   cx.globalCompositeOperation = "source-over";
 }
