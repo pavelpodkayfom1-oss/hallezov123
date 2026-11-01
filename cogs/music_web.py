@@ -1955,13 +1955,13 @@ function frame(t) {
      в середине, и её берём с весом 0.8, чтобы хэт не командовал картиной */
   const onset = Math.max(jump, (tgt[1] - LIVE.m) * .8);
   LIVE.hit = Math.max(LIVE.hit - dt * 3.4, onset > .03 ? Math.min(1, onset * 5) : 0);
-  /* плавная версия: нарастает за ~0.15 с, уходит за ~0.5 с — свет волной идёт за звуком,
-     а не включается и выключается */
+  /* чуть сглаженная версия: нарастает за ~50 мс, спадает за ~150 мс — свет точно идёт
+     за звуком и не дёргается, но и не отстаёт от него */
   ["l", "m", "h"].forEach((k, i) => {
-    SM[k] += (tgt[i] - SM[k]) * Math.min(1, dt * (tgt[i] > SM[k] ? 7 : 2.2));
+    SM[k] += (tgt[i] - SM[k]) * Math.min(1, dt * (tgt[i] > SM[k] ? 22 : 6.5));
   });
-  const th = LIVE.hit * .6;
-  SM.hit += (th - SM.hit) * Math.min(1, dt * (th > SM.hit ? 9 : 2.4));
+  const th = LIVE.hit * .8;
+  SM.hit += (th - SM.hit) * Math.min(1, dt * (th > SM.hit ? 40 : 6));
   /* пластинка: крутится, пока играет, и докручивается по инерции на паузе */
   const want = isPlaying ? 118 : 0;
   LIVE.vel += (want - LIVE.vel) * Math.min(1, dt * 2.4);
