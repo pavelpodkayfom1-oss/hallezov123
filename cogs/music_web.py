@@ -1376,7 +1376,9 @@ function paint() {
   paintTrack();
   paintDeck();
   syncAmbient();
-  document.body.classList.toggle("amb-on", !!AMB.lo && !!S.current);
+  /* фон включаем на любом треке: без анализа полос волны всё равно живут,
+     иначе на потоке (чужая ссылка) экран оставался чёрным и пульсировали только пятна */
+  document.body.classList.toggle("amb-on", !!S.current);
   document.body.classList.toggle("has-vinyl", !!S.current);
   paintQueue();
   if (currentTab() === "history") paintHistory();
@@ -1579,6 +1581,16 @@ const WAVES = [
   {b: 2, y: .81, amp: .032, len: 2.6, sp: 1.1, a: .22, lw: 1.3, top: 0}
 ];
 const WPTS = new Float32Array(288);
+/* полос по треку нет (поток, чужая ссылка) — фон не замирает: волны ведёт медленный
+   внутренний такт, три полосы в разных фазах. это не притворная музыка: ударов тут
+   нет вовсе, только плавный ход вверх-вниз, ровно то, что нужно в тихом месте */
+function idleBands(seed) {
+  return [
+    Math.max(0, .17 + .15 * Math.sin(seed * .55) + .05 * Math.sin(seed * 1.6 + .8)),
+    Math.max(0, .15 + .13 * Math.sin(seed * .42 + 1.1)),
+    Math.max(0, .10 + .10 * Math.sin(seed * .68 + 2.3))
+  ];
+}
 function artOrigin() {
   const a = document.querySelector(".art");
   if (!a) return [AW * .3, AH * .4];
@@ -1590,10 +1602,12 @@ function paintAmb(dt, t) {
   const cx = ambCx;
   cx.clearRect(0, 0, AW, AH);
   cx.globalCompositeOperation = "lighter";
-  const bass = SM.l, mid = SM.m, hi = SM.h;
-  /* прыжок гребня берём из LIVE.hit, до сглаживания: иначе удар уже не виден */
-  const hit = LIVE.hit;
   const seed = t / 1000;
+  /* полос по треку нет — волны ведёт внутренний такт (см. idleBands), ударов тут не бывает */
+  const IDLE = AMB.lo ? null : idleBands(seed);
+  const bass = IDLE ? IDLE[0] : SM.l, mid = IDLE ? IDLE[1] : SM.m, hi = IDLE ? IDLE[2] : SM.h;
+  /* прыжок гребня берём из LIVE.hit, до сглаживания: иначе удар уже не виден */
+  const hit = IDLE ? 0 : LIVE.hit;
   const energy = Math.min(1, (bass * 1.1 + mid * .8 + hi * .6) / 2);
   /* общий тон экрана: смесь трёх цветов обложки, где побеждает сильнейшая сейчас полоса.
      поэтому цвет фона плавно переливается вслед за тем, что звучит */
