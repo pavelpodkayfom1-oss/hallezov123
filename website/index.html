@@ -4,87 +4,77 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hallez Music Bot | Лучший музыкальный бот для Discord</title>
-    <meta name="description" content="Hallez Music — музыкальный бот для Discord. Сайт, который оживает под бит.">
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
-    <!-- Фон, который играет в такт музыке -->
-    <canvas id="bgCanvas" aria-hidden="true"></canvas>
-    <div class="flash" id="flash" aria-hidden="true"></div>
-    <div class="vignette" aria-hidden="true"></div>
+    <div class="stars"></div>
+    <div class="stars2"></div>
 
     <nav class="navbar">
         <div class="container">
-            <a href="#top" class="logo">
+            <div class="logo">
                 <span class="logo-icon">🎵</span>
                 <span class="logo-text">Hallez Music</span>
-            </a>
+            </div>
             <ul class="nav-links">
                 <li><a href="#features">Функции</a></li>
-                <li><a href="#pads">Пэды</a></li>
-                <li><a href="#visualizer">Визуализатор</a></li>
                 <li><a href="#commands">Команды</a></li>
                 <li><a href="#setup">Установка</a></li>
             </ul>
         </div>
     </nav>
 
-    <main id="top">
     <section class="hero">
         <div class="container">
             <div class="hero-content">
-                <div class="hero-tag"><span class="live-dot"></span> Сайт играет вместе с тобой</div>
                 <h1 class="hero-title">
                     Музыка для вашего <br>
                     <span class="gradient-text">Discord сервера</span>
                 </h1>
-                <p class="hero-subtitle" id="heroSubtitle">
+                <p class="hero-subtitle">
                     Приватный музыкальный бот для нашего Discord сервера.
                     Слушайте музыку с YouTube и SoundCloud вместе с друзьями.
                 </p>
                 <div class="hero-buttons">
-                    <button class="btn btn-primary btn-large" id="heroPlay" type="button">
-                        <span id="heroPlayLabel">▶ Включить бит</span>
-                    </button>
-                    <a href="#features" class="btn btn-secondary btn-large">Узнать больше</a>
-                    <a href="#commands" class="btn btn-ghost btn-large">Команды</a>
+                    <a href="#features" class="btn btn-primary btn-large">
+                        <span>Узнать больше</span>
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M7.5 15L12.5 10L7.5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </a>
+                    <a href="#commands" class="btn btn-secondary btn-large">Команды</a>
                 </div>
-                <p class="hero-hint">Нажми «Включить бит» — цвета, фон и кнопки заиграют под музыку. Пробел — пауза.</p>
             </div>
             <div class="hero-image">
-                <div class="music-player-preview" id="previewCard">
+                <div class="music-player-preview">
                     <div class="player-header">
                         <div class="player-dot"></div>
                         <div class="player-dot"></div>
                         <div class="player-dot"></div>
-                        <span class="player-bpm" id="previewBpm">— BPM</span>
                     </div>
                     <div class="player-body">
                         <div class="now-playing">
                             <span class="pulse-indicator"></span>
-                            <span id="previewStatus">Нажми Play</span>
+                            <span>Сейчас играет</span>
                         </div>
                         <div class="track-info">
-                            <div class="track-thumbnail" id="previewDisc"></div>
+                            <div class="track-thumbnail"></div>
                             <div class="track-details">
-                                <div class="track-title" id="previewTitle">Neon Drive</div>
-                                <div class="track-artist" id="previewArtist">Hallez Beats</div>
+                                <div class="track-title">Awesome Track Name</div>
+                                <div class="track-artist">Artist Name</div>
                             </div>
                         </div>
-                        <div class="mini-eq" id="miniEq" aria-hidden="true">
-                            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-                        </div>
-                        <div class="progress-bar" id="previewProgress">
-                            <div class="progress-fill" id="previewProgressFill"></div>
+                        <div class="progress-bar">
+                            <div class="progress-fill"></div>
                         </div>
                         <div class="player-controls">
-                            <button class="control-btn" id="previewPrev" type="button" aria-label="Предыдущий трек">⏮</button>
-                            <button class="control-btn play-btn" id="previewPlay" type="button" aria-label="Играть / пауза">▶</button>
-                            <button class="control-btn" id="previewNext" type="button" aria-label="Следующий трек">⏭</button>
-                            <button class="control-btn" id="previewMute" type="button" aria-label="Звук">🔊</button>
+                            <button class="control-btn">⏮️</button>
+                            <button class="control-btn play-btn">▶️</button>
+                            <button class="control-btn">⏭️</button>
+                            <button class="control-btn">🔊</button>
                         </div>
                     </div>
                 </div>
@@ -132,40 +122,6 @@
                     <div class="feature-icon">⚡</div>
                     <h3>Быстрая работа</h3>
                     <p>Моментальная загрузка треков и отклик на команды. Никаких задержек и зависаний.</p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section id="pads" class="pads-section">
-        <div class="container">
-            <h2 class="section-title">Бит-пэды</h2>
-            <p class="section-subtitle">Играй сам: жми на пэды или клавиши <b>Q W E R / A S D F</b></p>
-
-            <div class="pads-grid" id="padsGrid">
-                <button class="pad" type="button" data-pad="kick"  data-key="Q"><span class="pad-key">Q</span><span class="pad-name">Kick</span></button>
-                <button class="pad" type="button" data-pad="snare" data-key="W"><span class="pad-key">W</span><span class="pad-name">Snare</span></button>
-                <button class="pad" type="button" data-pad="hat"   data-key="E"><span class="pad-key">E</span><span class="pad-name">Hi-Hat</span></button>
-                <button class="pad" type="button" data-pad="clap"  data-key="R"><span class="pad-key">R</span><span class="pad-name">Clap</span></button>
-                <button class="pad" type="button" data-pad="bass"  data-key="A"><span class="pad-key">A</span><span class="pad-name">808 Bass</span></button>
-                <button class="pad" type="button" data-pad="tom"   data-key="S"><span class="pad-key">S</span><span class="pad-name">Tom</span></button>
-                <button class="pad" type="button" data-pad="zap"   data-key="D"><span class="pad-key">D</span><span class="pad-name">Laser</span></button>
-                <button class="pad" type="button" data-pad="chord" data-key="F"><span class="pad-key">F</span><span class="pad-name">Chord</span></button>
-            </div>
-        </div>
-    </section>
-
-    <section id="visualizer" class="visualizer">
-        <div class="container">
-            <h2 class="section-title">Живая визуализация звука</h2>
-            <p class="section-subtitle">Музыка оживает вместе с битом</p>
-
-            <div class="audio-visualizer">
-                <canvas id="visualizerCanvas"></canvas>
-                <div class="viz-toolbar">
-                    <button class="chip" id="vizModeBtn" type="button">Режим фона: Кольца</button>
-                    <button class="chip" id="softBtn" type="button" aria-pressed="false">Мягкий режим: выкл</button>
-                    <button class="chip" id="zenBtn" type="button">Только визуал</button>
                 </div>
             </div>
         </div>
@@ -280,7 +236,36 @@
             </div>
         </div>
     </section>
-    </main>
+
+    <section id="visualizer" class="visualizer">
+        <div class="container">
+            <h2 class="section-title">Живая визуализация звука</h2>
+            <p class="section-subtitle">Музыка оживает вместе с битом</p>
+
+            <div class="audio-visualizer">
+                <canvas id="visualizerCanvas"></canvas>
+                <div class="visualizer-bars">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                </div>
+                <div class="visualizer-waveform">
+                    <svg viewBox="0 0 1000 200">
+                        <path id="wavePath" d="M0,100 L1000,100" stroke="#fff" stroke-width="2" fill="none"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <footer class="footer">
         <div class="container">
@@ -297,7 +282,6 @@
                     <h4>Ссылки</h4>
                     <ul>
                         <li><a href="#features">Функции</a></li>
-                        <li><a href="#pads">Пэды</a></li>
                         <li><a href="#commands">Команды</a></li>
                         <li><a href="#setup">Установка</a></li>
                     </ul>
@@ -317,39 +301,6 @@
             </div>
         </div>
     </footer>
-
-    <!-- Нижний плеер -->
-    <div class="dock" id="dock">
-        <div class="dock-track">
-            <div class="dock-disc" id="dockDisc">♪</div>
-            <div class="dock-meta">
-                <div class="dock-title" id="dockTitle">Neon Drive</div>
-                <div class="dock-artist" id="dockArtist">Hallez Beats · 124 BPM</div>
-            </div>
-        </div>
-
-        <div class="dock-center">
-            <div class="dock-controls">
-                <button class="dock-btn" id="dockPrev" type="button" aria-label="Предыдущий">⏮</button>
-                <button class="dock-btn dock-play" id="dockPlay" type="button" aria-label="Играть / пауза">▶</button>
-                <button class="dock-btn" id="dockNext" type="button" aria-label="Следующий">⏭</button>
-            </div>
-            <div class="dock-seek">
-                <span id="dockTime">0:00</span>
-                <div class="dock-bar" id="dockBar"><div class="dock-bar-fill" id="dockBarFill"></div></div>
-                <span id="dockTotal">0:00</span>
-            </div>
-        </div>
-
-        <div class="dock-right">
-            <label class="dock-btn dock-file" title="Загрузить свой трек">
-                📁
-                <input type="file" id="fileInput" accept="audio/*" hidden>
-            </label>
-            <button class="dock-btn" id="dockMute" type="button" aria-label="Звук">🔊</button>
-            <input type="range" id="volume" min="0" max="100" value="70" aria-label="Громкость">
-        </div>
-    </div>
 
     <script src="script.js"></script>
 </body>
