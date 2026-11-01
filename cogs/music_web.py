@@ -1567,7 +1567,9 @@ function eqNote() {
    текущую минуту — фон идёт за настоящей музыкой: прыгнул бас — подскочил гребень.
    Опрос каждые 300 мс, показ с запасом в 0.7 с: если ответ опоздал, дыры в кадре нет */
 const LB = {n: 0, fps: 50, seq: 0, at: 0, raw: null, asked: false, stalls: 0};
-const LB_LEAD = 35;
+/* запас в 8 кадров = 0.16 с: меньше — фон начнёт упираться в край кольца, больше —
+   картинка ощутимо отстаёт от того, что звучит в канале */
+const LB_LEAD = 8;
 let hasBands = false;
 
 async function livePoll() {
@@ -1590,9 +1592,10 @@ async function livePoll() {
 function liveBands() {
   if (!LB.n) return null;
   const f = (performance.now() - LB.at) * LB.fps / 1000 + (LB.n - 1 - LB_LEAD);
-  const i = Math.floor(f);
-  if (i < 0 || i + 1 >= LB.n) return null;
-  const r = f - i;
+  /* опоздал с ответом — держим последний кадр, а не роняем полосу в ноль: провал
+     на полсекунды глаз читает как «картинка дёргается», а не как тишина в музыке */
+  const i = Math.max(0, Math.min(LB.n - 2, Math.floor(f)));
+  const r = Math.max(0, Math.min(1, f - i));
   const mix = (o) => (LB.raw[i * 3 + o] + (LB.raw[(i + 1) * 3 + o] - LB.raw[i * 3 + o]) * r) / 255;
   return [mix(0), mix(1), mix(2)];
 }
@@ -1627,10 +1630,10 @@ function blob(cx, x, y, r, col, alpha) {
       ходят вверх-вниз сами по себе (bob), а от удара гребень подпрыгивает. высота
       гребня и яркость — из реальной энергии полосы, ничего случайного тут нет ── */
 const WAVES = [
-  {b: 1, y: .13, amp: .030, len: 1.4, sp: .45, a: .20, lw: 1.2, top: 1},
-  {b: 0, y: .50, amp: .058, len: 1.0, sp: .55, a: .34, lw: 2.2, top: 0},
-  {b: 1, y: .66, amp: .044, len: 1.7, sp: .80, a: .26, lw: 1.7, top: 0},
-  {b: 2, y: .81, amp: .032, len: 2.6, sp: 1.1, a: .22, lw: 1.3, top: 0}
+  {b: 1, y: .13, amp: .026, len: 1.7, sp: .45, a: .16, lw: 1.1, top: 1},
+  {b: 0, y: .50, amp: .052, len: 1.35, sp: .55, a: .26, lw: 1.6, top: 0},
+  {b: 1, y: .66, amp: .040, len: 2.1, sp: .80, a: .20, lw: 1.3, top: 0},
+  {b: 2, y: .81, amp: .028, len: 3.0, sp: 1.1, a: .17, lw: 1.1, top: 0}
 ];
 const WPTS = new Float32Array(288);
 /* полос по треку нет (поток, чужая ссылка) — фон не замирает: волны ведёт медленный
@@ -1673,18 +1676,19 @@ function paintAmb(dt, t) {
   const wsum = bass + mid + hi + .45;
   const tint = [0, 1, 2].map((c) => Math.round(
     (PALB[0][c] * (bass + .15) + PALB[1][c] * (mid + .15) + PALB[2][c] * (hi + .15)) / wsum));
-  /* заливка на весь экран, а не только пятна по углам */
-  cx.fillStyle = rgba(tint, .04 + .15 * energy);
+  /* заливка на весь экран, а не только пятна по углам. свечения стало меньше
+     намеренно: на прежних цифрах список очереди тонул в розовом */
+  cx.fillStyle = rgba(tint, .03 + .1 * energy);
   cx.fillRect(0, 0, AW, AH);
   /* большие мягкие пятна, которые медленно плывут по всему фону; у каждой полосы своё */
   blob(cx, AW * (.18 + .1 * Math.sin(seed * .19)), AH * (.25 + .1 * Math.cos(seed * .15)),
-       AW * (.6 + .3 * bass), PALB[0], .12 + .32 * bass);
+       AW * (.6 + .3 * bass), PALB[0], .1 + .2 * bass);
   blob(cx, AW * (.82 + .08 * Math.cos(seed * .13)), AH * (.45 + .1 * Math.sin(seed * .17)),
-       AW * (.55 + .3 * mid), PALB[1], .1 + .3 * mid);
+       AW * (.55 + .3 * mid), PALB[1], .08 + .19 * mid);
   blob(cx, AW * (.5 + .2 * Math.sin(seed * .11)), AH * (.9 - .05 * Math.cos(seed * .21)),
-       AW * (.6 + .3 * hi), PALB[2], .1 + .3 * hi);
+       AW * (.6 + .3 * hi), PALB[2], .08 + .19 * hi);
   blob(cx, AW * (.5 + .25 * Math.cos(seed * .09)), AH * (.4 + .15 * Math.sin(seed * .12)),
-       AW * .8, tint, .04 + .2 * energy);
+       AW * .8, tint, .03 + .13 * energy);
   cx.lineCap = "round";
   const step = Math.max(6, AW / 90);
   for (let i = 0; i < WAVES.length; i++) {
@@ -1694,8 +1698,8 @@ function paintAmb(dt, t) {
     const bob = Math.sin(seed * w.sp * .7 + i * 1.9) * AH * .03;
     /* энергия полосы и удар тянут гребень только вверх: вниз он возвращается сам,
        по bob и по тому, как полоса отпускает — иначе на бите свет просто проваливается */
-    const y0 = AH * w.y + bob - (f * .18 + hit * .12) * AH;
-    const amp = AH * (w.amp + .11 * f);
+    const y0 = AH * w.y + bob - (f * .13 + hit * .08) * AH;
+    const amp = AH * (w.amp + .075 * f);
     let n = 0;
     for (let x = 0; x <= AW + step; x += step) {
       const p = x / AW * 6.2832 * w.len;
@@ -1712,8 +1716,8 @@ function paintAmb(dt, t) {
     cx.lineTo(WPTS[(n - 1) * 2], edge);
     cx.closePath();
     const g = cx.createLinearGradient(0, y0, 0, edge);
-    g.addColorStop(0, rgba(col, w.a * (.7 + .9 * e + .8 * hit)));
-    g.addColorStop(.55, rgba(col, w.a * (.24 + .34 * e + .3 * hit)));
+    g.addColorStop(0, rgba(col, w.a * (.55 + .6 * e + .5 * hit)));
+    g.addColorStop(.55, rgba(col, w.a * (.2 + .26 * e + .22 * hit)));
     g.addColorStop(1, rgba(col, 0));
     cx.fillStyle = g;
     cx.fill();
@@ -1721,8 +1725,8 @@ function paintAmb(dt, t) {
     cx.beginPath();
     cx.moveTo(WPTS[0], WPTS[1]);
     for (let k = 1; k < n; k++) cx.lineTo(WPTS[k * 2], WPTS[k * 2 + 1]);
-    cx.strokeStyle = rgba(col, .1 + .5 * e + .35 * hit);
-    cx.lineWidth = w.lw * (1 + 1.5 * f + 1.2 * hit);
+    cx.strokeStyle = rgba(col, .07 + .3 * e + .2 * hit);
+    cx.lineWidth = w.lw * (1 + .55 * f + .45 * hit);
     cx.stroke();
   }
   /* пылинки: вспыхивают от удара баса и уплывают вверх — тот же ритм, что и гребни */
@@ -1841,7 +1845,14 @@ function frame(t) {
     const v = tgt[i];
     LIVE[k] += (v - LIVE[k]) * Math.min(1, dt * (v > LIVE[k] ? 26 : 9));
   });
-  LIVE.hit = Math.min(1, Math.max(0, LIVE.hit - dt * 2.6) + (jump > .06 ? jump * 2.4 : 0));
+  /* удар — это импульс, а не накопление. раньше сюда каждый кадр прибавлялось по
+     0.1-0.3, и на плотном бите hit залипал на единице: фон стоял залитый светом и
+     на биты не отзывался вовсе (замер: 1 удар за 8 секунд). теперь hit либо равен
+     текущему всплеску, либо падает на 3.4/с — между битами он успевает погаснуть.
+     всплеск берём из баса и середины: у удара подъём и там и там, у тарелок — только
+     в середине, и её берём с весом 0.8, чтобы хэт не командовал картиной */
+  const onset = Math.max(jump, (tgt[1] - LIVE.m) * .8);
+  LIVE.hit = Math.max(LIVE.hit - dt * 3.4, onset > .03 ? Math.min(1, onset * 5) : 0);
   /* плавная версия: нарастает за ~0.15 с, уходит за ~0.5 с — свет волной идёт за звуком,
      а не включается и выключается */
   ["l", "m", "h"].forEach((k, i) => {
@@ -2450,11 +2461,12 @@ fillAll();
 poll();
 setInterval(() => { if (!document.hidden) poll(); }, 2200);
 /* живые полосы нужны, только когда играет поток без готового анализа: файл из
-   библиотеки уже лежит целиком, второй раз его спрашивать незачем */
+   библиотеки уже лежит целиком, второй раз его спрашивать незачем.
+   150 мс — ответ весит ~600 символов, а каждые 300 фон уже успевает догнать кольцо */
 setInterval(() => {
   if (document.hidden || !S || !S.playing || AMB.lo) return;
   livePoll();
-}, 300);
+}, 150);
 // вернулись во вкладку — опрос и цикл рисования заново: в фоновой вкладке браузер
 // сам заглушает requestAnimationFrame, и догонять это нужно сразу
 document.addEventListener("visibilitychange", () => {
