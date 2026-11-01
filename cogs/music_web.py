@@ -1001,6 +1001,33 @@ body.amb-on .range::-moz-range-thumb{
   box-shadow:0 2px 8px rgba(0,0,0,.55),
              0 0 calc(2px + 14px * var(--k,var(--hit))) color-mix(in srgb,var(--accent) 85%,transparent)}
 body.amb-on .switch[aria-checked="true"] i{box-shadow:0 0 calc(4px + 16px * var(--hit)) -4px var(--accent)}
+
+/* ═════════ лёгкий режим ═════════
+   пока фон играет, размытие стекла под анимированным холстом и тени с размытием,
+   привязанные к уровню звука, пересчитывались каждый кадр — страница тормозила и
+   опаздывала за битом. Здесь они выключены: остаются только дешёвые прозрачность
+   и масштаб, которые рисует видеокарта без перерасчёта */
+body.amb-on .glass,body.amb-on .tabs,body.amb-on .toast{-webkit-backdrop-filter:none;backdrop-filter:none}
+body.amb-on .glass{background:linear-gradient(180deg,rgba(20,20,27,.84),rgba(14,14,19,.8))}
+body.amb-on .hero::before,body.amb-on .dock::before{transform:none;will-change:opacity;
+  opacity:calc(.1 + .25 * var(--pulse))}
+body.amb-on .hero{border-color:var(--line)}
+body.amb-on .art{box-shadow:0 30px 70px -30px #000,0 0 0 1px var(--line) inset}
+body.amb-on .big{box-shadow:0 14px 34px -14px color-mix(in srgb,var(--accent) 85%,transparent),
+  inset 0 1px 0 rgba(255,255,255,.8)}
+body.amb-on .title{text-shadow:none}
+body.amb-on .vinyl .lbl,body.amb-on .track-bar i,body.amb-on .band .meter i{filter:none}
+body.amb-on .track-bar i,body.amb-on .band .meter i{box-shadow:none}
+body.amb-on .knob{border-color:var(--line)}
+body.amb-on .knob.live{border-color:color-mix(in srgb,var(--accent) 38%,transparent)}
+body.amb-on .range::-webkit-slider-thumb,body.amb-on .range::-moz-range-thumb{
+  box-shadow:0 2px 8px rgba(0,0,0,.55)}
+body.amb-on .switch[aria-checked="true"] i{box-shadow:none}
+.sync{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;padding-top:14px;
+  border-top:1px solid var(--line);font-size:.78rem;color:var(--text-2)}
+.sync .range{flex:1 1 140px;max-width:360px}
+.sync b{min-width:64px;text-align:right;font-variant-numeric:tabular-nums;color:var(--text)}
+.sync em{font-style:normal;color:var(--text-3);font-size:.72rem;flex:1 1 100%}
 </style>
 </head>
 <body>
@@ -1149,6 +1176,13 @@ body.amb-on .switch[aria-checked="true"] i{box-shadow:0 0 calc(4px + 16px * var(
           <span class="lv" id="l-high">—</span>
           <span class="nm">верх<em>от 1400 Гц</em></span></div>
       </div>
+      <div class="sync">
+        <span>Синхронизация света</span>
+        <input class="range" type="range" id="syncRange" min="0" max="800" step="20" value="160"
+               aria-label="Задержка света относительно звука, миллисекунды">
+        <b id="syncVal">160 мс</b>
+        <em>Звук идёт в Discord с задержкой. Если свет бьёт раньше, чем слышно, двигай вправо; если позже — влево.</em>
+      </div>
     </div>
     <p class="hint">Звук в голосовом один на весь канал: что крутит пульт, слышат все, и в
       канале подписано, кто именно. Трек при этом не начинается сначала — ffmpeg
@@ -1280,6 +1314,21 @@ function setIcon(el, id) {
   else el.replaceChildren(iconEl(id));
 }
 
+/* синхронизация света: у каждого свой Discord, своя задержка — подгоняется ползунком */
+function setSync(frames) {
+  LB_LEAD = frames;
+  $("syncVal").textContent = Math.round(frames * 20) + " мс";
+}
+function initSync() {
+  $("syncRange").value = LB_LEAD * 20;
+  setSync(LB_LEAD);
+  fillRange($("syncRange"));
+  $("syncRange").addEventListener("input", () => {
+    setSync(Math.round(Number($("syncRange").value) / 20));
+    save("hz-sync", LB_LEAD);
+  });
+}
+
 /* заливка ползунка: у громкости и темпа от левого края, у бас/середина/верха — от нуля */
 function fillRange(el) {
   const min = Number(el.min) || 0, max = Number(el.max) || 100, v = Number(el.value) || 0;
@@ -1289,10 +1338,10 @@ function fillRange(el) {
   el.style.setProperty("--a", pos(bi ? Math.min(50, p) : 0));
   el.style.setProperty("--b", pos(bi ? Math.max(50, p) : p));
 }
-function fillAll() { document.querySelectorAll(".knob .range, #volRange").forEach(fillRange); }
+function fillAll() { document.querySelectorAll(".knob .range, #volRange, #syncRange").forEach(fillRange); }
 document.addEventListener("input", (e) => {
   const t = e.target;
-  if (t && t.matches && t.matches(".knob .range, #volRange")) fillRange(t);
+  if (t && t.matches && t.matches(".knob .range, #volRange, #syncRange")) fillRange(t);
 });
 
 async function api(path, body) {
@@ -1625,7 +1674,8 @@ const LBRING = 150;                  // три секунды по 50 кадро
 /* запас в 8 кадров = 0.16 с. Меньше нельзя: точка показа всегда чуть опережает то, что
    уже приехало. Плюс к этому запасу добавляются ~40 мс шага серверного цикла и ~100 мс
    дорога до браузера — вместе ~0.3 с, ровно столько звук тратит от плеера бота до ушей */
-const LB_LEAD = 8;
+let LB_LEAD = 8;   // кадров по 20 мс; ручка «Синхронизация света» меняет это число
+{ const sv = Number(read("hz-sync", 8)); if (isFinite(sv)) LB_LEAD = Math.max(0, Math.min(40, Math.round(sv))); }
 let hasBands = false;
 
 function lbJoin(bytes, seq) {
@@ -1706,7 +1756,7 @@ function liveBands() {
       холст маленький (до 720 px) и растягивается стилями: свет размытый по задумке,
       а на телефоне это решает вопрос с частотой кадров ── */
 function fitCanvases() {
-  const w = Math.min(innerWidth, 720);
+  const w = Math.min(innerWidth, 560);
   const h = Math.round(w * innerHeight / Math.max(1, innerWidth));
   if (!ambCv) return;
   if (AW !== w || AH !== h) {
@@ -1914,7 +1964,7 @@ function setVars() {
   const root = document.documentElement.style;
   const v = [SM.l, SM.m, SM.h, SM.hit];
   for (let i = 0; i < 4; i++) {
-    if (Math.abs(v[i] - varLast[i]) > .006 || (v[i] === 0 && varLast[i] !== 0)) {
+    if (Math.abs(v[i] - varLast[i]) > .025 || (v[i] === 0 && varLast[i] !== 0)) {
       varLast[i] = v[i];
       root.setProperty(VAR_NAMES[i], v[i].toFixed(3));
     }
@@ -1936,7 +1986,7 @@ function frame(t) {
   const dt = Math.min(.06, Math.max(.004, (t - lastT) / 1000)); lastT = t;
   /* файл из библиотеки даёт точные полосы по секунде трека; всё остальное — живое
      кольцо кадров, которое бот снимает прямо с потока */
-  const band = trackBands(position()) || liveBands();
+  const band = trackBands(position() - LB_LEAD * .02) || liveBands();
   hasBands = !!band;
   const tgt = band || [0, 0, 0];
   /* удар ловим ДО сглаживания: после него прыжок уже не виден */
@@ -1972,7 +2022,7 @@ function frame(t) {
   fitCanvases();
   paintAmb(dt, t);
   paintViz(t);
-  setVars();
+  if (tick % 2 === 0) setVars();
   tick++;
   if (tick % 8 === 0) eqLive();
   if (tick % 30 === 1) syncViz();
@@ -2559,6 +2609,7 @@ $("queueList").append((() => {
 openTab(read(KEY.tab, "queue"));
 $("l-low").textContent = $("l-mid").textContent = $("l-high").textContent = "—";
 eqNote();
+initSync();
 fillAll();
 poll();
 setInterval(() => { if (!document.hidden) poll(); }, 2200);
