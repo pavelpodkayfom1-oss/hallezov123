@@ -2,7 +2,7 @@ import disnake
 from disnake.ext import commands
 from typing import Optional, Dict
 from utils.checks import load_config, save_config, is_admin, get_text
-from utils.embeds import base_embed, brand_name, note_embed, success_embed, error_embed, warning_embed
+from utils.embeds import base_embed, brand_name, note_embed, panel_embed, success_embed, error_embed, warning_embed
 from database import get_stats
 from cogs.recruitment import RecruitLaunchView
 from cogs.promotions import PromotionLaunchView, build_promo_panel_embed
@@ -810,9 +810,100 @@ class MainDashboardView(disnake.ui.View):
         return emb
 
 
+# ─────────────────────── служебные команды для ЛС ───────────────────────
+# Слово «admin» в личных сообщениях. В ЛС нет участника сервера, а значит нет и ролей:
+# обычная проверка прав (is_admin смотрит владельца сервера и роли) там бессильна,
+# поэтому админа узнаём по ID из config.json и по владельцу приложения — второй нужен,
+# чтобы после чистки конфига бот не остался без того, кто может его позвать.
+DEV_WORDS = ("admin", "админ")
+
+# Группы и пояснения держим здесь, а проверяем по живому реестру команд: если команду
+# переименовали или ког выключили, мёртвая строчка в карточке не останется.
+DEV_SECTIONS = [
+    ("⚙️ Сервис бота", [
+        ("панель", "все экраны семьи в одном меню"),
+        ("admin", "главная админ-панель"),
+        ("центр", "логи, роли, отпуска, розыгрыши"),
+        ("staff", "инструменты руководства"),
+        ("update_save", "снимок настроек и базы"),
+        ("reverse", "откат настроек на шаг назад"),
+        ("mem", "сколько памяти ест бот"),
+        ("test_texts", "проверка всех текстов бота"),
+    ]),
+    ("📤 Панели в канал", [
+        ("music_panel", "пульт музыки"),
+        ("rooms_panel", "временные комнаты"),
+        ("recruit_panel", "панель набора"),
+        ("hr", "рекрут-центр"),
+        ("banner", "баннер под заявками"),
+        ("media_send", "анонс стрима"),
+        ("стримы", "авто-анонсы Twitch"),
+    ]),
+    ("🔐 Права и доступ", [
+        ("removeadmin", "забрать админку у человека"),
+        ("hr_access", "рекрутерам доступ ко всем веткам"),
+        ("teg_access", "кто пользуется teg panel"),
+        ("govorit-panel", "роль доступа к голосу бота"),
+        ("media_role", "право анонсировать стримы"),
+    ]),
+    ("✋ Приказы и порядок", [
+        ("баллы", "начислить, списать, топ"),
+        ("выговоры", "выдать и снять"),
+        ("ранг", "поставить ранг и роль"),
+        ("ник", "сменить ник бойцу"),
+        ("сборы", "явка и молчуны"),
+        ("наказания", "мут и журнал"),
+        ("чс", "чёрный список"),
+    ]),
+]
+
+
+def dev_names(bot) -> set:
+    """Названия команд, которые бот действительно знает прямо сейчас."""
+    return {cmd.name for cmd in bot.application_commands}
+
+
+async def is_developer(bot, user) -> bool:
+    """Админ бота в ЛС: по ID из config.json или по владельцу приложения."""
+    if user.id in set(load_config().get("admin_user_ids", []) or []):
+        return True
+    try:
+        return await bot.is_owner(user)
+    except Exception:
+        return False
+
+
+def dev_card(bot) -> disnake.Embed:
+    live = dev_names(bot)
+    shown = 0
+    sections = []
+    for title, rows in DEV_SECTIONS:
+        lines = [f"`/{name}` — {note}" for name, note in rows if name in live]
+        shown += len(lines)
+        if lines:
+            sections.append((title, "\n".join(lines)))
+    latency = round((bot.latency or 0) * 1000)
+    intro = (f"Серверов у бота: **{len(bot.guilds)}** · отклик **{latency} мс** · "
+             f"команд всего **{len(live)}**, из них служебных тут **{shown}**. "
+             "Остальные экраны открывает `/панель` — уже на сервере.")
+    return panel_embed(f"⚜️ Команды разработчика · {brand_name()}", sections,
+                       guild=None, intro=intro)
+
+
 class AdminCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+
+    @commands.Cog.listener()
+    async def on_message(self, message: disnake.Message):
+        """«admin» в личных сообщениях — карточка служебных команд бота."""
+        if message.author.bot or message.guild is not None:
+            return
+        if message.content.strip().lower().lstrip("/").strip() not in DEV_WORDS:
+            return
+        if not await is_developer(self.bot, message.author):
+            return
+        await message.reply(embed=dev_card(self.bot), mention_author=False)
 
     @commands.slash_command(
         name="admin",
