@@ -40,6 +40,12 @@ AMBIENT_KEY = re.compile(r"\A[0-9a-f]{16}\Z")
 # Защита от чужих POST'ов и выключатель заказов действуют только на маршруты сайта.
 WRITE_PATHS = frozenset(f"{pre}/api/{name}"
                         for pre in ("", PREFIX) for name in ("order", "action"))
+# Зеркало звука: 192 КБ/с на одного слушателя, поэтому их число ограничено —
+# хостинг с 256 МБ и одним каналом наружу тянет двоих, третьего — нет.
+SOUND_POLL = 0.02            # как часто заглядываем в кольцо плеера
+SOUND_STREAM_S = 600         # дольше одного соединения не держим: страница сама переподключится
+SOUND_LISTENERS = 2
+_SOUND_ON = [0]              # сколько зеркал открыто прямо сейчас
 
 
 def _panel_port() -> int:
@@ -158,6 +164,7 @@ class MusicWeb(commands.Cog):
             app.router.add_get(pre + "/api/ambient", self.h_ambient)
             app.router.add_get(pre + "/api/live", self.h_live)
             app.router.add_get(pre + "/api/live/stream", self.h_live_stream)
+            app.router.add_get(pre + "/api/sound", self.h_sound)
             app.router.add_post(pre + "/api/order", self.h_order)
             app.router.add_post(pre + "/api/action", self.h_action)
         app.router.add_get(PREFIX, self.h_page_moved)
@@ -372,6 +379,63 @@ class MusicWeb(commands.Cog):
                     beat = now
                 await resp.write(b"data: " + json.dumps(payload).encode() + b"\n\n")
         except (ConnectionResetError, asyncio.CancelledError):
+            pass
+        return resp
+
+    async def h_sound(self, request: web.Request) -> web.StreamResponse:
+        """Зеркало звука: те же байты, что плеер каждую порцию отдаёт в канал.
+
+        Людей через бота не слышно — библиотека приём звука не умеет. Своё же
+        воспроизведение снять можно, и оно уже проходит через руки плеера: полосы
+        для фона берутся с того же PCM. Значит страницу можно сделать наушником,
+        не заходя в Discord.
+
+        Ручка громкости канала сюда не входит: зеркало снимается ДО трансформера,
+        иначе на 14 % слушатель слышал бы шёпот — проценты навешивает браузер.
+        Байты идут как есть (стерео, 48 кГц, по два байта на канал), без base64:
+        страница читает поток и сама раскладывает его в Web Audio.
+        """
+        cog, guild = self._player()
+        if cog is None:
+            raise web.HTTPNotFound()
+        if _SOUND_ON[0] >= SOUND_LISTENERS:
+            return _json({"error": "Слушает уже максимум людей — закрой другую вкладку"}, 429)
+        resp = web.StreamResponse(status=200, headers={
+            "Content-Type": "application/octet-stream",
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        })
+        await resp.prepare(request)
+        _SOUND_ON[0] += 1
+        since = None
+        last = time.monotonic()
+        end = last + SOUND_STREAM_S
+        try:
+            while time.monotonic() < end:
+                try:
+                    total, chunk = cog.web_sound_take(guild, since)
+                except Exception:
+                    break
+                if since is None:
+                    # стартуем от свежего края: слушателю не нужен хвост чужого трека
+                    since = total
+                if chunk:
+                    since = total
+                    last = time.monotonic()
+                    await resp.write(chunk)
+                else:
+                    await asyncio.sleep(SOUND_POLL)
+                    # трек кончился и плеер умер: висеть десять минут и занимать
+                    # место слушателя из-за тишины незачем — страница переподключится
+                    if time.monotonic() - last > 2.0 and not cog.web_sound_live(guild):
+                        break
+        except (ConnectionResetError, asyncio.CancelledError):
+            pass
+        finally:
+            _SOUND_ON[0] -= 1
+        try:
+            await resp.write_eof()
+        except Exception:
             pass
         return resp
 
@@ -1112,6 +1176,8 @@ body.amb-on .switch[aria-checked="true"] i{box-shadow:none}
           <button class="ctrl" id="repeatBtn" title="Повтор" aria-label="Повтор"><svg class="ic" aria-hidden="true"><use href="#i-repeat"></use></svg></button>
           <button class="ctrl" id="djBtn" title="Авто-диджей: брать треки из библиотеки сам"
             aria-label="Авто-диджей"><svg class="ic" aria-hidden="true"><use href="#i-auto"></use></svg></button>
+          <button class="ctrl" id="hearBtn" title="Слушать то, что играет в канале, прямо здесь — звук бота, не людей"
+            aria-label="Слушать у себя"><svg class="ic" aria-hidden="true"><use href="#i-headphones"></use></svg></button>
           <button class="ctrl" id="stopBtn" title="Остановить и очистить очередь"
             aria-label="Остановить"><svg class="ic sol" aria-hidden="true"><use href="#i-stop"></use></svg></button>
         </div>
@@ -1465,12 +1531,14 @@ function setStatus(text, live) {
 
 function paint() {
   const live = !!(S.connected && (S.playing || S.paused));
-  setStatus(live ? ("в эфире · " + (S.channel || "голосовой")) : "бот не в голосовом",
-            live && !!S.playing);
+  setStatus((live ? ("в эфире · " + (S.channel || "голосовой")) : "бот не в голосовом")
+            + (HEAR.on ? " · слушаешь" : ""), live && !!S.playing);
   $("cQueue").textContent = S.queue.length;
   $("cHist").textContent = (S.history || []).length;
   $("coolVal").textContent = S.cooldown;
   $("djBtn").classList.toggle("on", !!S.dj);
+  /* зеркало крутится той же ручкой, что и канал: слушать хочется ровно то, что слышно в голосе */
+  if (HEAR.gain) HEAR.gain.gain.value = hearVol();
   $("repeatBtn").classList.toggle("on", S.repeat !== "off");
   $("repeatBtn").title = S.repeat === "one" ? "Повтор: этот трек"
     : (S.repeat === "all" ? "Повтор: вся очередь" : "Повтор выключен");
@@ -1497,6 +1565,141 @@ function paint() {
   paintQueue();
   if (currentTab() === "history") paintHistory();
   fillAll();
+}
+
+/* ═════════ зеркало звука ═════════
+   Людей через бота не слышно: библиотека звук не принимает. Но то, что играет сам
+   бот, он отдаёт в канал ровно этими байтами, и страница умеет их слушать — это тот
+   же звук с теми же ручками пульта, только из браузера, без Discord. */
+const HR = {rate: 48000, bytes: 4, lead: 0.25, maxLag: 1.2, step: 19200};
+const HEAR = {on: false, ctx: null, gain: null, next: 0, ctl: null, acc: null,
+              srcs: [], got: 0, tries: 0};
+window.__hear = HEAR;          // им же пользуемся при проверке: видно, доходит ли звук
+
+function hearVol() {
+  return Math.max(0.05, Math.min(1, ((S && S.volume) || 100) / 100));
+}
+
+function hearOff(quiet, msg) {
+  HEAR.on = false;
+  if (HEAR.ctl) { try { HEAR.ctl.abort(); } catch (e) {} HEAR.ctl = null; }
+  if (HEAR.gain) { try { HEAR.gain.disconnect(); } catch (e) {} }
+  HEAR.gain = null;
+  HEAR.srcs.forEach((s) => { try { s.stop(); } catch (e) {} });
+  HEAR.srcs = [];
+  HEAR.next = 0; HEAR.acc = null; HEAR.got = 0; HEAR.tries = 0;
+  const b = $("hearBtn");
+  if (b) b.classList.remove("on");
+  if (msg) toast(msg, !quiet);
+  if (S) paint();
+}
+
+function hearPlay(part) {
+  const ctx = HEAR.ctx;
+  if (!ctx || ctx.state === "closed") return;
+  const i16 = new Int16Array(part.buffer, part.byteOffset, part.byteLength / 2);
+  const frames = part.byteLength / HR.bytes;
+  const buf = ctx.createBuffer(2, frames, HR.rate);
+  const L = buf.getChannelData(0), R = buf.getChannelData(1);
+  for (let i = 0; i < i16.length; i += 2) {
+    const k = i >> 1;
+    L[k] = i16[i] / 32768;
+    R[k] = i16[i + 1] / 32768;
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = buf;
+  src.connect(HEAR.gain);
+  /* прокси отвечает 230-270 мс, поэтому держим запас в четверть секунды; а если
+     отстали больше чем на полтора — перепрыгиваем: то, что уже поставлено в очередь,
+     сыграло бы поверх свежего и превратилось бы в кашу */
+  const now = ctx.currentTime;
+  if (HEAR.next < now || HEAR.next - now > HR.maxLag) {
+    HEAR.srcs.forEach((s) => { try { s.stop(); } catch (e) {} });
+    HEAR.srcs = [];
+    HEAR.next = now + HR.lead;
+  }
+  src.start(HEAR.next);
+  src.onended = () => {
+    const i = HEAR.srcs.indexOf(src);
+    if (i >= 0) HEAR.srcs.splice(i, 1);
+  };
+  HEAR.srcs.push(src);
+  HEAR.next += buf.duration;
+}
+
+function hearPush(add) {
+  const old = HEAR.acc || new Uint8Array(0);
+  const merged = new Uint8Array(old.length + add.byteLength);
+  merged.set(old);
+  merged.set(new Uint8Array(add.buffer, add.byteOffset, add.byteLength), old.length);
+  /* байт в нечётный хвост не выбрасываем: он дождётся следующего куска, иначе
+     каналы разъедутся — левый поедет правым, и это хрип на весь трек */
+  HEAR.acc = merged;
+  while (HEAR.acc.length >= HR.step) {
+    hearPlay(HEAR.acc.subarray(0, HR.step));
+    HEAR.acc = HEAR.acc.subarray(HR.step);
+  }
+}
+
+function hearRetry() {
+  if (!HEAR.on) return;
+  HEAR.tries += 1;
+  if (HEAR.tries > 3 || !S || !S.mirror) return hearOff(true);
+  setTimeout(() => { if (HEAR.on) hearPull(); }, 700);
+}
+
+async function hearPull() {
+  const ctl = new AbortController();
+  HEAR.ctl = ctl;
+  let r;
+  try {
+    r = await fetch(P + "/api/sound", {signal: ctl.signal});
+  } catch (e) {
+    return hearRetry();
+  }
+  if (!r.ok) {
+    let why = "звук не открылся (" + r.status + ")";
+    try { const j = await r.json(); if (j && j.error) why = j.error; } catch (e) {}
+    return hearOff(false, why);
+  }
+  if (!r.body || !r.body.getReader) return hearOff(false, "этот браузер не умеет слушать поток");
+  const read = r.body.getReader();
+  try {
+    for (;;) {
+      const got = await read.read();
+      if (got.done) break;
+      if (!got.value || !got.value.byteLength) continue;
+      HEAR.got += got.value.byteLength;
+      hearPush(got.value);
+    }
+    hearRetry();
+  } catch (e) {
+    if (HEAR.on) hearRetry();
+  }
+}
+
+async function hearOn() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return hearOff(false, "браузер совсем без звука");
+  try {
+    HEAR.ctx = HEAR.ctx || new AC();
+    if (HEAR.ctx.state === "suspended") await HEAR.ctx.resume();
+  } catch (e) {
+    return hearOff(false, "браузер не дал звук — нажми ещё раз");
+  }
+  if (HEAR.ctx.state !== "running") {
+    return hearOff(false, "нажми кнопку ещё раз: браузер ждёт клика");
+  }
+  const gain = HEAR.ctx.createGain();
+  gain.gain.value = hearVol();
+  gain.connect(HEAR.ctx.destination);
+  HEAR.gain = gain;
+  HEAR.on = true;
+  HEAR.next = 0; HEAR.acc = new Uint8Array(0); HEAR.srcs = [];
+  HEAR.got = 0; HEAR.tries = 0;
+  $("hearBtn").classList.add("on");
+  if (S) paint();
+  hearPull();
 }
 
 /* ═════════ пульт: значения с сервера, отправка — debounce ═════════ */
@@ -2129,9 +2332,16 @@ $("miniPrev").addEventListener("click", () => act("prev"));
 $("shuffleBtn").addEventListener("click", () => act("shuffle"));
 $("repeatBtn").addEventListener("click", () => act("repeat"));
 $("djBtn").addEventListener("click", () => act("dj"));
+$("hearBtn").addEventListener("click", () => {
+  if (HEAR.on) return hearOff(true);
+  if (!S) return toast("Страница ещё не узнала плеер — секунду", true);
+  if (!S.mirror) return toast("Сначала пусть что-то заиграет в канале", true);
+  hearOn();
+});
 $("stopBtn").addEventListener("click", () => { act("stop"); });
 $("volRange").addEventListener("input", () => {
   $("volVal").textContent = $("volRange").value + "%";
+  if (HEAR.gain) HEAR.gain.gain.value = Math.max(0.05, Number($("volRange").value) / 100);
   later("vol", () => act("volume", Number($("volRange").value)), 260);
 });
 $("seekRange").addEventListener("pointerdown", () => { dragSeek = true; });

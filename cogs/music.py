@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from collections import deque
 from urllib.parse import unquote, urlparse
@@ -902,24 +903,81 @@ class LiveBands:
         return self.seq, bytes(self.buf)[(n - (self.seq - since)) * 3:]
 
 
+SOUND_RATE = 48000        # с такой частотой плеер отдаёт PCM в голосовой канал
+SOUND_FRAME = 4           # стерео по два байта на канал
+SOUND_CHUNK = int(SOUND_RATE / 50) * SOUND_FRAME   # 20 мс — одна порция плеера
+SOUND_CAP = SOUND_CHUNK * 125      # кольцо: 2,5 секунды свежего звука на сервер
+SOUND_JUMP = SOUND_CHUNK * 12      # отставшего выкидывает на 0,24 с до конца кольца
+
+
+class Mirror:
+    """Кольцо тех же байтов, что плеер отдаёт в канал — зеркало звука в браузер.
+
+    Люди через бота не слышны: библиотека звук не принимает. А своё воспроизведение
+    снять можно, и оно уже проходит через руки плеера. Пишет аудиопоток disnake,
+    читает HTTP-обработчик, поэтому и счётчик, и кольцо под локом: без него читатель
+    мог бы увидеть обновлённый счётчик и ещё не обрезанное кольцо.
+    """
+
+    __slots__ = ("buf", "total", "lock")
+
+    def __init__(self):
+        self.buf = bytearray()
+        self.total = 0
+        self.lock = threading.Lock()
+
+    def push(self, pcm: bytes) -> None:
+        with self.lock:
+            self.buf += pcm
+            self.total += len(pcm)
+            over = len(self.buf) - SOUND_CAP
+            if over > 0:
+                del self.buf[:over]
+
+    def take(self, since):
+        """(счётчик, байты после него). None — начать со самого свежего края.
+
+        Отставшего дальше кольца не догоняем повтором: после паузы человек обязан
+        услышать то, что играет сейчас, а не то, что играло две секунды назад. Поэтому
+        выдаём свежий край, а счётчик ведём так, будто всё между тем уже прослушано.
+        """
+        with self.lock:
+            start = self.total - len(self.buf)
+            if since is None or since > self.total:
+                return self.total, b""
+            if since < start:
+                return self.total, bytes(self.buf)[-SOUND_JUMP:]
+            if since == self.total:
+                return self.total, b""
+            return self.total, bytes(self.buf)[since - start:]
+
+
 class _TeeSource(disnake.AudioSource):
     """Ставится ВНУТРЬ трансформера громкости: полосы снимаются до ручки.
 
     Так фон живёт и на тихом канале, и сама ручка остаётся у трансформера — обёртка
-    её не прячет.
+    её не прячет. Зеркало для браузера берёт те же байты до ручки: громкость канала
+    страница крутит сама, иначе на 14 % слушатель слышал бы шёпот.
     """
 
-    def __init__(self, original, live: LiveBands):
+    def __init__(self, original, live, mirror=None):
         self.original = original
         self.live = live
+        self.mirror = mirror
 
     def read(self) -> bytes:
         data = self.original.read()
         if data:
             try:
-                self.live.push(data)
+                if self.live is not None:
+                    self.live.push(data)
             except Exception:
                 # фон не имеет права оборвать звук в канале
+                pass
+            try:
+                if self.mirror is not None:
+                    self.mirror.push(data)
+            except Exception:
                 pass
         return data
 
@@ -958,6 +1016,8 @@ class GuildPlayer:
         self.source = None
         # 🌊 живые полосы того, что уходит в канал; вешается на источник
         self.live = None
+        # 🔊 те же байты для браузера: зеркало, чтобы музыку слышать вне Discord
+        self.mirror = Mirror()
         self.volume = cfg["volume"] / 100.0
         self.text_channel = None
         # 🔁 авто-диджей: когда очередь пустеет, берём случайный трек из библиотеки
@@ -1940,6 +2000,9 @@ class Music(commands.Cog):
             "channel": vc.channel.name if vc and vc.channel else None,
             "playing": bool(vc and vc.is_playing()),
             "paused": bool(vc and vc.is_paused()),
+            # зеркало доступно, пока источник играет или стоит на паузе: и там, и там
+            # страница может слушать, просто из паузы байты не идут
+            "mirror": self.web_sound_live(guild),
             "volume": int(round(volume * 100)),
             "dj": bool(p.dj if p else cfg["dj"]),
             "queue_max": cfg["queue"],
@@ -2034,6 +2097,26 @@ class Music(commands.Cog):
         seq, raw = live.delta(int(since))
         return {"fps": LIVE_FPS, "seq": seq, "frames": len(raw) // 3,
                 "bands": base64.b64encode(raw).decode("ascii")}
+
+    def web_sound_live(self, guild: disnake.Guild) -> bool:
+        """Живо ли зеркало: источник должен играть или стоять на паузе.
+
+        Пауза считается живым состоянием: на ней байты не идут, но слушатель ждёт
+        продолжения, и рвать его из-за кратковременной тишины нельзя.
+        """
+        p = self.players.get(guild.id)
+        vc = guild.voice_client
+        return bool(p and p.mirror and vc and (vc.is_playing() or vc.is_paused()))
+
+    def web_sound_take(self, guild: disnake.Guild, since):
+        """Следующий кусок PCM, который плеер отдал в канал: (счётчик, байты).
+
+        None в since — «подключился только что»: отдаём свежий край, а не хвост.
+        """
+        p = self.players.get(guild.id)
+        if p is None or p.mirror is None:
+            return 0, b""
+        return p.mirror.take(since)
 
     def web_library(self, query: str = "") -> dict:
         """Библиотека для живого поиска: имя, есть ли обложка, ничего лишнего."""
@@ -2396,7 +2479,8 @@ class Music(commands.Cog):
         await inter.followup.send(embed=emb, ephemeral=True)
         await self._play_next(inter.guild)
 
-    def _make_source(self, track: dict, volume: float, at: int = 0, fx: dict = None):
+    def _make_source(self, track: dict, volume: float, at: int = 0, fx: dict = None,
+                     mirror=None):
         """Источник ffmpeg + файл, куда он пишет свои ошибки.
 
         stderr в PIPE без читателя опасен: буфер забивается и ffmpeg встаёт посреди
@@ -2409,9 +2493,11 @@ class Music(commands.Cog):
             raw = disnake.FFmpegPCMAudio(track["stream_url"], executable=_ffmpeg_exe() or "ffmpeg",
                                          before_options=_before_options(track["stream_url"], at),
                                          options=opts, stderr=err)
-            pcm = _TeeSource(raw, LiveBands()) if audioop else raw
+            # зеркало живёт и без audioop: полосы требуют его, байты — нет
+            pcm = _TeeSource(raw, LiveBands() if audioop else None, mirror)
             src = disnake.PCMVolumeTransformer(pcm, volume=volume)
             src.live = getattr(pcm, "live", None)
+            src.mirror = pcm.mirror
         except Exception:
             err.close()
             raise
@@ -2515,7 +2601,8 @@ class Music(commands.Cog):
         if dur:
             at = min(at, max(0, int(dur) - 1))
         try:
-            source, err_file = self._make_source(p.current, p.volume, at=at, fx=p.fx)
+            source, err_file = self._make_source(p.current, p.volume, at=at, fx=p.fx,
+                                                 mirror=p.mirror)
         except Exception as e:
             return {"error": f"Так ffmpeg не умеет: {str(e)[:120]}"}
         was_paused = vc.is_paused()
@@ -2576,7 +2663,7 @@ class Music(commands.Cog):
                 # ссылка на чужой стрим могла протухнуть, файл с диска — нет
                 fresh = await self._extract(track["webpage_url"])
                 track.update(fresh)
-            source, err_file = self._make_source(track, p.volume, fx=p.fx)
+            source, err_file = self._make_source(track, p.volume, fx=p.fx, mirror=p.mirror)
         except Exception as e:
             p.dj_fails += 1
             gave_up = p.dj and p.dj_fails >= 4
