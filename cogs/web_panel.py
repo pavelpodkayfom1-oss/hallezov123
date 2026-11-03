@@ -352,6 +352,7 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/voices", self.h_voices)
             app.router.add_post("/api/send", self.h_send)
             app.router.add_get("/api/chat", self.h_chat)
+            app.router.add_get("/api/invite", self.h_invite)
             app.router.add_post("/api/chat/delete", self.h_chat_delete)
             app.router.add_get("/api/voice", self.h_voice)
             app.router.add_post("/api/voice/join", self.h_voice_join)
@@ -730,6 +731,27 @@ class WebPanel(commands.Cog):
         print(f"✉️ Панель: в {res.get('where', '?')}: {str(res.get('error') or res.get('link'))[:120]}",
               flush=True)
         return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_invite(self, request: web.Request) -> web.Response:
+        """Ссылка, по которой бота добавляют на другой сервер (OAuth2, scope bot + slash-команды)."""
+        if not self.bot.user:
+            return _json({"error": "Бот ещё не вошёл в Discord, подождите несколько секунд"}, 503)
+        level = request.query.get("perms", "recommended")
+        if level == "admin":
+            perms = disnake.Permissions(administrator=True)
+        elif level == "minimal":
+            perms = disnake.Permissions(view_channel=True, send_messages=True, embed_links=True,
+                                        read_message_history=True)
+        else:
+            level = "recommended"
+            perms = disnake.Permissions(
+                view_channel=True, send_messages=True, send_messages_in_threads=True, embed_links=True,
+                attach_files=True, read_message_history=True, add_reactions=True,
+                use_external_emojis=True, use_external_stickers=True, mention_everyone=True,
+                manage_webhooks=True, manage_messages=True, manage_roles=True, connect=True, speak=True)
+        url = disnake.utils.oauth_url(self.bot.user.id, permissions=perms,
+                                      scopes=("bot", "applications.commands"))
+        return _json({"url": url, "perms": level, "bot": str(self.bot.user), "client_id": str(self.bot.user.id)})
 
     async def h_chat(self, request: web.Request) -> web.Response:
         tools, err = self._tools()
