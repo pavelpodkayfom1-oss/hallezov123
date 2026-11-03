@@ -1010,7 +1010,7 @@ def voice_rooms(bot) -> Dict[str, Any]:
     rows.sort(key=lambda r: (-r["count"], r["cat"], r["name"].lower()))
     loaded = len(guild.members)
     out: Dict[str, Any] = {
-        "rows": rows, "guild": guild.name,
+        "rows": rows, "guild": guild.name, "guild_id": str(guild.id),
         "in_voice": sum(r["count"] for r in rows) + hidden,
         "hidden": hidden, "loaded": loaded,
         "member_count": int(getattr(guild, "member_count", 0) or 0),

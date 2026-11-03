@@ -1054,6 +1054,8 @@ html[data-style=ruby][data-theme=light] body::before,html[data-style=ice][data-t
 .vhead small{color:var(--faint);font-size:.7rem;letter-spacing:.05em;text-transform:uppercase}
 .vhead h3{margin:0;font-size:1.02rem;word-break:break-word}
 .vchips{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.28rem}
+.vchips a.btn{text-decoration:none}
+.vchips a.btn.dim:hover{opacity:1}
 .vpeople{display:flex;flex-direction:column;gap:.1rem;max-height:238px;overflow:auto}
 .vrow{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;font-size:.9rem;padding:.22rem .1rem}
 .vrow img,.vrow i{width:27px;height:27px;border-radius:9px;flex:none;object-fit:cover;font-style:normal;
@@ -3739,6 +3741,11 @@ async function pageVoice() {
       c.here ? chip('бот здесь', 'ok') : null,
       c.can_connect === false ? chip('нет прав на вход', 'err') : null,
       full && !c.here ? chip('мест нет', 'err') : null,
+      (data && data.guild_id) ? h('a', {
+        class: 'btn tiny dim', target: '_blank', rel: 'noopener noreferrer',
+        href: 'https://discord.com/channels/' + data.guild_id + '/' + c.id,
+        title: 'Откроет этот войс твоим аккаунтом в Discord — так ты их услышишь',
+      }, 'Открыть у себя') : null,
     ].filter(Boolean);
     const people = c.people.map(personNode);
     if (c.more) people.push(h('div', { class: 'vmore' }, 'и ещё ' + c.more));
@@ -3798,8 +3805,9 @@ async function pageVoice() {
   }, 8000);
 
   return h('div', null,
-    pageHead('Голос', 'Видно, кто в каком войсе сидит и у кого выключен микрофон. Бот может зайти в канал по кнопке — '
-      + 'его увидят все участники. Слушать разговор нельзя: бот умеет только говорить в войс, а не слышать его.',
+    pageHead('Голос', 'Видно, кто в каком войсе сидит и у кого выключен микрофон. Кнопка «Открыть у себя» кидает тебя '
+      + 'в этот войс твоим аккаунтом — только так ты их услышишь. Бот в войс зайти может, но слышать не умеет: '
+      + 'программа, на которой он работает, звук не принимает, а его присутствие в канале видят все.',
       h('button', { class: 'btn', onclick: () => go('voice') }, 'Обновить'),
       h('button', { class: 'btn', onclick: () => go('chat') }, 'К переписке')),
     h('div', { class: 'row' }, bar),
