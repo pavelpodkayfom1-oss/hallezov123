@@ -775,6 +775,134 @@ async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "
     return out
 
 
+# ─────────────────────── 2б. переписка в канале ───────────────────────
+# Раздел «Каналы» на сайте работает как обычный аккаунт: открыл канал — увидел
+# переписку, написал, убрал лишнее. Историю отдаём страницами: на 256 МБ нельзя
+# выкачать канал целиком, да и Discord режет выдачу, поэтому листаем по чуть-чуть.
+CHAT_PAGE = 50           # столько строк за один запрос
+CHAT_MAX = 200           # потолок за запрос: больше — только листанием
+CHAT_TEXT = 1800         # длинный пост режем: панель читают, а не скачивают
+CHAT_EMBEDS = 4          # вложений-эмбедов на сообщение показываем
+CHAT_FILES = 6
+
+
+def _file_row(a) -> Dict[str, Any]:
+    ctype = str(getattr(a, "content_type", "") or "")
+    return {
+        "url": a.url,
+        "name": (a.filename or "файл")[:120],
+        "size": int(getattr(a, "size", 0) or 0),
+        "image": ctype.startswith("image/"),
+        "video": ctype.startswith("video/"),
+    }
+
+
+def _message_row(m, bot_id: int) -> Dict[str, Any]:
+    author = m.author
+    text = (m.clean_content or m.content or "")
+    try:
+        mtype = int(getattr(getattr(m, "type", None), "value", 0) or 0)
+    except Exception:
+        mtype = 0
+    ref = getattr(m, "reference", None)
+    replied = getattr(ref, "message_id", None)
+    return {
+        "id": str(m.id),
+        "time": _iso(m.created_at),
+        "edited": m.edited_at is not None,
+        "pinned": bool(m.pinned),
+        "system": mtype not in (0, 19),
+        "text": text[:CHAT_TEXT] + ("…" if len(text) > CHAT_TEXT else ""),
+        "author": {
+            "id": str(author.id),
+            "name": getattr(author, "display_name", None) or author.name,
+            "bot": bool(getattr(author, "bot", False)),
+            "avatar": author.display_avatar.with_size(size=64).url if author.display_avatar else "",
+        },
+        "mine": author.id == bot_id,
+        "reply": str(replied) if replied else "",
+        "embeds": [_embed_json(e) for e in list(m.embeds or [])[:CHAT_EMBEDS]],
+        "files": [_file_row(a) for a in list(m.attachments or [])[:CHAT_FILES]],
+        "stickers": [str(getattr(s, "name", "") or "") or "стикер" for s in list(m.stickers or [])[:CHAT_FILES]],
+        "reactions": [{"emoji": _emoji_str(r.emoji), "count": int(r.count), "mine": bool(r.me)}
+                      for r in list(m.reactions or [])[:20]],
+        "link": m.jump_url,
+    }
+
+
+def _can(bot, ch, name: str) -> bool:
+    """Есть ли у бота в канале это право (manage_messages решает, чужие ли сообщения можно убрать)."""
+    guild = guild_of(bot)
+    me = getattr(guild, "me", None) if guild else None
+    if me is None:
+        return False
+    try:
+        return bool(getattr(ch.permissions_for(me), name, False))
+    except Exception:
+        return False
+
+
+async def chat_history(bot, cid: Any, limit: Any = CHAT_PAGE, before: Any = "") -> Dict[str, Any]:
+    ch, err = await _resolve_channel(bot, cid)
+    if err:
+        return {"error": err}
+    miss = _missing_perms(bot, ch, ["view_channel", "read_message_history"])
+    if miss:
+        return {"error": _no_perms_text(ch, miss)}
+    try:
+        cap = max(1, min(int(limit or CHAT_PAGE), CHAT_MAX))
+    except (TypeError, ValueError):
+        cap = CHAT_PAGE
+    kw: Dict[str, Any] = {"limit": cap}
+    if str(before or "").isdigit():
+        kw["before"] = disnake.Object(int(before))
+    rows: List[Dict[str, Any]] = []
+    bot_id = bot.user.id if bot.user else 0
+    try:
+        async for m in ch.history(**kw):
+            rows.append(_message_row(m, bot_id))
+    except Exception as e:
+        return {"error": _discord_error(e)}
+    rows.reverse()   # Discord отдаёт свежие первыми, а переписку читают сверху вниз
+    out: Dict[str, Any] = {
+        "rows": rows,
+        "channel": {"id": str(ch.id), "name": ch.name,
+                    "topic": (getattr(ch, "topic", "") or "")[:180],
+                    "kind": "ветка" if isinstance(ch, disnake.Thread) else "канал"},
+        "can_write": _can(bot, ch, "send_messages"),
+        "can_manage": _can(bot, ch, "manage_messages"),
+    }
+    if len(rows) == cap:
+        out["older"] = rows[0]["id"]
+    hint = _hygiene_hint(bot, ch)
+    if hint:
+        out["hint"] = hint
+    return out
+
+
+async def chat_delete(bot, cid: Any, mid: Any) -> Dict[str, Any]:
+    """Удалить одно сообщение. Чужие — только если боту выдано «Управлять сообщениями»."""
+    ch, err = await _resolve_channel(bot, cid)
+    if err:
+        return {"error": err}
+    if not str(mid or "").isdigit():
+        return {"error": "Не выбрано сообщение"}
+    try:
+        msg = await ch.fetch_message(int(mid))
+    except Exception as e:
+        return {"error": _discord_error(e)}
+    bot_id = bot.user.id if bot.user else 0
+    if msg.author.id != bot_id and not _can(bot, ch, "manage_messages"):
+        return {"error": f"Бот может убрать только свои сообщения. Чужие удаляются, когда у бота "
+                         f"есть право «Управлять сообщениями» в канале «{ch.name}»."}
+    what = (msg.clean_content or msg.content or "").strip()[:80] or "вложение или стикер"
+    try:
+        await msg.delete(reason="Панель семьи: чистка канала")
+    except Exception as e:
+        return {"error": _discord_error(e)}
+    return {"deleted": str(msg.id), "where": f"#{ch.name}", "what": what}
+
+
 async def post_dm(bot, user_id: Any, text: str, title: str = "", color: str = "",
                   author: str = "") -> Dict[str, Any]:
     text = (text or "").strip()

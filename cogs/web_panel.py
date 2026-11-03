@@ -351,6 +351,8 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/members", self.h_members)
             app.router.add_get("/api/voices", self.h_voices)
             app.router.add_post("/api/send", self.h_send)
+            app.router.add_get("/api/chat", self.h_chat)
+            app.router.add_post("/api/chat/delete", self.h_chat_delete)
             app.router.add_post("/api/dm", self.h_dm)
             app.router.add_post("/api/broadcast", self.h_broadcast)
             app.router.add_get("/api/texts", self.h_texts)
@@ -724,6 +726,24 @@ class WebPanel(commands.Cog):
                                       speaker=body.get("speaker"))
         print(f"✉️ Панель: в {res.get('where', '?')}: {str(res.get('error') or res.get('link'))[:120]}",
               flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_chat(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        return _json(await tools.chat_history(self.bot, request.query.get("channel"),
+                                             request.query.get("limit") or 50,
+                                             request.query.get("before")))
+
+    async def h_chat_delete(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        res = await tools.chat_delete(self.bot, body.get("channel"), body.get("message"))
+        print(f"🧹 Панель: чистка {res.get('where', '?')}: "
+              f"{str(res.get('error') or res.get('what'))[:120]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
 
     async def h_dm(self, request: web.Request) -> web.Response:

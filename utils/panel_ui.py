@@ -982,6 +982,60 @@ html[data-style=ruby][data-theme=light] body::before,html[data-style=ice][data-t
 .dcping{display:inline-block;margin-top:.3rem;color:#c9cdfb;background:rgba(88,101,242,.3);border-radius:4px;padding:0 .3em}
 @media (max-width:900px){.sendgrid{grid-template-columns:1fr}.pickcard{position:static}}
 
+/* ---------- раздел «Каналы»: переписка как в Discord ---------- */
+/* Лента остаётся тёмной при любом стиле: так сообщения читаются так же, как в самом Discord,
+   а оформление панели видно по рамам, кнопкам и плашке сверху. */
+.chatgrid{display:grid;grid-template-columns:minmax(250px,330px) 1fr;gap:1rem;align-items:start}
+.chatgrid>*{min-width:0}
+.chatlist{max-height:min(58vh,540px)}
+.chatbody{display:flex;flex-direction:column;gap:.8rem}
+.chanhead{display:flex;gap:.7rem;align-items:baseline;flex-wrap:wrap;padding:.85rem 1.1rem;
+  border:1px solid var(--line);border-radius:var(--radius) var(--radius) 5px 5px;background:var(--panel2)}
+.chanhead h2{margin:0;font-size:1.02rem}
+.chanhead small{color:var(--muted);font-size:.8rem;flex:1;min-width:12rem}
+.chatstream{display:flex;flex-direction:column;gap:.15rem;padding:.85rem .7rem;max-height:min(62vh,640px);
+  overflow:auto;background:#2b2d31;border:1px solid var(--line);border-radius:5px 5px var(--radius) var(--radius);
+  scrollbar-width:thin}
+.chatstream::-webkit-scrollbar{width:8px}
+.chatstream::-webkit-scrollbar-thumb{background:#1e1f22;border-radius:8px}
+.cmsg{display:flex;gap:.7rem;padding:.5rem .6rem;border-radius:10px;align-items:flex-start}
+.cmsg:hover{background:rgba(255,255,255,.04)}
+.cmsg .dcava{width:34px;height:34px;font-size:.85rem}
+.cmsg .dcbody{gap:.3rem;display:flex;flex-direction:column;min-width:0}
+.cmsg .dctext{font-size:.92rem;color:#dbdee1}
+.cmsg.mine{background:rgba(217,45,58,.1);box-shadow:inset 2px 0 0 var(--accent)}
+.cmsg.svc{opacity:.6}
+.cmsg.svc .dctext{font-style:italic}
+.chatstream .embed{background:#232428;color:#dbdee1;margin:0;max-width:520px;border-radius:8px}
+.chatstream .embed b,.chatstream .embed .muted{color:#f1f1f4}
+.chatstream .chip{background:rgba(0,0,0,.25)}
+.cmeta{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap;color:#949ba4;font-size:.73rem}
+.cmeta b{color:#fff;font-size:.9rem}
+.cmeta .dim{opacity:.75}
+.cfiles{display:flex;gap:.4rem;flex-wrap:wrap}
+.cfiles a{display:flex;align-items:center;gap:.45rem;max-width:280px;padding:.25rem .6rem .25rem .25rem;
+  border-radius:9px;background:#1e1f22;color:#00b0f4;font-size:.8rem;text-decoration:none}
+.cfiles a:hover{background:#232428}
+.cfiles a img{width:84px;height:56px;object-fit:cover;border-radius:6px;flex:none}
+.cfiles a span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.creact{display:flex;gap:.3rem;flex-wrap:wrap}
+.creact i{font-style:normal;display:inline-flex;align-items:center;gap:.3rem;padding:.14em .5em;
+  border-radius:999px;background:#1e1f22;border:1px solid transparent;color:#dbdee1;font-size:.78rem}
+.creact i.on{border-color:#5865f2;background:rgba(88,101,242,.18)}
+.creact img{width:17px;height:17px;object-fit:contain}
+.cdel{margin-left:auto;border:0;background:none;color:#949ba4;font:inherit;font-size:.78rem;
+  padding:.1em .45em;border-radius:6px;cursor:pointer;opacity:0}
+.cmsg:hover .cdel,.cmsg:focus-within .cdel{opacity:1}
+.cdel:hover{color:#fff;background:var(--err)}
+.composer{display:flex;flex-direction:column;gap:.6rem;padding:1rem 1.1rem;border:1px solid var(--line);
+  border-radius:var(--radius-s);background:var(--panel)}
+.composer textarea.msg{min-height:86px;font-size:.95rem}
+.composer textarea.msg:focus{border-color:var(--accent-line)}
+.chatline{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.chatline .fill{flex:1;min-width:0}
+.chattail{display:flex;justify-content:center;padding:.2rem}
+@media (max-width:900px){.chatgrid{grid-template-columns:1fr}.chatlist{max-height:270px}.chatstream{max-height:56vh}}
+
 /* ======================================================================
    Стиль «Дом» — по умолчанию. Семейная бухгалтерия: винный фон, латунь,
    тонкая полоска как на костюме, крупные цифры с засечками.
@@ -1557,6 +1611,7 @@ const PAGES = [
   ['overview', 'Обзор', 'dash', 'Семья'],
   ['apps', 'Заявки', 'inbox', 'Семья'],
   ['send', 'Сообщения', 'send', 'Семья'],
+  ['chat', 'Каналы', 'chat', 'Семья'],
   ['plan', 'Планировщик', 'clock', 'Семья'],
   ['notes', 'Заметки', 'note', 'Семья'],
   ['screens', 'Экраны', 'screen', 'Семья'],
@@ -1593,6 +1648,7 @@ const ICONS = {
   bank: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
   note: '<path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>',
   clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  chat: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/>',
   menu: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
 };
 function icon(name) {
@@ -1719,7 +1775,7 @@ async function go(page) {
   const content = document.getElementById('content');
   content.replaceChildren(skeleton());
   try {
-    const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, plan: pagePlan, notes: pageNotes, screens: pageScreens,
+    const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, chat: pageChat, plan: pagePlan, notes: pageNotes, screens: pageScreens,
       texts: pageTexts, stickers: pageStickers, kazna: pageKazna, emojis: pageEmojis,
       diag: pageDiag, audit: pageAudit, shots: pageShots,
       modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
@@ -3418,6 +3474,185 @@ async function pageSend() {
     tabs, body);
 }
 
+
+/* ---------- Каналы: переписка, запись и чистка ---------- */
+/* Раздел работает как обычный аккаунт: выбрал канал — прочитал, что там, написал своё,
+   убрал лишнее. Отправка идёт через тот же /api/send, что и раздел «Сообщения», поэтому
+   бот пишет в канал одинаково оттуда и отсюда; здесь только лента и скорость. */
+async function pageChat() {
+  const cq = h('input', { type: 'search', placeholder: 'Найти канал…', 'aria-label': 'Поиск канала' });
+  const listBox = h('div', { class: 'picks tall chatlist' });
+  const head = h('div', { class: 'chanhead' });
+  const stream = h('div', { class: 'chatstream' });
+  const tail = h('div', { class: 'chattail' });
+  const area = h('textarea', { class: 'msg', placeholder: 'Написать в канал… Enter — отправить, Shift+Enter — новая строка' });
+  const say = h('span', { class: 'muted small' });
+  const sendBtn = h('button', { class: 'btn primary big' }, 'Отправить');
+
+  let chanRows = [], rows = [], older = '', canManage = false, canWrite = true, busy = false;
+  let channelId = state.chatChannel || '';
+
+  const when = (r) => {
+    const ms = r.time ? Date.parse(r.time) : NaN;
+    return isNaN(ms) ? '' : fmtWhen(Math.floor(ms / 1000));
+  };
+
+  async function drop(m) {
+    const what = (m.text || '').slice(0, 90) || (m.files || []).map((f) => f.name).join(', ') || 'вложение';
+    if (!(await confirmBox('Убрать сообщение из канала?',
+      'Дальше: «' + what + '». Восстановить нельзя.', 'Убрать', true))) return;
+    try {
+      await api('/api/chat/delete', { method: 'POST', body: { channel: channelId, message: m.id } });
+      rows = rows.filter((x) => x.id !== m.id);
+      draw();
+      toast('Убрал сообщение', 'ok');
+    } catch (e) { toast(e.message, 'err'); }
+  }
+
+  function msgNode(m) {
+    const meta = h('div', { class: 'cmeta' },
+      h('b', null, m.author.name || '?'),
+      m.author.bot ? h('span', { class: 'dctag' }, 'БОТ') : null,
+      h('span', { class: 'dim' }, when(m)),
+      m.edited ? h('span', { class: 'dim' }, '(изменено)') : null,
+      m.pinned ? chip('закреплено', '') : null);
+    const body = h('div', { class: 'dcbody' }, meta);
+    if (m.text) body.append(h('div', { class: 'dctext' }, ...richNode(m.text)));
+    (m.embeds || []).forEach((e) => body.append(embedNode(e)));
+    if ((m.files || []).length) body.append(h('div', { class: 'cfiles' },
+      m.files.map((f) => h('a', { href: f.url, target: '_blank', rel: 'noopener noreferrer', title: f.name },
+        f.image ? h('img', { src: f.url, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' }) : null,
+        h('span', null, f.image ? '' : f.name)))));
+    if ((m.stickers || []).length) body.append(h('div', { class: 'cmeta dim' }, 'стикер: ' + m.stickers.join(', ')));
+    if ((m.reactions || []).length) body.append(h('div', { class: 'creact' },
+      m.reactions.map((r) => h('i', { class: r.mine ? 'on' : '', title: 'реакций: ' + r.count },
+        ...emojiNodes(r.emoji), h('span', null, String(r.count))))));
+    if (m.mine || canManage) meta.append(h('button', { class: 'cdel', title: 'Удалить это сообщение', onclick: () => drop(m) }, '🗑 убрать'));
+    const ava = h('div', { class: 'dcava' }, m.author.avatar
+      ? h('img', { src: m.author.avatar, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
+      : (m.author.name || '?').slice(0, 1).toUpperCase());
+    return h('div', { class: 'cmsg' + (m.mine ? ' mine' : '') + (m.system ? ' svc' : '') }, ava, body);
+  }
+
+  function draw() {
+    if (!rows.length) {
+      stream.replaceChildren(h('p', { class: 'muted' }, 'В этом канале сообщений пока нет.'));
+      tail.replaceChildren();
+      return;
+    }
+    stream.replaceChildren(...rows.map(msgNode));
+    stream.scrollTop = stream.scrollHeight;
+    /* replaceChildren() лепит из null текстовый узел «null», поэтому узлы отдаём списком */
+    tail.replaceChildren(...(older ? [h('button', { class: 'btn', onclick: () => pull(true) }, 'Сообщения старше')] : []));
+  }
+
+  function drawHead(d) {
+    canManage = !!d.can_manage;
+    canWrite = d.can_write !== false;
+    head.replaceChildren(...[
+      h('h2', null, chanLabel({ name: d.channel.name, kind: d.channel.kind, can_write: canWrite })),
+      h('small', null, d.channel.topic || (rows.length + ' сообщ.')),
+      d.hint ? chip('канал заявок: сюда только про набор', 'err') : null,
+      canWrite ? null : chip('боту нельзя писать в этот канал', 'err'),
+      canManage ? chip('можно чистить чужие сообщения', 'ok') : null,
+    ].filter(Boolean));
+    sendBtn.disabled = !canWrite;
+    area.disabled = !canWrite;
+  }
+
+  async function pull(olderRun) {
+    if (!channelId || busy) return;
+    busy = true;
+    if (!olderRun) stream.replaceChildren(spinner('Читаю канал…'));
+    try {
+      const q = 'channel=' + encodeURIComponent(channelId) + '&limit=50' +
+                (olderRun && older ? '&before=' + encodeURIComponent(older) : '');
+      const d = await api('/api/chat?' + q);
+      if (d.error) {
+        rows = []; older = '';
+        head.replaceChildren(h('h2', null, 'Канал'), h('small', null, d.error));
+        stream.replaceChildren(h('p', { class: 'err' }, d.error));
+        tail.replaceChildren();
+        return;
+      }
+      rows = olderRun ? d.rows.concat(rows) : d.rows;
+      older = d.older || '';
+      drawHead(d);
+      draw();
+    } finally { busy = false; }
+  }
+
+  async function pickChannel(id) {
+    channelId = id;
+    state.chatChannel = id;
+    rows = []; older = '';
+    await pull(false);
+  }
+
+  function listNodes() {
+    listBox.replaceChildren(...chanRows.map((c) => h('label', null,
+      h('input', { type: 'radio', name: 'chan', value: c.id, checked: c.id === channelId,
+        onchange: () => pickChannel(c.id) }),
+      h('span', { class: 'grow' }, h('b', null, chanLabel(c)), h('small', null, chanSub(c))),
+      c.can_write === false ? chip('нет прав', 'err') : (c.is_review ? chip('заявки', 'err') : null))));
+    if (!chanRows.length) listBox.append(h('div', { class: 'none' }, 'Ни один канал не нашёлся.'));
+  }
+
+  async function loadChannels() {
+    const d = await api('/api/channels?q=' + encodeURIComponent(cq.value.trim()));
+    if (d.error) { listBox.replaceChildren(h('div', { class: 'none' }, d.error)); return; }
+    chanRows = d.rows || [];
+    if (!channelId && chanRows.length) {
+      const first = chanRows.find((c) => c.can_write !== false) || chanRows[0];
+      channelId = first.id;
+      state.chatChannel = channelId;
+      pull(false);
+    }
+    listNodes();
+  }
+  cq.addEventListener('input', () => { clearTimeout(cq._t); cq._t = setTimeout(loadChannels, 300); });
+
+  async function sendNow() {
+    const text = area.value.trim();
+    if (!channelId) { toast('Сначала выбери канал', 'err'); return; }
+    if (!text) { toast('Пустое сообщение — писать нечего', 'err'); return; }
+    sendBtn.disabled = true;
+    try {
+      const r = await api('/api/send', { method: 'POST', body: { channel: channelId, text } });
+      if (r.error) { toast(r.error, 'err'); return; }
+      area.value = '';
+      say.replaceChildren(...[h('a', { href: r.link, target: '_blank', rel: 'noopener noreferrer' }, 'Открыть в Discord'),
+                            r.hint ? h('span', { class: 'warnline' }, ' · ' + r.hint) : null].filter(Boolean));
+      toast('Написал в канал', 'ok');
+      await pull(false);
+    } catch (e) { toast(e.message, 'err'); }
+    finally { sendBtn.disabled = !canWrite; }
+  }
+  sendBtn.addEventListener('click', sendNow);
+  area.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendNow(); }
+  });
+
+  getEmojis().catch(() => { /* без пака эмодзи останутся текстом */ });
+  await loadChannels();
+  if (!channelId) head.replaceChildren(h('h2', null, 'Каналов нет'), h('small', null, 'Бот ни на одном сервере, или их не видно.'));
+
+  /* лента подтягивается сама: раздел открывают, чтобы следить за каналом, а не перезагружать страницу */
+  state.timer = setInterval(() => {
+    if (state.page !== 'chat' || document.hidden || busy || area.value.trim()) return;
+    pull(false);
+  }, 9000);
+
+  return h('div', null,
+    pageHead('Каналы', 'Читаешь переписку, пишешь в канал и убираешь сообщения — как с живого аккаунта. '
+      + 'Пишет бот; если нужен чужой ник и аватарка — это в «Сообщениях».',
+      h('button', { class: 'btn', onclick: () => go('chat') }, 'Обновить'),
+      h('button', { class: 'btn', onclick: () => go('send') }, 'Писать от имени человека')),
+    h('div', { class: 'chatgrid' },
+      h('div', { class: 'card form pickcard' }, h('h2', null, 'Каналы'), cq, listBox),
+      h('div', { class: 'chatbody' }, head, stream, tail,
+        h('div', { class: 'composer' }, area, h('div', { class: 'chatline' }, sendBtn, say)))));
+}
 
 /* ---------- Экраны команд ---------- */
 function embedNode(e) {
