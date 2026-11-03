@@ -1036,6 +1036,36 @@ html[data-style=ruby][data-theme=light] body::before,html[data-style=ice][data-t
 .chattail{display:flex;justify-content:center;padding:.2rem}
 @media (max-width:900px){.chatgrid{grid-template-columns:1fr}.chatlist{max-height:270px}.chatstream{max-height:56vh}}
 
+/* ---------- Голос: кто в войсе ---------- */
+.vbar{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;padding:.7rem .9rem;border:1px solid var(--line);
+  border-radius:14px;background:var(--panel2)}
+.vnum{display:flex;align-items:baseline;gap:.42rem;padding-right:.5rem}
+.vnum b{font-size:1.75rem;line-height:1}
+.vnum span{color:var(--muted);font-size:.78rem}
+.vnline{font-size:.86rem;color:var(--muted);line-height:1.5;padding:.7rem .95rem;
+  border-left:3px solid var(--accent-line);border-radius:0 12px 12px 0;background:var(--accent-soft)}
+.vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));gap:.9rem;align-items:start}
+.vgrid>*{min-width:0}
+.vcard{display:flex;flex-direction:column;gap:.55rem;padding:.85rem .9rem 1rem;border:1px solid var(--line);
+  border-radius:16px 16px 6px 16px;background:var(--panel)}
+.vcard.live{border-color:var(--line2)}
+.vcard.here{background:var(--panel2);box-shadow:inset 0 0 0 1px var(--accent-line)}
+.vhead{display:flex;flex-direction:column;gap:.16rem}
+.vhead small{color:var(--faint);font-size:.7rem;letter-spacing:.05em;text-transform:uppercase}
+.vhead h3{margin:0;font-size:1.02rem;word-break:break-word}
+.vchips{display:flex;gap:.35rem;flex-wrap:wrap;margin-top:.28rem}
+.vpeople{display:flex;flex-direction:column;gap:.1rem;max-height:238px;overflow:auto}
+.vrow{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;font-size:.9rem;padding:.22rem .1rem}
+.vrow img,.vrow i{width:27px;height:27px;border-radius:9px;flex:none;object-fit:cover;font-style:normal;
+  display:grid;place-items:center;background:var(--panel3);font-size:.76rem}
+.vrow b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vrow.vbot{opacity:.62}
+.vflag{font-size:.71rem;color:var(--muted);padding:.12em .5em;border:1px solid var(--line);border-radius:999px}
+.vmore{font-size:.8rem;color:var(--muted);padding:.35rem .1rem}
+.vfoot{display:flex;gap:.5rem;align-items:center;justify-content:space-between;margin-top:auto;padding-top:.3rem}
+.vfoot small{color:var(--faint);font-size:.74rem}
+@media (max-width:700px){.vgrid{grid-template-columns:1fr}.vpeople{max-height:190px}}
+
 /* ======================================================================
    Стиль «Дом» — по умолчанию. Семейная бухгалтерия: винный фон, латунь,
    тонкая полоска как на костюме, крупные цифры с засечками.
@@ -1612,6 +1642,7 @@ const PAGES = [
   ['apps', 'Заявки', 'inbox', 'Семья'],
   ['send', 'Сообщения', 'send', 'Семья'],
   ['chat', 'Каналы', 'chat', 'Семья'],
+  ['voice', 'Голос', 'mic', 'Семья'],
   ['plan', 'Планировщик', 'clock', 'Семья'],
   ['notes', 'Заметки', 'note', 'Семья'],
   ['screens', 'Экраны', 'screen', 'Семья'],
@@ -1650,6 +1681,7 @@ const ICONS = {
   clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
   chat: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/>',
   menu: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
+  mic: '<rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/>',
 };
 function icon(name) {
   const el = h('span', { class: 'ico', 'aria-hidden': 'true' });
@@ -1775,7 +1807,7 @@ async function go(page) {
   const content = document.getElementById('content');
   content.replaceChildren(skeleton());
   try {
-    const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, chat: pageChat, plan: pagePlan, notes: pageNotes, screens: pageScreens,
+    const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, chat: pageChat, voice: pageVoice, plan: pagePlan, notes: pageNotes, screens: pageScreens,
       texts: pageTexts, stickers: pageStickers, kazna: pageKazna, emojis: pageEmojis,
       diag: pageDiag, audit: pageAudit, shots: pageShots,
       modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
@@ -3652,6 +3684,126 @@ async function pageChat() {
       h('div', { class: 'card form pickcard' }, h('h2', null, 'Каналы'), cq, listBox),
       h('div', { class: 'chatbody' }, head, stream, tail,
         h('div', { class: 'composer' }, area, h('div', { class: 'chatline' }, sendBtn, say)))));
+}
+
+/* ---------- Голос: кто сидит в войсе ---------- */
+/* Раздел честно про присутствие, а не про звук: библиотека бота умеет только говорить
+   в голосовой канал, принимать чужой разговор она не обучена, поэтому «подслушать» отсюда
+   нельзя ни при каких настройках. Кнопка «Зайти» ведёт себя как обычный участник: бота
+   видно в канале всем, кто там сидит. */
+async function pageVoice() {
+  const bar = h('div', { class: 'vbar' });
+  const grid = h('div', { class: 'vgrid' });
+  let data = null, busy = false;
+
+  async function load() {
+    const d = await api('/api/voice');
+    if (d.error) {
+      data = null;
+      bar.replaceChildren(h('div', { class: 'vnum' }, h('b', null, '—'), h('span', null, 'войс не виден')));
+      grid.replaceChildren(h('p', { class: 'err' }, d.error));
+      return;
+    }
+    data = d;
+    drawBar();
+    if (!d.rows.length) {
+      grid.replaceChildren(h('div', { class: 'none' }, 'Бот не видит ни одного голосового канала — проверь права роли в категории.'));
+      return;
+    }
+    grid.replaceChildren(...d.rows.map(cardNode));
+  }
+
+  function drawBar() {
+    const d = data || {}, bot = d.bot || {};
+    bar.replaceChildren(...[
+      h('div', { class: 'vnum' }, h('b', null, String(d.in_voice || 0)), h('span', null, 'в голосе')),
+      bot.here ? chip('бот в «' + bot.here + '»', 'ok') : null,
+      bot.sound ? chip('в этом канале играет звук', '') : null,
+      d.hidden ? chip('ещё ' + d.hidden + ' в каналах, которых бот не видит', 'err') : null,
+      d.hint ? chip(d.hint, 'err') : null,
+      d.stay ? chip(d.stay, '') : null,
+    ].filter(Boolean));
+  }
+
+  function personNode(p) {
+    return h('div', { class: 'vrow' + (p.bot ? ' vbot' : '') },
+      p.avatar ? h('img', { src: p.avatar, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
+               : h('i', null, (p.name || '?').slice(0, 1).toUpperCase()),
+      h('b', null, p.name || '?'),
+      ...(p.flags || []).map((f) => h('span', { class: 'vflag', title: f }, f)));
+  }
+
+  function cardNode(c) {
+    const full = c.limit ? c.count >= c.limit : false;
+    const chips = [
+      c.here ? chip('бот здесь', 'ok') : null,
+      c.can_connect === false ? chip('нет прав на вход', 'err') : null,
+      full && !c.here ? chip('мест нет', 'err') : null,
+    ].filter(Boolean);
+    const people = c.people.map(personNode);
+    if (c.more) people.push(h('div', { class: 'vmore' }, 'и ещё ' + c.more));
+    let foot = null;
+    if (c.here) foot = h('button', { class: 'btn danger big', onclick: () => doLeave() }, 'Выйти отсюда');
+    else if (c.can_connect !== false && !full) foot = h('button', { class: 'btn big', onclick: () => doJoin(c) }, 'Зайти сюда');
+    const cap = c.count ? c.count + (c.limit ? ' из ' + c.limit : '') : 'никого';
+    return h('div', { class: 'vcard' + (c.count ? ' live' : '') + (c.here ? ' here' : '') },
+      h('div', { class: 'vhead' },
+        h('small', null, (c.cat || 'без категории') + (c.stage ? ' · сцена' : '')),
+        h('h3', null, c.name),
+        h('div', { class: 'vchips' }, ...chips)),
+      h('div', { class: 'vpeople' }, people),
+      h('div', { class: 'vfoot' }, h('small', null, cap), foot));
+  }
+
+  async function doJoin(c) {
+    if (busy) return;
+    busy = true;
+    try {
+      let r = await api('/api/voice/join', { method: 'POST', body: { channel: c.id } });
+      if (r.blocked) {
+        busy = false;
+        if (!(await confirmBox('Перевести звук?', r.blocked, 'Перевести', true))) return;
+        busy = true;
+        r = await api('/api/voice/join', { method: 'POST', body: { channel: c.id, force: 'ok' } });
+      }
+      if (r.error) { toast(r.error, 'err'); return; }
+      toast(r.note || ('Зашёл в «' + r.where + '»'), 'ok');
+      await load();
+    } catch (e) { toast(e.message, 'err'); }
+    finally { busy = false; }
+  }
+
+  async function doLeave() {
+    if (busy) return;
+    if (data && data.bot && data.bot.sound &&
+        !(await confirmBox('Остановить звук?', 'В канале сейчас играет звук: выход оборвёт его и очередь встанет.', 'Выйти', true))) return;
+    busy = true;
+    try {
+      const r = await api('/api/voice/leave', { method: 'POST', body: {} });
+      if (r.error) { toast(r.error, 'err'); return; }
+      toast(r.note || ('Вышёл из «' + r.left + '»'), 'ok');
+      if (r.stopped) toast(r.stopped, 'err');
+      await load();
+    } catch (e) { toast(e.message, 'err'); }
+    finally { busy = false; }
+  }
+
+  grid.replaceChildren(spinner('Читаю голосовые каналы…'));
+  await load();
+
+  /* кто зашёл-вышел видно сразу: голосовые состояния лежат в кэше бота, запрос бесплатный */
+  state.timer = setInterval(() => {
+    if (state.page !== 'voice' || document.hidden || busy) return;
+    load().catch(() => { /* следующая попытка через 8 секунд */ });
+  }, 8000);
+
+  return h('div', null,
+    pageHead('Голос', 'Видно, кто в каком войсе сидит и у кого выключен микрофон. Бот может зайти в канал по кнопке — '
+      + 'его увидят все участники. Слушать разговор нельзя: бот умеет только говорить в войс, а не слышать его.',
+      h('button', { class: 'btn', onclick: () => go('voice') }, 'Обновить'),
+      h('button', { class: 'btn', onclick: () => go('chat') }, 'К переписке')),
+    h('div', { class: 'row' }, bar),
+    grid);
 }
 
 /* ---------- Экраны команд ---------- */

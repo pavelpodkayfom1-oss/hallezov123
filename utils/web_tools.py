@@ -903,6 +903,236 @@ async def chat_delete(bot, cid: Any, mid: Any) -> Dict[str, Any]:
     return {"deleted": str(msg.id), "where": f"#{ch.name}", "what": what}
 
 
+VOICE_PEOPLE = 30      # человек на канал: дальше только счётчик «и ещё N»
+VOICE_ROOMS = 60       # потолок каналов на экране
+
+
+def _voice_guild(bot):
+    guild = guild_of(bot)
+    if guild is None and getattr(bot, "guilds", None):
+        guild = max(bot.guilds, key=lambda g: getattr(g, "member_count", 0) or 0)
+    return guild
+
+
+def _voice_flags(st) -> List[str]:
+    """Что видно по человеку в войсе: микрофон, слух, камера. Про звук речи тут нет — его бот не слушает."""
+    out: List[str] = []
+    try:
+        if st.mute:
+            out.append("микрофон выключил сервер")
+        elif st.self_mute:
+            out.append("микрофон выключен")
+        if st.self_deaf:
+            out.append("сам ничего не слышит")
+        if st.suppress:
+            out.append("говорить не может")
+        if st.self_stream:
+            out.append("стрим")
+        if st.self_video:
+            out.append("камера")
+    except Exception:
+        pass
+    return out
+
+
+def _voice_row(m) -> Dict[str, Any]:
+    try:
+        avatar = str(m.display_avatar.with_size(64).url)
+    except Exception:
+        avatar = ""
+    return {"id": str(m.id), "name": (m.nick or m.display_name or str(m))[:40],
+            "bot": bool(getattr(m, "bot", False)), "avatar": avatar,
+            "flags": _voice_flags(m.voice)}
+
+
+def _voice_client(bot, guild):
+    """Голосовое соединение бота на этом сервере, если оно есть."""
+    for vc in list(getattr(bot, "voice_clients", []) or []):
+        try:
+            if vc.guild is not None and vc.guild.id == guild.id:
+                return vc
+        except Exception:
+            continue
+    return None
+
+
+def _stay_hint(bot, guild, channel_id=None) -> str:
+    """Режим «всегда в войсе» из govorit_stay: бот вернётся в канал сам, и кнопка «выйти» выглядит сломанной."""
+    mod = _golos_mod()
+    if mod is None:
+        return ""
+    try:
+        cfg = mod.get_guild(guild.id)
+    except Exception:
+        return ""
+    if not cfg.get("stay"):
+        return ""
+    held = cfg.get("channel_id")
+    if channel_id is not None and held and str(held) != str(channel_id):
+        return ""
+    return "у бота включён режим «всегда в войсе» — он вернётся в канал сам"
+
+
+def voice_rooms(bot) -> Dict[str, Any]:
+    """Кто где сидит в голосе. Только чтение кэша: запросов к Discord нет, поэтому экран можно листать часто."""
+    guild = _voice_guild(bot)
+    if guild is None:
+        return {"error": "Бот ни на одном сервере"}
+    inside: Dict[int, List[Dict[str, Any]]] = {}
+    for m in guild.members:
+        st = getattr(m, "voice", None)
+        ch = getattr(st, "channel", None) if st is not None else None
+        if ch is None:
+            continue
+        inside.setdefault(ch.id, []).append(_voice_row(m))
+    vc = _voice_client(bot, guild)
+    here_id = None
+    try:
+        here_id = vc.channel.id if vc is not None and vc.channel is not None else None
+    except Exception:
+        here_id = None
+    rows: List[Dict[str, Any]] = []
+    rooms = list(guild.voice_channels) + list(guild.stage_channels)
+    for ch in rooms[:VOICE_ROOMS]:
+        people = inside.pop(ch.id, [])
+        people.sort(key=lambda r: (r["bot"], r["name"].lower()))
+        rows.append({
+            "id": str(ch.id), "name": (ch.name or "?")[:60],
+            "cat": (getattr(getattr(ch, "category", None), "name", "") or "")[:40],
+            "stage": isinstance(ch, disnake.StageChannel),
+            "limit": int(getattr(ch, "user_limit", 0) or 0),
+            "people": people[:VOICE_PEOPLE], "count": len(people),
+            "more": max(0, len(people) - VOICE_PEOPLE),
+            "here": here_id == ch.id,
+            "can_connect": not _missing_perms(bot, ch, ["view_channel", "connect"]),
+        })
+    hidden = sum(len(v) for v in inside.values())   # войсы, которых нет в списке каналов бота
+    rows.sort(key=lambda r: (-r["count"], r["cat"], r["name"].lower()))
+    loaded = len(guild.members)
+    out: Dict[str, Any] = {
+        "rows": rows, "guild": guild.name,
+        "in_voice": sum(r["count"] for r in rows) + hidden,
+        "hidden": hidden, "loaded": loaded,
+        "member_count": int(getattr(guild, "member_count", 0) or 0),
+        "bot": {"here": "", "sound": False},
+    }
+    if here_id is not None:
+        try:
+            out["bot"] = {"here": (vc.channel.name or "?")[:60], "sound": _safe_playing(vc)}
+        except Exception:
+            out["bot"] = {"here": "?", "sound": False}
+    if out["in_voice"] and loaded <= 1:
+        out["hint"] = ("Состав сервера не поднят: бот видит войс, но не знает, кто в нём. "
+                       "Нажми «Обновить состав» или дождись загрузки людей.")
+    hint = _stay_hint(bot, guild, here_id)
+    if hint:
+        out["stay"] = hint
+    return out
+
+
+async def voice_now(bot) -> Dict[str, Any]:
+    """Экран «Голос»: без поднятого состава не видно ни одного человека, поэтому догружаем один раз."""
+    data = voice_rooms(bot)
+    if data.get("error") or data.get("in_voice") or data.get("loaded", 0) > 1:
+        return data
+    guild = _voice_guild(bot)
+    if guild is None or int(getattr(guild, "member_count", 0) or 0) < 2:
+        return data
+    now = time.time()
+    if now - _chunk_at.get(guild.id, 0.0) > CHUNK_TTL:
+        _chunk_at[guild.id] = now
+        try:
+            await asyncio.wait_for(guild.chunk(), timeout=45)
+        except Exception:
+            return data
+        return voice_rooms(bot)
+    return data
+
+
+async def voice_join(bot, cid: Any, force: Any = "") -> Dict[str, Any]:
+    """Бот заходит в голосовой канал (или переводит туда своё же соединение)."""
+    guild = _voice_guild(bot)
+    if guild is None:
+        return {"error": "Бот ни на одном сервере"}
+    if not str(cid or "").isdigit():
+        return {"error": "Не выбран канал"}
+    ch = guild.get_channel(int(cid))
+    if ch is None:
+        try:
+            ch = await guild.fetch_channel(int(cid))
+        except Exception:
+            return {"error": f"Канала {cid} бот не видит"}
+    if not isinstance(ch, (disnake.VoiceChannel, disnake.StageChannel)):
+        return {"error": "Это не голосовой канал"}
+    miss = _missing_perms(bot, ch, ["view_channel", "connect"])
+    if miss:
+        return {"error": _no_perms_text(ch, miss)}
+    vc = _voice_client(bot, guild)
+    moved = False
+    if vc is None:
+        try:
+            vc = await ch.connect(timeout=20)
+        except Exception as e:
+            return {"error": _discord_error(e)}
+    else:
+        try:
+            same = vc.channel is not None and vc.channel.id == ch.id
+        except Exception:
+            same = False
+        if same:
+            return {"where": ch.name, "moved": False, "note": "Бот уже в этом канале"}
+        try:
+            busy = bool(vc.is_playing())
+            from_where = (vc.channel.name if vc.channel else "?")
+        except Exception:
+            busy, from_where = False, "?"
+        if busy and not str(force or ""):
+            return {"blocked": f"В «{from_where}» сейчас играет звук. Перевести его в «{ch.name}»?"}
+        try:
+            await vc.move_to(ch)
+        except Exception as e:
+            return {"error": _discord_error(e)}
+        moved = True
+    out: Dict[str, Any] = {"where": ch.name, "moved": moved, "sound": bool(_safe_playing(vc))}
+    hint = _stay_hint(bot, guild, ch.id)
+    if hint:
+        out["note"] = hint
+    return out
+
+
+def _safe_playing(vc) -> bool:
+    try:
+        return bool(vc.is_playing())
+    except Exception:
+        return False
+
+
+async def voice_leave(bot) -> Dict[str, Any]:
+    guild = _voice_guild(bot)
+    if guild is None:
+        return {"error": "Бот ни на одном сервере"}
+    vc = _voice_client(bot, guild)
+    if vc is None:
+        return {"error": "Бот сейчас ни в одном голосовом канале"}
+    where = "?"
+    try:
+        where = vc.channel.name if vc.channel else "?"
+    except Exception:
+        pass
+    sound = _safe_playing(vc)
+    try:
+        await vc.disconnect(force=True)
+    except Exception as e:
+        return {"error": _discord_error(e)}
+    out: Dict[str, Any] = {"left": where}
+    if sound:
+        out["stopped"] = f"Звук в «{where}» оборвался: плеер остался без канала."
+    hint = _stay_hint(bot, guild)
+    if hint:
+        out["note"] = hint
+    return out
+
+
 async def post_dm(bot, user_id: Any, text: str, title: str = "", color: str = "",
                   author: str = "") -> Dict[str, Any]:
     text = (text or "").strip()

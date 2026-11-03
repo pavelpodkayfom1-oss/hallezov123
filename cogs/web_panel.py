@@ -353,6 +353,9 @@ class WebPanel(commands.Cog):
             app.router.add_post("/api/send", self.h_send)
             app.router.add_get("/api/chat", self.h_chat)
             app.router.add_post("/api/chat/delete", self.h_chat_delete)
+            app.router.add_get("/api/voice", self.h_voice)
+            app.router.add_post("/api/voice/join", self.h_voice_join)
+            app.router.add_post("/api/voice/leave", self.h_voice_leave)
             app.router.add_post("/api/dm", self.h_dm)
             app.router.add_post("/api/broadcast", self.h_broadcast)
             app.router.add_get("/api/texts", self.h_texts)
@@ -744,6 +747,31 @@ class WebPanel(commands.Cog):
         res = await tools.chat_delete(self.bot, body.get("channel"), body.get("message"))
         print(f"🧹 Панель: чистка {res.get('where', '?')}: "
               f"{str(res.get('error') or res.get('what'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_voice(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        return _json(await tools.voice_now(self.bot))
+
+    async def h_voice_join(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        res = await tools.voice_join(self.bot, body.get("channel"), body.get("force"))
+        print(f"🔊 Панель: вход в войс {res.get('where', '?')}: "
+              f"{str(res.get('error') or res.get('blocked') or 'сидит')[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_voice_leave(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        res = await tools.voice_leave(self.bot)
+        print(f"🔇 Панель: выход из войса {res.get('left', '?')}: "
+              f"{str(res.get('error') or 'вышел')[:120]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
 
     async def h_dm(self, request: web.Request) -> web.Response:
