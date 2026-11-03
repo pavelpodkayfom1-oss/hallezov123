@@ -5,6 +5,7 @@
   • обзор: пинг, аптайм, память, серверы, статистика БД
   • заявки: список, анкета, история, принять/отказать/обзвон прямо из браузера
   • сообщения: текст в канал, ЛС и рассылка
+  • дискорд-чат: чтение каналов и переписка от имени бота (с ответами на сообщения)
   • команды: экраны админ-хаба без Discord
   • диагностика: сутки работы, память против лимита хостинга, молчуны
   • снимки: откат файлов настроек с показом отличий
@@ -350,6 +351,8 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/channels", self.h_channels)
             app.router.add_get("/api/members", self.h_members)
             app.router.add_get("/api/voices", self.h_voices)
+            app.router.add_get("/api/chat/messages", self.h_chat_messages)
+            app.router.add_get("/api/invite", self.h_invite)
             app.router.add_post("/api/send", self.h_send)
             app.router.add_post("/api/dm", self.h_dm)
             app.router.add_post("/api/broadcast", self.h_broadcast)
@@ -450,7 +453,7 @@ class WebPanel(commands.Cog):
             "default-src 'none'; "
             f"script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
             # blob: нужен превьюшкам скринов в форме отчёта — их рисует createObjectURL
-            "img-src 'self' data: blob: https://cdn.discordapp.com; connect-src 'self'; "
+            "img-src 'self' data: blob: https://cdn.discordapp.com https://media.discordapp.net; connect-src 'self'; "
             "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
         )
         return web.Response(
@@ -721,9 +724,40 @@ class WebPanel(commands.Cog):
                                       str(body.get("text") or ""), str(body.get("title") or ""),
                                       str(body.get("color") or ""), bool(body.get("ping")),
                                       author=str(body.get("author") or ""),
-                                      speaker=body.get("speaker"))
+                                      speaker=body.get("speaker"),
+                                      reply_to=body.get("reply_to"))
         print(f"✉️ Панель: в {res.get('where', '?')}: {str(res.get('error') or res.get('link'))[:120]}",
               flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_invite(self, request: web.Request) -> web.Response:
+        """Ссылка, по которой бота добавляют на другой сервер (OAuth2, scope bot + slash-команды)."""
+        if not self.bot.user:
+            return _json({"error": "Бот ещё не вошёл в Discord, подождите несколько секунд"}, 503)
+        level = request.query.get("perms", "recommended")
+        if level == "admin":
+            perms = disnake.Permissions(administrator=True)
+        elif level == "minimal":
+            perms = disnake.Permissions(view_channel=True, send_messages=True, embed_links=True,
+                                        read_message_history=True)
+        else:
+            level = "recommended"
+            perms = disnake.Permissions(
+                view_channel=True, send_messages=True, send_messages_in_threads=True, embed_links=True,
+                attach_files=True, read_message_history=True, add_reactions=True,
+                use_external_emojis=True, use_external_stickers=True, mention_everyone=True,
+                manage_webhooks=True, manage_messages=True, manage_roles=True, connect=True, speak=True)
+        url = disnake.utils.oauth_url(self.bot.user.id, permissions=perms,
+                                      scopes=("bot", "applications.commands"))
+        return _json({"url": url, "perms": level, "bot": str(self.bot.user), "client_id": str(self.bot.user.id)})
+
+    async def h_chat_messages(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        q = request.query
+        res = await tools.chat_history(self.bot, q.get("channel"), q.get("limit") or 50,
+                                       after=q.get("after"), before=q.get("before"))
         return _json(res, 400 if self._fail(res) else 200)
 
     async def h_dm(self, request: web.Request) -> web.Response:

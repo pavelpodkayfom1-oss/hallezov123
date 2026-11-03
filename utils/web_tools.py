@@ -724,7 +724,8 @@ async def _webhook_for(bot, ch):
 
 
 async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "",
-                       ping: bool = False, author: str = "", speaker: Any = None) -> Dict[str, Any]:
+                       ping: bool = False, author: str = "", speaker: Any = None,
+                       reply_to: Any = None) -> Dict[str, Any]:
     text = (text or "").strip()
     if not text:
         return {"error": "Пустое сообщение — писать нечего"}
@@ -762,7 +763,12 @@ async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "
                                   avatar_url=sp_avatar or disnake.utils.MISSING,
                                   allowed_mentions=mentions, wait=True, **kw)
         else:
-            msg = await ch.send(content=content, embed=emb, allowed_mentions=mentions)
+            # ответ на сообщение: работает только при отправке самим ботом (вебхук отвечать не умеет)
+            ref = None
+            if str(reply_to or "").isdigit():
+                ref = disnake.MessageReference(message_id=int(reply_to), channel_id=ch.id,
+                                               fail_if_not_exists=False)
+            msg = await ch.send(content=content, embed=emb, allowed_mentions=mentions, reference=ref)
     except Exception as e:
         return {"error": _discord_error(e)}
     out = {"link": msg.jump_url, "where": f"#{ch.name}" + (f" · от имени «{sp_name}»" if sp_name else ""),
@@ -773,6 +779,106 @@ async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "
     if ping:
         out["hint"] = out.get("hint", "") + " | пинг @everyone дошёл до всех на сервере"
     return out
+
+
+# ────────────── чтение канала (раздел «Дискорд-чат») ──────────────
+CHAT_LIMIT = 100
+
+
+def _chat_row(m) -> Dict[str, Any]:
+    """Одно сообщение для ленты в панели: только то, что нужно нарисовать."""
+    try:
+        avatar = str(m.author.display_avatar.with_size(64).url)
+    except Exception:
+        avatar = ""
+    try:
+        text = m.clean_content  # упоминания <@123> превращаются в читаемые @ники
+    except Exception:
+        text = m.content or ""
+    atts = []
+    for a in m.attachments[:10]:
+        ctype = a.content_type or ""
+        atts.append({"name": a.filename, "url": a.url, "size": int(a.size or 0),
+                     "image": ctype.startswith("image/")})
+    embeds = []
+    for e in m.embeds[:5]:
+        try:
+            embeds.append({
+                "title": (e.title or "")[:256],
+                "text": (e.description or "")[:1200],
+                "color": f"#{e.colour.value:06x}" if e.colour else "",
+                "author": (e.author.name or "")[:120] if e.author else "",
+                "image": (e.image.url or "") if e.image else "",
+                "fields": [{"name": f.name[:80], "value": f.value[:300]} for f in e.fields[:6]],
+            })
+        except Exception:
+            continue
+    reply = None
+    ref = getattr(m, "reference", None)
+    if ref is not None and getattr(ref, "message_id", None):
+        src = getattr(ref, "resolved", None)
+        if isinstance(src, disnake.Message):
+            snippet = (src.clean_content or ("вложение" if src.attachments else "эмбед"))[:90]
+            reply = {"id": str(ref.message_id), "author": src.author.display_name, "text": snippet}
+        else:
+            reply = {"id": str(ref.message_id), "author": "", "text": "исходное сообщение недоступно"}
+    reactions = []
+    for r in list(m.reactions)[:12]:
+        reactions.append({"emoji": getattr(r.emoji, "name", None) or str(r.emoji), "count": r.count})
+    return {
+        "id": str(m.id),
+        "ts": m.created_at.isoformat() if m.created_at else "",
+        "author": {"id": str(m.author.id), "name": m.author.display_name,
+                   "bot": bool(m.author.bot), "avatar": avatar},
+        "mine": False,
+        "text": text[:4000],
+        "edited": bool(m.edited_at),
+        "pinned": bool(m.pinned),
+        "attachments": atts,
+        "embeds": embeds,
+        "stickers": [s.name for s in getattr(m, "stickers", [])[:3]],
+        "reply": reply,
+        "reactions": reactions,
+        "link": m.jump_url,
+    }
+
+
+async def chat_history(bot, cid: Any, limit: Any = 50, after: Any = None,
+                       before: Any = None) -> Dict[str, Any]:
+    """Последние сообщения канала (старые сверху). after — только новее этого id (для автообновления),
+    before — подгрузка более старых."""
+    ch, err = await _resolve_channel(bot, cid)
+    if err:
+        return {"error": err}
+    miss = _missing_perms(bot, ch, ["view_channel", "read_message_history"])
+    if miss:
+        return {"error": _no_perms_text(ch, miss)}
+    try:
+        cap = max(1, min(int(limit or 50), CHAT_LIMIT))
+    except (TypeError, ValueError):
+        cap = 50
+    kw: Dict[str, Any] = {"limit": cap}
+    newer = str(after or "").isdigit()
+    if newer:
+        kw["after"] = disnake.Object(id=int(after))
+        kw["oldest_first"] = True
+    elif str(before or "").isdigit():
+        kw["before"] = disnake.Object(id=int(before))
+    try:
+        msgs = [m async for m in ch.history(**kw)]
+    except Exception as e:
+        return {"error": _discord_error(e)}
+    if not newer:
+        msgs.reverse()  # history() отдаёт от новых к старым — в ленте нужно наоборот
+    me = bot.user.id if bot.user else 0
+    rows = []
+    for m in msgs:
+        row = _chat_row(m)
+        row["mine"] = m.author.id == me
+        rows.append(row)
+    return {"rows": rows, "channel": {"id": str(ch.id), "name": ch.name,
+                                      "topic": (getattr(ch, "topic", "") or "")[:300]},
+            "full": len(msgs) >= cap and not newer}
 
 
 async def post_dm(bot, user_id: Any, text: str, title: str = "", color: str = "",

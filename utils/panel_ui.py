@@ -982,6 +982,44 @@ html[data-style=ruby][data-theme=light] body::before,html[data-style=ice][data-t
 .dcping{display:inline-block;margin-top:.3rem;color:#c9cdfb;background:rgba(88,101,242,.3);border-radius:4px;padding:0 .3em}
 @media (max-width:900px){.sendgrid{grid-template-columns:1fr}.pickcard{position:static}}
 
+/* ---- Дискорд-чат: каналы слева, лента и поле ответа справа ---- */
+.chatwrap{display:grid;grid-template-columns:minmax(210px,270px) 1fr;gap:1rem;height:calc(100vh - 12rem);min-height:480px}
+.chatside{display:flex;flex-direction:column;gap:.6rem;min-height:0;padding:.8rem}
+.chatchans{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:.1rem}
+.chatchans .cat{margin:.7rem .4rem .2rem;font-size:.66rem;font-weight:650;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.chatchans button{display:flex;align-items:center;gap:.5rem;width:100%;text-align:left;padding:.42rem .6rem;border-radius:9px;
+  border:1px solid transparent;background:none;color:var(--muted);font:inherit;font-size:.88rem;cursor:pointer}
+.chatchans button:hover{background:var(--hover);color:var(--text)}
+.chatchans button.on{background:var(--accent-soft);border-color:var(--accent-line);color:var(--text)}
+.chatchans button span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chatmain{display:flex;flex-direction:column;min-height:0;padding:0;overflow:hidden}
+.chathead{padding:.75rem 1rem;border-bottom:1px solid var(--line);display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
+.chathead small{color:var(--muted)}
+.chatfeed{flex:1;min-height:0;overflow:auto;padding:.6rem 1rem;display:flex;flex-direction:column;gap:.15rem}
+.chmsg{display:flex;gap:.7rem;padding:.4rem .5rem;border-radius:var(--radius-s)}
+.chmsg:hover{background:var(--hover)}
+.chmsg.mine .chmeta b{color:var(--accent2)}
+.chav{width:38px;height:38px;border-radius:50%;flex:none;object-fit:cover;background:var(--panel3)}
+.chav.ph{display:grid;place-items:center;font-weight:700;color:var(--muted)}
+.chbody{flex:1;min-width:0}
+.chmeta{display:flex;gap:.5rem;align-items:baseline;flex-wrap:wrap}
+.chmeta b{font-size:.92rem}
+.chtext{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5;font-size:.93rem}
+.chrep{font-size:.78rem;color:var(--muted);border-left:2px solid var(--line2);padding-left:.5rem;margin-bottom:.2rem;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chatt{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.35rem}
+.chatt img{max-width:min(360px,100%);max-height:280px;border-radius:var(--radius-s);border:1px solid var(--line)}
+.chreact{display:flex;gap:.3rem;flex-wrap:wrap;margin-top:.3rem}
+.chact{opacity:0;align-self:flex-start;transition:opacity .15s}
+.chmsg:hover .chact,.chmsg:focus-within .chact{opacity:1}
+.chatmore{align-self:center;margin:.3rem 0 .6rem}
+.chatsend{border-top:1px solid var(--line);padding:.7rem 1rem;display:flex;flex-direction:column;gap:.5rem}
+.chatsend textarea{min-height:64px;max-height:200px;width:100%;resize:vertical;font-family:inherit;line-height:1.5}
+.chatreply{display:flex;gap:.5rem;align-items:center;font-size:.8rem;color:var(--muted);
+  background:var(--panel2);border-radius:9px;padding:.3rem .6rem}
+.chatreply span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:900px){.chatwrap{grid-template-columns:1fr;height:auto}.chatside{max-height:220px}.chatfeed{height:55vh;flex:none}.chact{opacity:1}}
+
 /* ======================================================================
    Стиль «Дом» — по умолчанию. Семейная бухгалтерия: винный фон, латунь,
    тонкая полоска как на костюме, крупные цифры с засечками.
@@ -1557,6 +1595,8 @@ const PAGES = [
   ['overview', 'Обзор', 'dash', 'Семья'],
   ['apps', 'Заявки', 'inbox', 'Семья'],
   ['send', 'Сообщения', 'send', 'Семья'],
+  ['chat', 'Дискорд-чат', 'chat', 'Семья'],
+  ['servers', 'Серверы', 'cube', 'Служба'],
   ['plan', 'Планировщик', 'clock', 'Семья'],
   ['notes', 'Заметки', 'note', 'Семья'],
   ['screens', 'Экраны', 'screen', 'Семья'],
@@ -1579,6 +1619,7 @@ const ICONS = {
   inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
   send: '<path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>',
   screen: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
   type: '<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>',
   smile: '<circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/>',
   pulse: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
@@ -1719,7 +1760,7 @@ async function go(page) {
   const content = document.getElementById('content');
   content.replaceChildren(skeleton());
   try {
-    const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, plan: pagePlan, notes: pageNotes, screens: pageScreens,
+    const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, chat: pageChat, servers: pageServers, plan: pagePlan, notes: pageNotes, screens: pageScreens,
       texts: pageTexts, stickers: pageStickers, kazna: pageKazna, emojis: pageEmojis,
       diag: pageDiag, audit: pageAudit, shots: pageShots,
       modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
@@ -3416,6 +3457,233 @@ async function pageSend() {
     pageHead('Сообщения', 'Можно писать от имени бота или от любого человека с сервера: выбери аккаунт, и сообщение выйдет с его ником и аватаркой.',
       h('button', { class: 'btn', onclick: () => go('send') }, 'Обновить')),
     tabs, body);
+}
+
+
+/* ---------- Дискорд-чат ---------- */
+/* Читаем канал и пишем в него от имени бота — как в обычном клиенте Discord, но только для бота:
+   чужой аккаунт сюда не подключается (это запрещено правилами Discord), все права — права роли бота. */
+const CDN_OK = /^https:\/\/(cdn\.discordapp\.com|media\.discordapp\.net)\//;
+
+function chatMsgNode(m, onReply) {
+  const t = new Date(m.ts);
+  const when = isNaN(t) ? '' : t.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const av = CDN_OK.test(m.author.avatar || '')
+    ? h('img', { class: 'chav', src: m.author.avatar, alt: '', referrerpolicy: 'no-referrer', loading: 'lazy' })
+    : h('div', { class: 'chav ph', 'aria-hidden': 'true' }, (m.author.name || '?').slice(0, 1).toUpperCase());
+  const body = h('div', { class: 'chbody' });
+  if (m.reply) body.append(h('div', { class: 'chrep' }, '↪ ', h('b', null, m.reply.author || '…'), ' ', m.reply.text));
+  body.append(h('div', { class: 'chmeta' },
+    h('b', null, m.author.name),
+    m.author.bot ? chip('бот') : null,
+    h('small', { class: 'muted' }, when),
+    m.edited ? h('small', { class: 'muted' }, '(изменено)') : null,
+    m.pinned ? chip('📌 закреплено') : null));
+  if (m.text) body.append(h('div', { class: 'chtext' }, m.text));
+  if ((m.stickers || []).length) body.append(h('div', { class: 'chreact' }, m.stickers.map((s) => chip('стикер: ' + s))));
+  if ((m.attachments || []).length) {
+    body.append(h('div', { class: 'chatt' }, m.attachments.map((a) => {
+      const ok = CDN_OK.test(a.url || '');
+      if (a.image && ok) return h('a', { href: a.url, target: '_blank', rel: 'noopener noreferrer' },
+        h('img', { src: a.url, alt: a.name, referrerpolicy: 'no-referrer', loading: 'lazy' }));
+      const label = '📎 ' + a.name + (a.size ? ' · ' + Math.max(1, Math.round(a.size / 1024)) + ' КБ' : '');
+      return ok ? h('a', { class: 'chip', href: a.url, target: '_blank', rel: 'noopener noreferrer' }, label) : chip(label);
+    })));
+  }
+  (m.embeds || []).forEach((e) => body.append(embedNode(e)));
+  if ((m.reactions || []).length) body.append(h('div', { class: 'chreact' }, m.reactions.map((r) => chip(r.emoji + ' ' + r.count))));
+  return h('div', { class: 'chmsg' + (m.mine ? ' mine' : ''), 'data-id': m.id }, av, body,
+    h('button', { class: 'btn icon chact', title: 'Ответить на это сообщение', 'aria-label': 'Ответить',
+      onclick: () => onReply(m) }, '↩'));
+}
+
+async function pageChat() {
+  const cq = h('input', { type: 'search', placeholder: 'Найти канал…', 'aria-label': 'Поиск канала' });
+  const list = h('div', { class: 'chatchans' });
+  const head = h('div', { class: 'chathead' }, h('small', null, 'Выбери канал слева'));
+  const feed = h('div', { class: 'chatfeed', role: 'log', 'aria-live': 'polite' });
+  const replyBar = h('div', { class: 'chatreply', style: 'display:none' });
+  const box = h('textarea', { class: 'msg', maxlength: '3500', 'aria-label': 'Сообщение',
+    placeholder: 'Написать от имени бота… (Ctrl+Enter — отправить)' });
+  const sendBtn = h('button', { class: 'btn primary', disabled: true }, 'Отправить');
+  const note = h('small', { class: 'muted' }, '');
+  let chans = [], cur = '', oldest = '', newest = '', replyTo = null, busy = false;
+  const seen = new Set();
+
+  const current = () => chans.find((c) => c.id === cur);
+  const nearBottom = () => feed.scrollHeight - feed.scrollTop - feed.clientHeight < 120;
+  const toBottom = () => { feed.scrollTop = feed.scrollHeight; };
+
+  function setReply(m) {
+    replyTo = m;
+    if (!m) { replyBar.style.display = 'none'; replyBar.replaceChildren(); return; }
+    replyBar.style.display = '';
+    replyBar.replaceChildren(h('span', null, 'Ответ для ', h('b', null, m.author.name), ': ', (m.text || 'вложение').slice(0, 80)),
+      h('button', { class: 'btn icon', 'aria-label': 'Отменить ответ', onclick: () => setReply(null) }, '✕'));
+    box.focus();
+  }
+
+  function drawChannels() {
+    const needle = cq.value.trim().toLowerCase();
+    const rows = chans.filter((c) => !needle || c.name.toLowerCase().includes(needle));
+    const kids = [];
+    let cat = null;
+    for (const c of rows) {
+      const g = c.category || (c.kind === 'ветка' ? 'Ветки' : 'Без категории');
+      if (g !== cat) { cat = g; kids.push(h('div', { class: 'cat' }, g)); }
+      kids.push(h('button', { class: c.id === cur ? 'on' : '', type: 'button', title: chanSub(c), onclick: () => openChannel(c.id) },
+        h('span', null, chanLabel(c).replace(' · нет прав', '')),
+        c.can_write === false ? chip('чтение', 'err') : null));
+    }
+    if (!rows.length) kids.push(h('div', { class: 'none muted' }, 'Каналов не нашлось.'));
+    list.replaceChildren(...kids);
+  }
+
+  function addRows(rows, prepend) {
+    const fresh = rows.filter((m) => !seen.has(m.id));
+    fresh.forEach((m) => seen.add(m.id));
+    if (!fresh.length) return 0;
+    const nodes = fresh.map((m) => chatMsgNode(m, setReply));
+    if (prepend) {
+      const before = feed.scrollHeight;
+      const anchor = feed.querySelector('.chatmore');
+      (anchor ? anchor.after(...nodes) : feed.prepend(...nodes));
+      feed.scrollTop += feed.scrollHeight - before;
+      oldest = fresh[0].id;
+    } else {
+      feed.append(...nodes);
+      newest = fresh[fresh.length - 1].id;
+    }
+    return fresh.length;
+  }
+
+  function moreButton(full) {
+    feed.querySelectorAll('.chatmore').forEach((n) => n.remove());
+    if (!full) return;
+    const b = h('button', { class: 'btn chatmore', onclick: async () => {
+      b.disabled = true;
+      const id = cur;
+      try {
+        const d = await api('/api/chat/messages?channel=' + id + '&limit=50&before=' + oldest);
+        if (id !== cur) return;
+        addRows(d.rows, true);
+        moreButton(d.full);
+      } catch (e) { toast(e.message, 'err'); b.disabled = false; }
+    } }, 'Загрузить более ранние');
+    feed.prepend(b);
+  }
+
+  async function openChannel(id) {
+    cur = id;
+    state.chatChan = id;
+    seen.clear(); oldest = ''; newest = ''; setReply(null);
+    drawChannels();
+    const c = current();
+    head.replaceChildren(h('b', null, c ? chanLabel(c).replace(' · нет прав', '') : '…'),
+      h('small', null, c ? [c.category, c.topic].filter(Boolean).join(' · ') : ''));
+    const canWrite = !c || c.can_write !== false;
+    sendBtn.disabled = !canWrite;
+    note.textContent = canWrite ? '' : 'У бота нет права писать в этот канал — только чтение.';
+    feed.replaceChildren(spinner('Читаю канал…'));
+    try {
+      const d = await api('/api/chat/messages?channel=' + id + '&limit=60');
+      if (id !== cur) return;
+      feed.replaceChildren();
+      if (!d.rows.length) feed.append(h('p', { class: 'muted' }, 'В канале пока пусто.'));
+      addRows(d.rows, false);
+      moreButton(d.full);
+      toBottom();
+    } catch (e) {
+      if (id === cur) feed.replaceChildren(h('p', { class: 'err' }, e.message));
+    }
+  }
+
+  async function poll() {
+    if (!cur || !newest || busy || document.hidden) return;
+    busy = true;
+    const id = cur;
+    try {
+      const d = await api('/api/chat/messages?channel=' + id + '&after=' + newest + '&limit=100');
+      if (id !== cur) return;
+      const stick = nearBottom();
+      if (addRows(d.rows, false) && stick) toBottom();
+    } catch (e) { /* связь мигнула — следующий опрос всё догонит */ }
+    finally { busy = false; }
+  }
+
+  async function send() {
+    const text = box.value.trim();
+    if (!cur || !text || sendBtn.disabled) return;
+    sendBtn.disabled = true;
+    try {
+      await api('/api/send', { method: 'POST', body: { channel: cur, text, reply_to: replyTo ? replyTo.id : null } });
+      box.value = '';
+      setReply(null);
+      busy = false;
+      await poll();
+      toBottom();
+    } catch (e) { toast(e.message, 'err'); }
+    finally { const c = current(); sendBtn.disabled = !!c && c.can_write === false; box.focus(); }
+  }
+
+  sendBtn.addEventListener('click', send);
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } });
+  cq.addEventListener('input', drawChannels);
+
+  const d = await api('/api/channels');
+  chans = d.rows;
+  drawChannels();
+  state.timer = setInterval(poll, 4000);
+  if (!chans.some((c) => c.id === state.chatChan)) state.chatChan = '';
+  if (state.chatChan) openChannel(state.chatChan);
+
+  return h('div', null,
+    pageHead('Дискорд-чат', 'Читай каналы и пиши в них от имени бота. Новые сообщения подтягиваются сами каждые несколько секунд.',
+      h('button', { class: 'btn', onclick: () => go('chat') }, 'Обновить список')),
+    h('div', { class: 'chatwrap' },
+      h('div', { class: 'card chatside' }, cq, list),
+      h('div', { class: 'card chatmain' }, head, feed,
+        h('div', { class: 'chatsend' }, replyBar, box, h('div', { class: 'row' }, sendBtn, note)))));
+}
+
+
+/* ---------- Серверы: добавить бота куда-то ещё ---------- */
+async function pageServers() {
+  const ov = await api('/api/overview');
+  let level = 'recommended';
+  const urlBox = h('input', { type: 'text', readonly: true, 'aria-label': 'Ссылка-приглашение', class: 'mono' });
+  const openBtn = h('a', { class: 'btn primary big', target: '_blank', rel: 'noopener noreferrer', href: '#' }, 'Добавить бота на сервер');
+  async function load() {
+    try {
+      const d = await api('/api/invite?perms=' + level);
+      urlBox.value = d.url;
+      openBtn.href = d.url;
+    } catch (e) { urlBox.value = ''; openBtn.removeAttribute('href'); toast(e.message, 'err'); }
+  }
+  const sel = h('select', { 'aria-label': 'Какие права выдать', onchange: (e) => { level = e.target.value; load(); } },
+    h('option', { value: 'recommended' }, 'Рекомендуемые (всё, что нужно панели и командам)'),
+    h('option', { value: 'minimal' }, 'Минимальные (читать и писать)'),
+    h('option', { value: 'admin' }, 'Администратор (всё сразу)'));
+  const copy = h('button', { class: 'btn', onclick: async () => {
+    try { await navigator.clipboard.writeText(urlBox.value); toast('Ссылка скопирована', 'ok'); }
+    catch (e) { urlBox.select(); toast('Скопируй вручную: Ctrl+C', 'err'); }
+  } }, 'Копировать');
+  await load();
+  const rows = (ov.guilds || []).map((g) => h('div', { class: 'row' },
+    g.icon && CDN_OK.test(g.icon) ? h('img', { class: 'chav', src: g.icon, alt: '', referrerpolicy: 'no-referrer' })
+      : h('div', { class: 'chav ph', 'aria-hidden': 'true' }, (g.name || '?').slice(0, 1).toUpperCase()),
+    h('b', null, g.name), h('small', { class: 'muted' }, (g.members || '?') + ' участников · ID ' + g.id)));
+  return h('div', null,
+    pageHead('Серверы', 'Добавь бота на другой сервер по ссылке-приглашению. Добавлять может тот, у кого там есть право «Управлять сервером».'),
+    h('div', { class: 'card form' },
+      h('h2', null, 'Пригласить бота'),
+      h('label', null, 'Права', sel),
+      h('label', null, 'Ссылка', urlBox),
+      h('div', { class: 'row' }, openBtn, copy),
+      h('p', { class: 'muted small' }, 'Если Discord пишет «Бот закрытый» или «Требуется авторизация кода» — в Developer Portal → Bot включи переключатель Public Bot и выключи Requires OAuth2 Code Grant.'),
+      h('p', { class: 'warnline small' }, 'Панель и часть модулей работают с одним главным сервером (guild_id в config.json). На новом сервере бот будет отвечать на slash-команды, но разделы панели по-прежнему смотрят на главный.')),
+    h('div', { class: 'card' }, h('h2', null, 'Где бот сейчас (' + rows.length + ')'),
+      rows.length ? h('div', { class: 'form' }, rows) : h('p', { class: 'muted' }, 'Ни одного сервера.')));
 }
 
 
