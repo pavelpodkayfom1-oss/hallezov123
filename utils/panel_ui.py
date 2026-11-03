@@ -1641,6 +1641,7 @@ function favToggle(ref) {
 /* группа в третьей колонке — пункты меню собираются под заголовок группы */
 const PAGES = [
   ['overview', 'Обзор', 'dash', 'Семья'],
+  ['servers', 'Серверы', 'cube', 'Семья'],
   ['apps', 'Заявки', 'inbox', 'Семья'],
   ['send', 'Сообщения', 'send', 'Семья'],
   ['chat', 'Каналы', 'chat', 'Семья'],
@@ -1809,7 +1810,7 @@ async function go(page) {
   const content = document.getElementById('content');
   content.replaceChildren(skeleton());
   try {
-    const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, chat: pageChat, voice: pageVoice, plan: pagePlan, notes: pageNotes, screens: pageScreens,
+    const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, servers: pageServers, chat: pageChat, voice: pageVoice, plan: pagePlan, notes: pageNotes, screens: pageScreens,
       texts: pageTexts, stickers: pageStickers, kazna: pageKazna, emojis: pageEmojis,
       diag: pageDiag, audit: pageAudit, shots: pageShots,
       modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
@@ -3813,6 +3814,47 @@ async function pageVoice() {
     h('div', { class: 'row' }, bar),
     grid);
 }
+
+/* ---------- Серверы: добавить бота куда-то ещё ---------- */
+async function pageServers() {
+  const ov = await api('/api/overview');
+  let level = 'recommended';
+  const imgOk = (u) => /^https:\/\/(cdn|media)\.discordapp\.(com|net)\//.test(u || '');
+  const urlBox = h('input', { type: 'text', readonly: true, 'aria-label': 'Ссылка-приглашение', class: 'mono' });
+  const openBtn = h('a', { class: 'btn primary big', target: '_blank', rel: 'noopener noreferrer', href: '#' }, 'Добавить бота на сервер');
+  async function load() {
+    try {
+      const d = await api('/api/invite?perms=' + level);
+      urlBox.value = d.url;
+      openBtn.href = d.url;
+    } catch (e) { urlBox.value = ''; openBtn.removeAttribute('href'); toast(e.message, 'err'); }
+  }
+  const sel = h('select', { 'aria-label': 'Какие права выдать', onchange: (e) => { level = e.target.value; load(); } },
+    h('option', { value: 'recommended' }, 'Рекомендуемые (всё, что нужно панели и командам)'),
+    h('option', { value: 'minimal' }, 'Минимальные (читать и писать)'),
+    h('option', { value: 'admin' }, 'Администратор (всё сразу)'));
+  const copy = h('button', { class: 'btn', onclick: async () => {
+    try { await navigator.clipboard.writeText(urlBox.value); toast('Ссылка скопирована', 'ok'); }
+    catch (e) { urlBox.select(); toast('Скопируй вручную: Ctrl+C', 'err'); }
+  } }, 'Копировать');
+  await load();
+  const rows = (ov.guilds || []).map((g) => h('div', { class: 'row' },
+    imgOk(g.icon) ? h('img', { src: g.icon, alt: '', width: '36', height: '36', style: 'border-radius:50%', referrerpolicy: 'no-referrer' })
+      : h('b', null, (g.name || '?').slice(0, 1).toUpperCase()),
+    h('b', null, g.name), h('small', { class: 'muted' }, (g.members || '?') + ' участников · ID ' + g.id)));
+  return h('div', null,
+    pageHead('Серверы', 'Добавь бота на другой сервер по ссылке-приглашению. Добавлять может тот, у кого там есть право «Управлять сервером».'),
+    h('div', { class: 'card form' },
+      h('h2', null, 'Пригласить бота'),
+      h('label', null, 'Права', sel),
+      h('label', null, 'Ссылка', urlBox),
+      h('div', { class: 'row' }, openBtn, copy),
+      h('p', { class: 'muted small' }, 'Если Discord пишет «Бот закрытый» или «Требуется авторизация кода» — в Developer Portal → Bot включи Public Bot и выключи Requires OAuth2 Code Grant.'),
+      h('p', { class: 'warnline small' }, 'Панель и часть модулей работают с одним главным сервером (guild_id в config.json). На новом сервере бот будет отвечать на slash-команды, но разделы панели по-прежнему смотрят на главный.')),
+    h('div', { class: 'card' }, h('h2', null, 'Где бот сейчас (' + rows.length + ')'),
+      rows.length ? h('div', { class: 'form' }, rows) : h('p', { class: 'muted' }, 'Ни одного сервера.')));
+}
+
 
 /* ---------- Экраны команд ---------- */
 function embedNode(e) {
