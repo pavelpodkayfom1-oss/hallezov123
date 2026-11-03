@@ -817,7 +817,7 @@ def _message_row(m, bot_id: int) -> Dict[str, Any]:
             "id": str(author.id),
             "name": getattr(author, "display_name", None) or author.name,
             "bot": bool(getattr(author, "bot", False)),
-            "avatar": author.display_avatar.with_size(size=64).url if author.display_avatar else "",
+            "avatar": author.display_avatar.with_size(64).url if author.display_avatar else "",
         },
         "mine": author.id == bot_id,
         "reply": str(replied) if replied else "",
@@ -897,7 +897,7 @@ async def chat_delete(bot, cid: Any, mid: Any) -> Dict[str, Any]:
                          f"есть право «Управлять сообщениями» в канале «{ch.name}»."}
     what = (msg.clean_content or msg.content or "").strip()[:80] or "вложение или стикер"
     try:
-        await msg.delete(reason="Панель семьи: чистка канала")
+        await msg.delete()          # у disnake у удаления нет причины — только delay
     except Exception as e:
         return {"error": _discord_error(e)}
     return {"deleted": str(msg.id), "where": f"#{ch.name}", "what": what}
