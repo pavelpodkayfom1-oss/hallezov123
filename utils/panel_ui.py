@@ -1346,6 +1346,29 @@ html[data-style=stark] .stats>.stat,html[data-style=stark] .guilds>.card{animati
 html[data-style=stark] .nav button.active .ico{filter:none}
 html[data-style=stark] .nav button.active::before{box-shadow:none}
 html[data-style=stark] .dot{box-shadow:none}
+
+/* ---------- раздел «Саундборд» ---------- */
+/* Цвет звука виден по левой полоске карточки: человек сразу понимает, каким выйдет знак
+   на сайте, не открывая редактор. Плашка знака нарочно несимметричная — экран не должен
+   читаться как «Эмодзи» или «Стикеры» с их сеткой квадратных плиток. */
+.sndgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem}
+.snd{position:relative;display:flex;flex-direction:column;gap:.65rem;padding:.95rem 1.05rem .95rem 1.25rem;
+  border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:var(--radius-s);
+  background:var(--panel2);transition:border-color .18s}
+.snd:hover{border-color:var(--line2)}
+.sndtop{display:flex;align-items:center;gap:.75rem;min-width:0}
+.sndmark{width:46px;height:46px;flex:none;display:grid;place-items:center;font-size:1.4rem;line-height:1;
+  border-radius:16px 6px 16px 6px;background:var(--panel3);border:1px solid var(--line)}
+.sndtop .grow{flex:1;min-width:0}
+.sndtop b{display:block;font-size:.98rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sndtop small{display:block;color:var(--faint);font-size:.74rem}
+.snd audio{width:100%;height:36px;border-radius:8px}
+.sndacts{display:flex;gap:.45rem;flex-wrap:wrap;align-items:center}
+.sned{display:none;flex-direction:column;gap:.6rem;padding-top:.75rem;border-top:1px dashed var(--line)}
+.snd.edit .sned{display:flex}
+.markpick{display:flex;gap:.3rem;flex-wrap:wrap;max-width:100%}
+.sned .swatches{margin-top:.1rem}
+@media (max-width:640px){.sndgrid{grid-template-columns:1fr}.snd audio{height:40px}}
 </style>
 </head>
 <body>
@@ -1653,6 +1676,7 @@ const PAGES = [
   ['stickers', 'Стикеры', 'image', 'Семья'],
   ['kazna', 'Казна', 'bank', 'Семья'],
   ['emojis', 'Эмодзи', 'smile', 'Семья'],
+  ['sounds', 'Саундборд', 'sound', 'Семья'],
   ['diag', 'Диагностика', 'pulse', 'Служба'],
   ['audit', 'Ревизия', 'search', 'Служба'],
   ['shots', 'Снимки', 'camera', 'Служба'],
@@ -1685,6 +1709,7 @@ const ICONS = {
   chat: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/>',
   menu: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
   mic: '<rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/>',
+  sound: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.7 5.3a9 9 0 0 1 0 13.4"/>',
 };
 function icon(name) {
   const el = h('span', { class: 'ico', 'aria-hidden': 'true' });
@@ -1811,7 +1836,7 @@ async function go(page) {
   content.replaceChildren(skeleton());
   try {
     const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, servers: pageServers, chat: pageChat, voice: pageVoice, plan: pagePlan, notes: pageNotes, screens: pageScreens,
-      texts: pageTexts, stickers: pageStickers, kazna: pageKazna, emojis: pageEmojis,
+      texts: pageTexts, stickers: pageStickers, kazna: pageKazna, emojis: pageEmojis, sounds: pageSounds,
       diag: pageDiag, audit: pageAudit, shots: pageShots,
       modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
     if (state.page === page) content.replaceChildren(view);
@@ -2918,6 +2943,228 @@ async function pageStickers() {
         h('label', null, 'Цвет', color),
         sendBtn,
         h('div', { class: 'section-title' }, 'Результат'), out)));
+}
+
+/* ---------- Саундборд ---------- */
+/* Цвет звука подставляется в полосу карточки только после проверки: цвет приходит из
+   sounds_meta.json, а в style нельзя отдать что попало. */
+const soundTone = (c) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : 'var(--line2)');
+const soundHex = (c) => {
+  const v = String(c || '').trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(v)) return v;
+  return /^[0-9a-f]{6}$/.test(v) ? '#' + v : '';
+};
+
+async function pageSounds() {
+  let d = await api('/api/sounds').catch((e) => ({ error: e.message }));
+  if (d.error) return h('div', null, pageHead('Саундборд', null), h('p', { class: 'err' }, d.error));
+
+  const stats = h('div', { class: 'stats' });
+  const grid = h('div', { class: 'sndgrid' });
+  const backList = h('div', { class: 'list' });
+  const backWrap = h('div', null, h('div', { class: 'section-title' }, 'Спрятано с панели'), backList);
+  let busy = false;
+
+  /* Плееры не качают всё сразу (preload=none) и глушат друг друга: на 23 карточках
+     двадцать три играющих трека — это лаг, а не выбор. */
+  grid.addEventListener('play', (e) => {
+    grid.querySelectorAll('audio').forEach((a) => { if (a !== e.target) a.pause(); });
+  }, true);
+
+  async function reload() {
+    try { d = await api('/api/sounds'); draw(); }
+    catch (e) { toast(e.message, 'err'); }
+  }
+
+  async function post(path, body, btn) {
+    if (busy) return { error: 'Подождите, бот ещё делает прошлое действие.' };
+    busy = true;
+    if (btn) btn.disabled = true;
+    let r;
+    try { r = await api(path, { method: 'POST', body }); }
+    catch (e) { r = { error: e.message }; }
+    busy = false;
+    if (r.error) { toast(r.error, 'err'); return r; }
+    toast(r.panel || 'Готово', 'ok');
+    await reload();
+    return r;
+  }
+
+  function editor(r, card) {
+    const title = h('input', { type: 'text', maxlength: '24', value: r.title, 'aria-label': 'Текст на кнопке' });
+    const mark = h('select', { 'aria-label': 'Знак на кнопке' },
+      d.emojis.map((e) => h('option', { value: e, selected: e === r.emoji }, e)));
+    const hex = h('input', { type: 'text', maxlength: '7', class: 'hexin', value: r.color,
+      'aria-label': 'Цвет карточки', placeholder: '#5b5bd6' });
+    const sw = h('div', { class: 'swatches' }, d.colors.map((c) => h('button', {
+      type: 'button', class: 'sw', title: 'Цвет ' + c, 'aria-label': 'Цвет ' + c,
+      style: 'background:' + soundTone(c), onclick: () => { hex.value = c; } })));
+    const save = h('button', { class: 'btn primary tiny', onclick: async () => {
+      const raw = hex.value.trim();
+      const color = soundHex(raw);
+      if (!title.value.trim()) { toast('Нужен текст кнопки.', 'err'); return; }
+      if (raw && !color) { toast('Цвет — шесть знаков после решётки, например ' + r.color + '.', 'err'); return; }
+      const res = await post('/api/sounds/save', { name: r.name, title: title.value.trim(),
+        emoji: mark.value, color }, save);
+      if (res && !res.error) card.classList.remove('edit');
+    } }, 'Сохранить');
+    const back = h('button', { class: 'btn tiny', onclick: () => card.classList.remove('edit') }, 'Отмена');
+    return [h('label', null, 'Текст на кнопке', title), h('label', null, 'Знак', mark),
+      h('label', null, 'Цвет карточки', h('div', { class: 'row' }, sw, hex)),
+      h('div', { class: 'row end' }, back, save)];
+  }
+
+  function cardFor(r) {
+    const ed = h('div', { class: 'sned' });
+    const el = h('div', { class: 'snd', style: 'border-left-color:' + soundTone(r.color) },
+      h('div', { class: 'sndtop' },
+        h('span', { class: 'sndmark' }, r.emoji),
+        h('div', { class: 'grow' }, h('b', { title: r.name }, r.title),
+          h('small', null, r.name + ' · .' + r.ext + ' · ' + r.kb + ' КБ · ~'
+            + Math.max(1, Math.round(r.seconds || 0)) + ' с')),
+        chip(r.local ? 'мой файл' : 'звук пака', r.local ? 'ok' : 'off')),
+      h('audio', { controls: true, preload: 'none', src: r.url, 'aria-label': 'Прослушать ' + r.title }),
+      ed,
+      h('div', { class: 'sndacts' },
+        h('button', { class: 'btn tiny', onclick: open }, 'Править'),
+        h('button', {
+          class: 'btn tiny danger', onclick: async () => {
+            const hard = r.local ? 'Файл удалится с диска.' : 'Файл готового пака останется, звук только спрячется — вернуть можно ниже.';
+            if (!(await confirmBox('Убрать «' + r.title + '»?', hard + ' Кнопка в Discord исчезнет сразу.', 'Убрать', true))) return;
+            await post('/api/sounds/remove', { name: r.name });
+          }
+        }, 'Убрать')));
+
+    /* Редактор собирается только когда его открыли, и открыт всегда один: 23 живых формы
+       на экране — это лишние сотни узлов и прыгающая вёрстка. */
+    function open() {
+      document.querySelectorAll('.snd.edit').forEach((x) => { if (x !== el) x.classList.remove('edit'); });
+      if (!ed.childElementCount) ed.append(...editor(r, el));
+      el.classList.add('edit');
+      const inp = ed.querySelector('input');
+      if (inp) inp.focus();
+    }
+    return el;
+  }
+
+  function draw() {
+    const kb = Math.round(d.rows.reduce((a, r) => a + (r.bytes || 0), 0) / 1024);
+    stats.replaceChildren(
+      ...[['На панели', d.total + ' из ' + d.max, d.free ? 'ok' : 'warn'],
+        ['Свободно мест', String(d.free), d.free ? '' : 'warn'],
+        ['Весят вместе', kb + ' КБ', ''],
+        ['Спрятано', String(d.hidden.length), d.hidden.length ? 'warn' : '']]
+        .map(([l, v, k]) => h('div', { class: 'card stat ' + k }, h('small', null, l), h('b', null, v))));
+    grid.replaceChildren(...(d.rows.length ? d.rows.map(cardFor)
+      : [h('p', { class: 'empty' }, 'Звуков пока нет — добавьте первый файлом или ссылкой ниже.')]));
+    backList.replaceChildren(...d.hidden.map((s) => h('div', { class: 'card item' },
+      h('span', { class: 'sndmark' }, s.emoji),
+      h('div', { class: 'grow' }, h('b', null, s.title),
+        h('small', { class: 'muted' }, s.name + ' · ' + (s.local ? 'мой файл' : 'звук пака'))),
+      h('button', { class: 'btn tiny', onclick: () => post('/api/sounds/restore', { name: s.name }) }, 'Вернуть'))));
+    backWrap.style.display = d.hidden.length ? '' : 'none';
+  }
+
+  /* ---- добавить файлом ---- */
+  const fName = h('input', { type: 'text', maxlength: '20', placeholder: 'boom — можно оставить пустым' });
+  const fTitle = h('input', { type: 'text', maxlength: '24', placeholder: 'Бум — что написать на кнопке' });
+  const fMark = h('select', { 'aria-label': 'Знак на кнопке' },
+    [h('option', { value: '' }, 'подобрать по имени файла')]
+      .concat(d.emojis.map((e) => h('option', { value: e }, e))));
+  const fInput = h('input', { type: 'file', accept: d.exts.map((e) => '.' + e).join(','), style: 'display:none' });
+  const fPicked = h('div', { class: 'row small' });
+  const fOut = h('div');
+  const fDrop = h('div', { class: 'drop' },
+    h('div', null, '🔊  ', h('b', null, 'Перетащите сюда mp3, wav, ogg или m4a')),
+    h('div', { class: 'muted small' }, 'до ' + d.max_mb + ' МБ · или нажмите, чтобы выбрать'));
+  let picked = null;
+
+  function showPicked() {
+    fPicked.replaceChildren(picked
+      ? chip(picked.name + ' · ' + Math.max(1, Math.round(picked.size / 1024)) + ' КБ', 'ok')
+      : h('span', { class: 'muted small' }, 'файл не выбран'));
+  }
+  function take(list) {
+    const f = list && list[0];
+    if (!f) return;
+    const ext = String(f.name).split('.').pop().toLowerCase();
+    if (d.exts.indexOf(ext) < 0) { toast('«' + f.name + '» — не звук. Нужен ' + d.exts.join(', ') + '.', 'err'); return; }
+    if (f.size > d.max_mb * 1024 * 1024) { toast('«' + f.name + '» больше ' + d.max_mb + ' МБ', 'err'); return; }
+    picked = f;
+    showPicked();
+  }
+  fDrop.addEventListener('click', () => fInput.click());
+  fDrop.addEventListener('dragover', (e) => { e.preventDefault(); fDrop.classList.add('over'); });
+  fDrop.addEventListener('dragleave', () => fDrop.classList.remove('over'));
+  fDrop.addEventListener('drop', (e) => { e.preventDefault(); fDrop.classList.remove('over'); take(e.dataTransfer.files); });
+  fInput.addEventListener('change', () => { take(fInput.files); fInput.value = ''; });
+
+  const fAdd = h('button', { class: 'btn primary', onclick: async () => {
+    if (!picked) { toast('Сначала выберите файл со звуком.', 'err'); return; }
+    if (busy) return;
+    busy = true; fAdd.disabled = true; fOut.replaceChildren(spinner('Кладу файл…'));
+    const fd = new FormData();
+    if (fName.value.trim()) fd.append('name', fName.value.trim());
+    if (fTitle.value.trim()) fd.append('title', fTitle.value.trim());
+    if (fMark.value) fd.append('emoji', fMark.value);
+    fd.append('sound', picked, picked.name);
+    try {
+      const r = await apiForm('/api/sounds/upload', fd);
+      fOut.replaceChildren(h('p', null, chip('добавлено', 'ok'), ' ' + (r.panel || '')));
+      picked = null; showPicked(); fName.value = fTitle.value = '';
+      await reload();
+    } catch (e) { fOut.replaceChildren(h('p', { class: 'err' }, e.message)); }
+    busy = false; fAdd.disabled = false;
+  } }, 'Добавить звук');
+
+  /* ---- добавить по ссылке ---- */
+  const uName = h('input', { type: 'text', maxlength: '20', placeholder: 'airhorn' });
+  const uUrl = h('input', { type: 'text', placeholder: 'https://…/sound.mp3 или страница myinstants.com' });
+  const uTitle = h('input', { type: 'text', maxlength: '24', placeholder: 'Аирхорн — что написать на кнопке' });
+  const uOut = h('div');
+  const uAdd = h('button', { class: 'btn', onclick: async () => {
+    if (!uName.value.trim()) { toast('Придумайте имя звука: буквы, цифры, - и _, до 20 знаков.', 'err'); return; }
+    if (!uUrl.value.trim()) { toast('Вставьте ссылку на звук.', 'err'); return; }
+    if (busy) return;
+    busy = true; uAdd.disabled = true; uOut.replaceChildren(spinner('Скачиваю…'));
+    let r;
+    try { r = await api('/api/sounds/url', { method: 'POST', body: { name: uName.value.trim(),
+      url: uUrl.value.trim(), title: uTitle.value.trim() } }); }
+    catch (e) { r = { error: e.message }; }
+    busy = false; uAdd.disabled = false;
+    if (r.error) { uOut.replaceChildren(h('p', { class: 'err' }, r.error)); return; }
+    uOut.replaceChildren(h('p', null, chip('готово', 'ok'), ' ' + (r.panel || '')));
+    uUrl.value = uTitle.value = '';
+    await reload();
+  } }, 'Скачать и добавить');
+
+  draw();
+  return h('div', null,
+    pageHead('Саундборд',
+      'Кнопки со звуками в голосовом канале: человек заходит в войс и нажимает. Здесь правят подпись, '
+      + 'знак и цвет, добавляют файл или ссылку и убирают лишнее — панель в Discord переклеивается сама, '
+      + 'рестарт не нужен. Кнопки идут по алфавиту имён файлов.',
+      h('button', { class: 'btn', onclick: () => go('sounds') }, 'Обновить')),
+    stats, grid,
+    h('div', { class: 'section-title' }, 'Добавить звук'),
+    h('div', { class: 'grid2' },
+      h('div', { class: 'card form' },
+        h('h2', null, 'Файл с компьютера'),
+        h('label', null, 'Файл', fDrop, fInput, fPicked),
+        h('div', { class: 'grid2' }, h('label', null, 'Имя звука', fName), h('label', null, 'Подпись', fTitle)),
+        h('label', null, 'Знак', fMark),
+        h('small', { class: 'muted' }, 'Имя можно не писать — возьмём из файла. Файл ляжет в ' + d.dir
+          + ' и переживёт обновление кода бота.'),
+        h('div', { class: 'row end' }, fAdd), fOut),
+      h('div', { class: 'card form' },
+        h('h2', null, 'Ссылка'),
+        h('label', null, 'Имя звука', uName),
+        h('label', null, 'Ссылка', uUrl),
+        h('label', null, 'Подпись', uTitle),
+        h('small', { class: 'muted' }, 'Бот скачивает сам и проверяет, что по ссылке именно звук до '
+          + d.max_mb + ' МБ. Ссылки на сайты внутри сети хостинга он не открывает.'),
+        h('div', { class: 'row end' }, uAdd), uOut)),
+    backWrap);
 }
 
 /* ---------- Управление ---------- */

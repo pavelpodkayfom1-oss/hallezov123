@@ -373,6 +373,13 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/emojis", self.h_emojis)
             app.router.add_get("/api/emojis/image", self.h_emoji_image)
             app.router.add_post("/api/emojis/upload", self.h_emoji_upload)
+            app.router.add_get("/api/sounds", self.h_sounds)
+            app.router.add_get("/api/sounds/file", self.h_sound_file)
+            app.router.add_post("/api/sounds/save", self.h_sound_save)
+            app.router.add_post("/api/sounds/upload", self.h_sound_upload)
+            app.router.add_post("/api/sounds/url", self.h_sound_url)
+            app.router.add_post("/api/sounds/remove", self.h_sound_remove)
+            app.router.add_post("/api/sounds/restore", self.h_sound_restore)
             app.router.add_get("/api/notes", self.h_notes)
             app.router.add_post("/api/notes/add", self.h_note_add)
             app.router.add_post("/api/notes/update", self.h_note_update)
@@ -457,6 +464,8 @@ class WebPanel(commands.Cog):
             f"script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; "
             # blob: нужен превьюшкам скринов в форме отчёта — их рисует createObjectURL
             "img-src 'self' data: blob: https://cdn.discordapp.com; connect-src 'self'; "
+            # прослушивание звуков саундборда: без media-src плеер молча показывает неактивную кнопку
+            "media-src 'self'; "
             "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
         )
         return web.Response(
@@ -656,6 +665,14 @@ class WebPanel(commands.Cog):
         except Exception as e:
             return None, f"Раздел не загрузился: utils/web_tools.py не импортируется ({e.__class__.__name__}: {e}). Смотрите «Логи» при старте бота."
         return web_tools, None
+
+    @staticmethod
+    def _sounds():
+        try:
+            from utils import web_sounds
+        except Exception as e:
+            return None, f"Раздел не загрузился: utils/web_sounds.py не импортируется ({e.__class__.__name__}: {e}). Смотрите «Логи» при старте бота."
+        return web_sounds, None
 
     @staticmethod
     def _fail(res: Dict[str, Any]) -> bool:
@@ -1029,6 +1046,91 @@ class WebPanel(commands.Cog):
         res = await tools.emoji_upload(self.bot, body.get("names"))
         print(f"🙂 Панель: эмодзи загружено {len(res.get('uploaded', []))}, "
               f"не вышло {len(res.get('failed', []))}: {str(res.get('error') or '')[:100]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    # ---- саундборд ----
+    async def h_sounds(self, request: web.Request) -> web.Response:
+        s, err = self._sounds()
+        if err:
+            return _json({"error": err}, 503)
+        return _json(s.catalog())
+
+    async def h_sound_file(self, request: web.Request) -> web.Response:
+        s, err = self._sounds()
+        if err:
+            return _json({"error": err}, 503)
+        res = s.audio(request.query.get("name") or "", request.headers.get("Range", ""))
+        if self._fail(res):
+            return _json({"error": res["error"]}, 404)
+        return web.Response(body=res["body"], content_type=res["mime"], status=res["status"],
+                            headers=res["headers"])
+
+    async def h_sound_save(self, request: web.Request) -> web.Response:
+        s, err = self._sounds()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        res = await s.save(self.bot, str(body.get("name") or ""), str(body.get("title") or ""),
+                           str(body.get("emoji") or ""), str(body.get("color") or ""))
+        print(f"🔊 Панель: правка звука «{body.get('name')}»: "
+              f"{str(res.get('error') or res.get('panel'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_sound_remove(self, request: web.Request) -> web.Response:
+        s, err = self._sounds()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        res = await s.hide(self.bot, str(body.get("name") or ""))
+        print(f"🔊 Панель: убрал звук «{body.get('name')}»: "
+              f"{str(res.get('error') or res.get('panel'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_sound_restore(self, request: web.Request) -> web.Response:
+        s, err = self._sounds()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        res = await s.restore(self.bot, str(body.get("name") or ""))
+        print(f"🔊 Панель: вернул звук «{body.get('name')}»: "
+              f"{str(res.get('error') or res.get('panel'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_sound_url(self, request: web.Request) -> web.Response:
+        s, err = self._sounds()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        res = await s.from_url(self.bot, str(body.get("name") or ""), str(body.get("url") or ""),
+                               str(body.get("title") or ""))
+        print(f"🔊 Панель: звук по ссылке «{body.get('name')}»: "
+              f"{str(res.get('error') or res.get('panel'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_sound_upload(self, request: web.Request) -> web.Response:
+        s, err = self._sounds()
+        if err:
+            return _json({"error": err}, 503)
+        fields: Dict[str, str] = {}
+        files: List[tuple] = []
+        try:
+            reader = await request.multipart()
+            while True:
+                part = await reader.next()
+                if part is None:
+                    break
+                data = await part.read(decode=True)
+                if part.filename:
+                    files.append((part.filename, str(part.headers.get("Content-Type") or ""), data))
+                else:
+                    fields[str(part.name or "")[:20]] = data.decode("utf-8", "replace")[:900]
+        except web.HTTPException as e:
+            return _json({"error": f"Файл не дошёл целиком ({e.status} {e.reason})"}, e.status)
+        except Exception as e:
+            return _json({"error": f"Файл не дошёл целиком ({e.__class__.__name__})"}, 400)
+        res = await s.upload(self.bot, fields, files)
+        print(f"🔊 Панель: загрузил звук «{fields.get('name') or '?'}»: "
+              f"{str(res.get('error') or res.get('panel'))[:120]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
 
     async def h_commands(self, request: web.Request) -> web.Response:
