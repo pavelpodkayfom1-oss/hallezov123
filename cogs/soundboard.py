@@ -1,10 +1,10 @@
 """Саундборд: панель кнопок со звуками, бот играет их в голосовом канале.
 
- • /sounds panel — выложить панель в канал (для руководства)
- • /sounds add <имя> <файл> — добавить звук (для руководства)
- • /sounds url <имя> <ссылка> — добавить звук по ссылке (для руководства)
- • /sounds edit <имя> — поменять подпись, знак или цвет (для руководства)
- • /sounds remove <имя> — убрать звук (для руководства)
+ • /sounds_panel — выложить панель в канал (для руководства)
+ • /sound_add <имя> <файл> — добавить звук (для руководства)
+ • /sound_url <имя> <ссылка> — добавить звук по ссылке (для руководства)
+ • /sound_edit <имя> — поменять подпись, знак или цвет (для руководства)
+ • /sound_remove <имя> — убрать звук (для руководства)
 Жать кнопки может любой, кто сидит в голосовом канале. Звуки и их подписи лежат в
 utils/sound_store.py — тот же код использует веб-панель, поэтому список правится в
 одном месте, а панель в Discord обновляется сама после изменений с сайта.
@@ -13,14 +13,14 @@ import asyncio
 import json
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import disnake
 from disnake.ext import commands
 
 from utils import sound_store as store
 from utils.checks import is_admin
-from utils.embeds import clip, get_color, note_embed, panel_embed
+from utils.embeds import clip, note_embed, panel_embed
 from utils.ffmpeg_path import ffmpeg_exe
 
 PREFIX = "sb:"
@@ -31,60 +31,62 @@ PANEL_FILE = Path("soundboard_panels.json")
 USER_COOLDOWN = 3          # секунд между нажатиями одного человека
 IDLE_LEAVE = 60            # секунд тишины, после которых бот выходит (если зашёл сам)
 REPAINT_GAP = 5.0          # как часто можно перекраивать панель в канале
-LABEL = 16                 # знаков подписи в кнопке: дальше Discord режет слово
+LABEL = 18                 # знаков подписи в кнопке: дальше Discord режет слово
 ROWS, PER_ROW = 5, 5       # жёсткий потолок Discord: 5 рядов по 5 кнопок на сообщение
 TOTAL = ROWS * PER_ROW     # всего кнопок в одном сообщении
 MAX_SOUNDS = store.MAX_SOUNDS      # хранилище и панель должны ждать один лимит
 ACCENT = "sound_color"
 
 
-DEFAULT_EMOJI = "🔊"
-
-
 def buttons(items: List[dict], playing: str = "") -> List[disnake.ui.Button]:
-    """Кнопка = название звука. Знак ставим, только если он не дежурный 🔊: иначе он на каждой кнопке."""
     out = []
     for it in items[:MAX_SOUNDS]:
         title = it["title"][:LABEL].rstrip(" -_")
-        emo = (it.get("emoji") or "").strip()
-        on = it["name"] == playing
-        out.append(disnake.ui.Button(
-            label=title[:80] or it["name"], custom_id=PREFIX + it["name"],
-            emoji=emo if emo and emo != DEFAULT_EMOJI else ("🔈" if on else None),
-            style=disnake.ButtonStyle.success if on else disnake.ButtonStyle.secondary))
+        label = f"{it['emoji']} {title}".strip()
+        style = disnake.ButtonStyle.primary if it["name"] == playing else disnake.ButtonStyle.secondary
+        out.append(disnake.ui.Button(label=label[:80], custom_id=PREFIX + it["name"], style=style))
     return out
 
 
 def controls(playing: str = "") -> List[disnake.ui.Button]:
-    return [disnake.ui.Button(label="Стоп", emoji="⏹️", custom_id=STOP_ID,
-                              style=disnake.ButtonStyle.danger),
-            disnake.ui.Button(emoji="🔄", custom_id=SYNC_ID, style=disnake.ButtonStyle.primary)]
+    stop = disnake.ButtonStyle.danger if playing else disnake.ButtonStyle.secondary
+    return [disnake.ui.Button(label="⏹ Стоп", custom_id=STOP_ID, style=stop),
+            disnake.ui.Button(label="🔄 Обновить", custom_id=SYNC_ID, style=disnake.ButtonStyle.secondary)]
 
 
 def components(items: List[dict], playing: str = "") -> List[disnake.ui.ActionRow]:
-    """Звуки рядами по пять, «Стоп» и «Обновить» отдельным последним рядом.
+    """Кнопки рядами по пять — столбцами, а не кашей.
 
     Лишние звуки отрезаются, а не уходят шестым рядом: Discord отвечает 400 на
     сообщение больше чем с 25 кнопками, и тогда панель не выкладывается вовсе.
     """
-    snd = buttons(items, playing)[:TOTAL - PER_ROW]
-    rows = [snd[i:i + PER_ROW] for i in range(0, len(snd), PER_ROW)]
-    rows.append(controls(playing))
+    bl = buttons(items, playing)[:TOTAL - 2] + controls(playing)
+    rows = [bl[i:i + PER_ROW] for i in range(0, len(bl), PER_ROW)]
     return [disnake.ui.ActionRow(*r) for r in rows[:ROWS] if r]
+
+
+def size_of(item: dict) -> str:
+    kb = item.get("bytes") or 0
+    return f"{max(1, round(kb / 1024))} КБ"
 
 
 def panel_embed_of(items: List[dict], now: str = "",
                    guild: Optional[disnake.Guild] = None) -> disnake.Embed:
-    """Компактная карточка: список звуков уже на кнопках, второй раз его не пишем."""
-    if not items:
-        body = "Пока пусто. Добавь звук через `/sounds add` или на сайте."
-    elif now:
-        body = f"▶️  {now}"
-    else:
-        body = "Тишина. Зайди в голосовой канал и нажми кнопку."
-    emb = disnake.Embed(title="🔊  Саундборд", description=body, color=get_color(ACCENT))
-    emb.set_footer(text=f"Звуков: {len(items)} из {MAX_SOUNDS}  ·  Стоп глушит только звуки, музыку не трогает")
-    return emb
+    """Карточка панели: что звучит сейчас, и чем жать."""
+    lines = []
+    for it in items[:MAX_SOUNDS]:
+        mark = " ◂" if now and it["title"] in now else ""
+        lines.append(f"{it['emoji']}  **{clip(it['title'], 24)}**  `.{it['ext']}` · {size_of(it)}{mark}")
+    free = max(0, MAX_SOUNDS - len(items))
+    sounds = "\n".join(lines) if lines else "пока пусто — добавь через `/sound_add` или на сайте"
+    sounds += f"\n`{len(items)} из {MAX_SOUNDS}, свободно {free}`"
+    return panel_embed(
+        "🔊  САУНДБОРД",
+        [("ИГРАЕТ", now or "тишина — зайди в голосовой канал и нажми кнопку"),
+         ("ЗВУКИ", sounds)],
+        color_key=ACCENT, guild=guild,
+        intro="Кнопка играет звук в том канале, где сидишь ты. «Стоп» глушит только мои звуки, "
+              "музыку не трогает. Подписи и порядок правятся на сайте в разделе «Саундборд».")
 
 
 def audio_source(path: Path) -> disnake.FFmpegPCMAudio:
@@ -161,7 +163,7 @@ class Soundboard(commands.Cog):
 
         Вызывается после любой правки — из команд бота и из веб-панели. Иначе
         человек добавит звук на сайте, а кнопка в Discord появится только после
-        /sounds panel, и это выглядит как «сайт ничего не сохранил».
+        /sounds_panel, и это выглядит как «сайт ничего не сохранил».
         """
         keys = [str(guild)] if guild else list(self.panels)
         done = 0
@@ -257,6 +259,21 @@ class Soundboard(commands.Cog):
         if path is None:
             return "Файл звука пропал с диска. Добавь его заново.", "warning"
 
+        text, style = await self._launch(guild, channel, card, path, user.display_name)
+        if style == "error":
+            return text, style
+        self.schedule_repaint(guild.id)
+        return text, style
+
+    async def _launch(self, guild: disnake.Guild, channel, card: dict, path: Path,
+                      who: str) -> Tuple[str, Optional[str]]:
+        """Зайти в канал (или перевести туда же соединение) и начать звук.
+
+        Одна и та же дорога и для кнопки в Discord, и для заказа с сайта: по-разному
+        заполняется только подпись «по заказу кого», остальное — замок, переезд, токен
+        и выход по тишине — обязано совпадать, иначе панель в Discord начнёт врать
+        о том, что играет сайт.
+        """
         async with self._lock(guild.id):
             vc = guild.voice_client
             ours = self.now_playing.get(guild.id) is not None
@@ -284,8 +301,8 @@ class Soundboard(commands.Cog):
             self.now_playing[guild.id] = token
             loop = asyncio.get_running_loop()
             title, emoji = clip(card["title"], 24), card["emoji"]
-            self.now[guild.id] = f"{emoji}  **{title}**  ·  по заказу {user.display_name}"
-            self.now_name[guild.id] = name
+            self.now[guild.id] = f"{emoji}  **{title}**  ·  по заказу {who}"
+            self.now_name[guild.id] = card["name"]
 
             def _after(_err):
                 def _done():
@@ -304,8 +321,47 @@ class Soundboard(commands.Cog):
                 self.now.pop(guild.id, None)
                 self.now_name.pop(guild.id, None)
                 return f"Не получилось играть: {str(e)[:120]}", "error"
+        return f"{emoji}  **{title}**  ·  сыграл {who}", "success"
+
+    async def web_play(self, guild: disnake.Guild, name: str, channel) -> Dict[str, Any]:
+        """Запуск звука с сайта: канал уже выбран, остаётся сыграть.
+
+        Возвращает словарь для панели, а не строчку в Discord: экран показывает и куда
+        бот зашёл, и что заиграло — голый «ок» тут не ответит на «почему тихо».
+        """
+        card = next((i for i in store.items() if i["name"] == store.norm(name)), None)
+        if card is None:
+            return {"error": "Такого звука уже нет — руководство могло его убрать."}
+        path = store.path_of(card["name"])
+        if path is None:
+            return {"error": "Файл звука пропал с диска. Добавь его заново."}
+        if not ffmpeg_exe():
+            return {"error": "На хостинге нет ffmpeg, поэтому звук воспроизвести нельзя."}
+        if channel is None:
+            return {"error": "Не выбран голосовый канал."}
+        text, style = await self._launch(guild, channel, card, path, "веб-панель")
+        if style == "error":
+            return {"error": text}
+        if style == "warning":
+            return {"error": text}
+        return {"where": channel.name, "title": card["title"], "emoji": card["emoji"],
+                "note": text}
+
+    async def web_stop(self, guild: disnake.Guild) -> Dict[str, Any]:
+        """Остановить свой звук, музыку не трогая — та же договорённость, что у кнопки «Стоп»."""
+        vc = guild.voice_client
+        if vc is None:
+            return {"error": "Бот сейчас ни в одном голосовом канале"}
+        if not vc.is_playing():
+            return {"error": "Сейчас мой звук не играет — музыку я не глушу."}
+        if self.now_playing.get(guild.id) is None:
+            return {"error": "В канале играет музыка, а не саундборд — останавливай её на сайте музыки."}
+        vc.stop()
+        self.now_playing.pop(guild.id, None)
+        self.now.pop(guild.id, None)
+        self.now_name.pop(guild.id, None)
         self.schedule_repaint(guild.id)
-        return f"{emoji}  **{title}**  ·  сыграл {user.display_name}", "success"
+        return {"stopped": True, "note": "Остановил."}
 
     # ---- управление звуками ----
     async def _deny(self, inter) -> bool:
@@ -315,18 +371,15 @@ class Soundboard(commands.Cog):
             return True
         return False
 
-    @commands.slash_command(name="sounds", description="Саундборд: панель и звуки (для руководства)")
-    async def sounds(self, inter: disnake.ApplicationCommandInteraction):
-        pass
-
-    @sounds.sub_command(name="panel", description="Выложить в канал панель со звуками")
+    @commands.slash_command(name="sounds_panel",
+                            description="Выложить в канал панель со звуками (для руководства)")
     async def sounds_panel(self, inter: disnake.ApplicationCommandInteraction):
         if await self._deny(inter):
             return
         items = store.items()
         if not items:
             await inter.response.send_message(
-                embed=note_embed("Звуков пока нет. Добавь через /sounds add или на сайте, "
+                embed=note_embed("Звуков пока нет. Добавь через /sound_add или на сайте, "
                                  "а потом выложи панель.", "warning"), ephemeral=True)
             return
         old = self.forget(inter.guild.id)
@@ -344,7 +397,7 @@ class Soundboard(commands.Cog):
             embed=note_embed(f"Панель выложена: {len(items)} звуков. Она обновляется сама, "
                              "когда звуки правят на сайте.", "success"), ephemeral=True)
 
-    @sounds.sub_command(name="add", description="Добавить звук в саундборд")
+    @commands.slash_command(name="sound_add", description="Добавить звук в саундборд (для руководства)")
     async def sound_add(self, inter: disnake.ApplicationCommandInteraction,
                         name: str = commands.Param(description="Имя звука: буквы, цифры, - и _ (до 20)"),
                         file: disnake.Attachment = commands.Param(description="mp3, wav, ogg или m4a"),
@@ -364,7 +417,7 @@ class Soundboard(commands.Cog):
             f"Звук **{card.get('title') or name}** добавлен. Кнопка появилась на панели." if ok
             else err, "success" if ok else "warning"))
 
-    @sounds.sub_command(name="url", description="Добавить звук по ссылке")
+    @commands.slash_command(name="sound_url", description="Добавить звук по ссылке (для руководства)")
     async def sound_url(self, inter: disnake.ApplicationCommandInteraction,
                         name: str = commands.Param(description="Имя звука: буквы, цифры, - и _ (до 20)"),
                         url: str = commands.Param(description="Ссылка на mp3 или на страницу звука"),
@@ -381,7 +434,8 @@ class Soundboard(commands.Cog):
             f"Звук **{card.get('title') or name}** скачан и добавлен." if ok else err,
             "success" if ok else "warning"))
 
-    @sounds.sub_command(name="edit", description="Поменять подпись, знак или цвет звука")
+    @commands.slash_command(name="sound_edit",
+                            description="Поменять подпись, знак или цвет звука (для руководства)")
     async def sound_edit(self, inter: disnake.ApplicationCommandInteraction,
                          name: str = commands.Param(description="Какой звук поменять"),
                          title: Optional[str] = commands.Param(default=None, max_length=24,
@@ -404,7 +458,7 @@ class Soundboard(commands.Cog):
         await inter.response.send_message(embed=note_embed("Готово: панель перерисовалась.",
                                                            "success"), ephemeral=True)
 
-    @sounds.sub_command(name="remove", description="Убрать звук из саундборда")
+    @commands.slash_command(name="sound_remove", description="Убрать звук из саундборда (для руководства)")
     async def sound_remove(self, inter: disnake.ApplicationCommandInteraction,
                            name: str = commands.Param(description="Какой звук убрать")):
         if await self._deny(inter):

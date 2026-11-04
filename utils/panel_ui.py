@@ -1374,6 +1374,11 @@ html[data-style=stark] .dot{box-shadow:none}
   background:transparent;color:var(--muted);font-size:.95rem;padding:0}
 .sndacts .ib:hover{background:var(--panel3);color:var(--text)}
 .sndacts .ib.danger:hover{color:#ff6b6b}
+/* звук в голос: кнопка активнее «правь» и «убери», потому что это главное действие карточки */
+.sndacts .ib.voice{font-size:.85rem}
+.sndacts .ib.voice:hover{background:var(--accent);color:var(--bg)}
+.sndvoice{display:flex;flex-direction:column;gap:.5rem;margin-bottom:.85rem;padding:.8rem .9rem}
+.sndvoice select{flex:1;min-width:0;max-width:560px}
 .sned{display:none;flex-direction:column;gap:.6rem;padding-top:.75rem;border-top:1px dashed var(--line)}
 .snd.edit .sned{display:flex}
 .markpick{display:flex;gap:.3rem;flex-wrap:wrap;max-width:100%}
@@ -3145,6 +3150,8 @@ async function pageSounds() {
         h('div', { class: 'grow' }, h('b', { title: r.name }, (r.emoji && r.emoji !== '🔊' ? r.emoji + ' ' : '') + r.title),
           h('small', null, '~' + Math.max(1, Math.round(r.seconds || 0)) + ' с' + (r.local ? ' · мой файл' : ''))),
         h('div', { class: 'sndacts' },
+          h('button', { class: 'ib voice', type: 'button', title: 'Сыграть в голосовом канале',
+            'aria-label': 'Сыграть в голосовом: ' + r.title, onclick: (e) => playVoice(r, e.currentTarget) }, '🔊'),
           h('button', { class: 'ib', type: 'button', title: 'Править', 'aria-label': 'Править', onclick: open }, '✎'),
           h('button', {
             class: 'ib danger', type: 'button', title: 'Убрать', 'aria-label': 'Убрать', onclick: async () => {
@@ -3256,13 +3263,89 @@ async function pageSounds() {
     await reload();
   } }, 'Скачать и добавить');
 
+  /* ---- куда играть звук ----
+     На сайте нет человека, чей голосовой канал можно взять, поэтому адресат
+     выбирается здесь: канал из списка или «там, где я» — канал владельца сервера.
+     Выбор запоминается: тыкать одно и то же при каждом заходе никто не будет. */
+  let V = null;
+  const vSel = h('select', { 'aria-label': 'Куда играть звук', onchange: () => {
+    try { localStorage.setItem('hz_sndch', vSel.value); } catch (e) { /* приватный режим */ }
+  } });
+  const vNow = h('div', { class: 'row small' });
+  const vStop = h('button', { class: 'btn tiny', onclick: async () => {
+    vStop.disabled = true;
+    let r;
+    try { r = await api('/api/sounds/stop', { method: 'POST', body: {} }); }
+    catch (e) { r = { error: e.message }; }
+    vStop.disabled = false;
+    if (r.voice) { V = r.voice; fillVoice(); }
+    toast(r.error || 'Остановил.', r.error ? 'err' : 'ok');
+  } }, 'Стоп');
+  const voiceBar = h('div', { class: 'card sndvoice' },
+    h('div', { class: 'row' }, h('b', null, 'Играть в голос'), vSel, vStop),
+    vNow,
+    h('small', { class: 'muted' }, 'Звук пойдёт в выбранный канал: бот зайдёт туда сам или перейдёт из другого. '
+      + '«там, где я» — канал владельца сервера, чтобы не выбирать каждый раз. Музыка и звук не смешиваются: '
+      + 'пока играет трек, сначала сбрось его на сайте музыки.'));
+
+  function fillVoice() {
+    if (!V) return;
+    let keep = '';
+    try { keep = localStorage.getItem('hz_sndch') || ''; } catch (e) { keep = ''; }
+    if (!keep) keep = vSel.value;
+    const opts = [];
+    if (V.follow && V.follow.name) {
+      opts.push(h('option', { value: 'auto' }, 'там, где я · ' + V.follow.name
+        + (V.follow.channel ? ' (в «' + V.follow.channel + '»)' : ' (не в голосовом)')));
+    }
+    (V.channels || []).forEach((c) => {
+      const who = c.count ? c.people.join(', ') + (c.count > c.people.length ? ' +' + (c.count - c.people.length) : '') : 'пусто';
+      opts.push(h('option', { value: c.id }, c.name + ' · ' + who + (c.here ? ' · бот тут' : '')));
+    });
+    vSel.replaceChildren(...opts);
+    vSel.value = opts.some((o) => o.value === keep) ? keep : String(V.bot_id || (V.follow && V.follow.id ? 'auto' : ''));
+    const bits = [V.bot ? chip('бот: ' + V.bot, 'ok') : chip('бот не в голосовом', 'off')];
+    if (V.now) bits.push(chip('звучит мой звук', 'ok'));
+    if (V.music) bits.push(chip('в канале играет музыка', 'warn'));
+    if (!V.ffmpeg) bits.push(chip('на хостинге нет ffmpeg', 'err'));
+    if (!(V.channels || []).length) bits.push(chip('нет ни одного голосового канала', 'err'));
+    vNow.replaceChildren(...bits);
+  }
+
+  async function loadVoice() {
+    let r;
+    try { r = await api('/api/sounds/voice'); } catch (e) { r = { error: e.message }; }
+    if (r.error) { vNow.replaceChildren(h('span', { class: 'muted small' }, r.error)); return; }
+    V = r;
+    fillVoice();
+  }
+
+  async function playVoice(r, btn) {
+    if (busy) { toast('Подожди, бот ещё делает прошлое действие.', 'err'); return; }
+    busy = true;
+    if (btn) btn.disabled = true;
+    stopCur();
+    let res;
+    try { res = await api('/api/sounds/play', { method: 'POST', body: { name: r.name, channel: vSel.value } }); }
+    catch (e) { res = { error: e.message }; }
+    if (res.voice) V = res.voice;
+    fillVoice();
+    if (btn) btn.disabled = false;
+    busy = false;
+    if (res.error) { toast(res.error, 'err'); return; }
+    toast((res.emoji || '🔊') + ' ' + res.title + ' → «' + res.where + '»', 'ok');
+  }
+
   draw();
+  loadVoice();
+  state.timer = setInterval(() => { if (!document.hidden) loadVoice(); }, 5000);
   return h('div', null,
     pageHead('Саундборд',
       'Кнопки со звуками в голосовом канале: человек заходит в войс и нажимает. Здесь правят подпись, '
       + 'знак и цвет, добавляют файл или ссылку и убирают лишнее — панель в Discord переклеивается сама, '
       + 'рестарт не нужен. Кнопки идут по алфавиту имён файлов.',
       h('button', { class: 'btn', onclick: () => go('sounds') }, 'Обновить')),
+    voiceBar,
     stats, grid,
     h('div', { class: 'section-title' }, 'Добавить звук'),
     h('div', { class: 'grid2' },

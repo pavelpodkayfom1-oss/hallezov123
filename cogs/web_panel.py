@@ -382,6 +382,9 @@ class WebPanel(commands.Cog):
             app.router.add_post("/api/sounds/url", self.h_sound_url)
             app.router.add_post("/api/sounds/remove", self.h_sound_remove)
             app.router.add_post("/api/sounds/restore", self.h_sound_restore)
+            app.router.add_get("/api/sounds/voice", self.h_sound_voice)
+            app.router.add_post("/api/sounds/play", self.h_sound_play)
+            app.router.add_post("/api/sounds/stop", self.h_sound_stop)
             app.router.add_get("/api/notes", self.h_notes)
             app.router.add_post("/api/notes/add", self.h_note_add)
             app.router.add_post("/api/notes/update", self.h_note_update)
@@ -1172,6 +1175,32 @@ class WebPanel(commands.Cog):
         res = await s.restore(self.bot, str(body.get("name") or ""))
         print(f"🔊 Панель: вернул звук «{body.get('name')}»: "
               f"{str(res.get('error') or res.get('panel'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_sound_voice(self, request: web.Request) -> web.Response:
+        """Голосовые каналы для саундборда: где сидит бот и кто где — чтобы «в канал»
+        не был слепым выстрелом в первый попавшийся войс."""
+        s, err = self._sounds()
+        if err:
+            return _json({"error": err}, 503)
+        return _json(s.voice_state(self.bot))
+
+    async def h_sound_play(self, request: web.Request) -> web.Response:
+        s, err = self._sounds()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        res = await s.play(self.bot, str(body.get("name") or ""), body.get("channel"))
+        print(f"🔊 Панель: звук «{body.get('name')}» → {body.get('channel') or 'текущий'}: "
+              f"{str(res.get('error') or res.get('where'))[:120]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_sound_stop(self, request: web.Request) -> web.Response:
+        s, err = self._sounds()
+        if err:
+            return _json({"error": err}, 503)
+        res = await s.stop(self.bot)
+        print(f"🔇 Панель: стоп саундборда: {str(res.get('error') or 'остановил')[:120]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
 
     async def h_sound_url(self, request: web.Request) -> web.Response:

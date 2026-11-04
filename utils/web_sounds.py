@@ -3,19 +3,25 @@
 Хранилище общее (utils/sound_store.py), поэтому сайт и Discord видят один и тот же
 набор и не могут разойтись. После любой правки просим ког «Soundboard» перекрасить
 панель в канале: иначе звук появится на сайте, а кнопка в Discord — только после
-заново выложенного /sounds panel, и это выглядит как «сайт не сохранил».
+заново выложенного /sounds_panel, и это выглядит как «сайт не сохранил».
+
+Прослушать в браузере и сыграть в голосовой канал — разные вещи: на сайте нет
+человека, чей канал можно взять, поэтому адресат выбирается явно (канал из списка)
+или по «там, где я» — канал владельца сервера.
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote
 
 from utils import sound_store as store
 
 MIME = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".m4a": "audio/mp4"}
 RANGE_RE = re.compile(r"bytes=(\d*)-(\d*)", re.I)
+AUTO = "auto"              # играть туда, где сидит тот, за кем следим (владелец сервера)
+PEOPLE = 6                 # сколько имён показать у канала, чтобы список не распух
 
 
 def rows_of(sounds: List[dict]) -> List[dict]:
@@ -51,7 +57,7 @@ async def sync(bot) -> str:
     except Exception as e:
         return f"Панель в Discord не обновилась ({e.__class__.__name__})"
     if not done:
-        return "Панели в Discord нет — выложи её через /sounds panel"
+        return "Панели в Discord нет — выложи её через /sounds_panel"
     return f"Панель в Discord обновлена ({done})"
 
 
@@ -163,3 +169,143 @@ def audio(name: str, rng: str = "") -> Dict[str, Any]:
     if partial:
         headers["Content-Range"] = f"bytes {start}-{end}/{total}"
     return {"body": body, "mime": mime, "headers": headers, "status": 206 if partial else 200}
+
+
+# ---------- голосовой канал: куда играть ----------
+
+
+def _guild(bot):
+    from utils import web_tools
+
+    return web_tools._voice_guild(bot)
+
+
+def follow_of(guild):
+    """За кем следим: владелец сервера, а если его в голосе нет — первый админ из config.json.
+
+    У панели один пароль, поэтому «кто нажал» определить нечем. Молча взять первый
+    попавшийся канал хуже: звук уйдёт туда, где человека нет, и это будет выглядеть
+    как сломанная кнопка.
+    """
+    ids: List[int] = []
+    owner = int(getattr(guild, "owner_id", 0) or 0)
+    if owner:
+        ids.append(owner)
+    try:
+        from utils.checks import load_config
+
+        ids += [int(x) for x in (load_config().get("admin_user_ids") or [])]
+    except Exception:
+        pass
+    first = None
+    for uid in ids:
+        member = guild.get_member(uid)
+        if member is None:
+            continue
+        if first is None:
+            first = member
+        ch = getattr(getattr(member, "voice", None), "channel", None)
+        if ch is not None:
+            return member, ch
+    return first, None
+
+
+def _channel_of(vc):
+    try:
+        return vc.channel if vc is not None else None
+    except Exception:
+        return None
+
+
+def voice_state(bot) -> Dict[str, Any]:
+    """Всё, что нужно полосе над звуками: где бот, кто в каналах, можно ли играть."""
+    guild = _guild(bot)
+    if guild is None:
+        return {"error": "Бот ни на одном сервере"}
+    cog = bot.get_cog("Soundboard")
+    if cog is None:
+        return {"error": "Ког «Soundboard» выключен — играть звуки нечем"}
+    from utils.ffmpeg_path import ffmpeg_exe
+
+    try:
+        vc = guild.voice_client
+    except Exception:
+        vc = None
+    here = _channel_of(vc)
+    rows = []
+    for ch in sorted(getattr(guild, "voice_channels", None) or [],
+                     key=lambda c: (int(getattr(c, "position", 0) or 0), str(c.name))):
+        try:
+            people = [m.display_name for m in list(ch.members)[:PEOPLE]]
+            count = len(list(ch.members))
+        except Exception:
+            people, count = [], 0
+        rows.append({"id": str(ch.id), "name": ch.name, "people": people, "count": count,
+                     "limit": int(getattr(ch, "user_limit", 0) or 0),
+                     "here": here is not None and here.id == ch.id})
+    who, mine = follow_of(guild)
+    try:
+        music = bool(vc is not None and vc.is_playing() and cog.now_playing.get(guild.id) is None)
+    except Exception:
+        music = False
+    return {"guild": guild.name, "channels": rows,
+            "bot": str(here.name) if here is not None else "",
+            "bot_id": str(here.id) if here is not None else "",
+            "follow": {"name": who.display_name if who is not None else "",
+                       "channel": mine.name if mine is not None else "",
+                       "id": str(mine.id) if mine is not None else ""},
+            "now": str(cog.now_name.get(guild.id) or ""), "music": music,
+            "ffmpeg": bool(ffmpeg_exe())}
+
+
+async def resolve_channel(guild, choice: Any) -> Tuple[Any, str]:
+    """Канал, куда играть: выбранный из списка, «там, где я» или где бот уже сидит."""
+    text = str(choice or "").strip()
+    if text == AUTO:
+        _who, ch = follow_of(guild)
+        if ch is None:
+            return None, "Тебя нет в голосовом канале — зайди в канал и нажми ещё раз."
+        return ch, ""
+    if text.isdigit():
+        ch = guild.get_channel(int(text))
+        if ch is None:
+            return None, f"Канала {text} бот не видит — обнови список"
+        if getattr(ch, "connect", None) is None:
+            return None, "Это не голосовой канал"
+        return ch, ""
+    try:
+        vc = guild.voice_client
+    except Exception:
+        vc = None
+    ch = _channel_of(vc)
+    if ch is None:
+        return None, "Бот ни в каком канале не сидит — выбери канал из списка."
+    return ch, ""
+
+
+async def play(bot, name: str, choice: Any = "") -> Dict[str, Any]:
+    """Сыграть звук в голосовом канале по заказу с сайта."""
+    cog = bot.get_cog("Soundboard")
+    if cog is None:
+        return {"error": "Ког «Soundboard» выключен — играть звуки нечем"}
+    guild = _guild(bot)
+    if guild is None:
+        return {"error": "Бот ни на одном сервере"}
+    ch, err = await resolve_channel(guild, choice)
+    if err:
+        return {"error": err}
+    res = await cog.web_play(guild, name, ch)
+    res["voice"] = voice_state(bot)
+    return res
+
+
+async def stop(bot, choice: Any = "") -> Dict[str, Any]:
+    cog = bot.get_cog("Soundboard")
+    if cog is None:
+        return {"error": "Ког «Soundboard» выключен"}
+    guild = _guild(bot)
+    if guild is None:
+        return {"error": "Бот ни на одном сервере"}
+    res = await cog.web_stop(guild)
+    res["voice"] = voice_state(bot)
+    return res
