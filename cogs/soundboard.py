@@ -2,15 +2,20 @@
 
  • /sounds_panel — выложить в канал панель с кнопками (для руководства)
  • /sound_add <имя> <файл> — добавить звук (mp3, wav, ogg, до 2 МБ; для руководства)
+ • /sound_url <имя> <ссылка> — добавить звук по ссылке на файл или на страницу myinstants (для руководства)
  • /sound_remove <имя> — убрать звук (для руководства)
 Нажать кнопку может любой, кто сидит в голосовом канале. Звуки лежат в папке sounds/.
 """
 import asyncio
+import ipaddress
 import re
+import socket
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urljoin, urlparse
 
+import aiohttp
 import disnake
 from disnake.ext import commands
 
@@ -35,6 +40,45 @@ def list_sounds() -> Dict[str, Path]:
     except FileNotFoundError:
         return {}
     return {p.stem: p for p in sorted(files, key=lambda p: p.stem)}
+
+
+CTYPE_EXT = {"audio/mpeg": ".mp3", "audio/mp3": ".mp3", "audio/ogg": ".ogg", "application/ogg": ".ogg",
+             "audio/wav": ".wav", "audio/x-wav": ".wav", "audio/mp4": ".m4a", "audio/x-m4a": ".m4a"}
+AUDIO_LINK_RE = re.compile(r"""(?:https://[^"'\s<>]+?\.mp3|/media/[^"'\s<>]+?\.mp3)""")
+
+
+async def _public_host(host: str) -> bool:
+    """Только обычные сайты из интернета: свою сеть и localhost бот не открывает."""
+    try:
+        infos = await asyncio.get_running_loop().getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    except Exception:
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            return False
+    return bool(infos)
+
+
+async def _download(sess: aiohttp.ClientSession, url: str, limit: int) -> Tuple[bytes, str, str]:
+    """(данные, content-type, ошибка). Идёт по перенаправлениям вручную и проверяет каждый адрес."""
+    for _ in range(4):
+        u = urlparse(url)
+        if u.scheme != "https" or not u.hostname or not await _public_host(u.hostname):
+            return b"", "", "ссылка должна начинаться с https:// и вести на обычный сайт"
+        async with sess.get(url, allow_redirects=False, headers={"User-Agent": "Mozilla/5.0"}) as r:
+            if r.status in (301, 302, 303, 307, 308) and r.headers.get("Location"):
+                url = urljoin(url, r.headers["Location"])
+                continue
+            if r.status != 200:
+                return b"", "", f"сайт ответил кодом {r.status}"
+            data = bytearray()
+            async for chunk in r.content.iter_chunked(65536):
+                data += chunk
+                if len(data) > limit:
+                    return b"", "", "файл слишком большой"
+            return bytes(data), r.headers.get("Content-Type", "").split(";")[0].strip().lower(), ""
+    return b"", "", "слишком много перенаправлений"
 
 
 def panel_components(names: List[str]) -> List[disnake.ui.ActionRow]:
@@ -195,6 +239,57 @@ class Soundboard(commands.Cog):
         if old:
             old.unlink(missing_ok=True)
         await file.save(SOUND_DIR / f"{name}{ext}")
+        await inter.edit_original_response(embed=note_embed(
+            f"✅ Звук **{name}** добавлен. Выложи панель заново через /sounds_panel, чтобы кнопка появилась.",
+            "success"))
+
+    @commands.slash_command(name="sound_url", description="Добавить звук по ссылке (для руководства)")
+    async def sound_url(self, inter: disnake.ApplicationCommandInteraction,
+                        name: str = commands.Param(description="Название кнопки: буквы, цифры, - и _ (до 20)"),
+                        url: str = commands.Param(description="Ссылка на mp3 или на страницу звука на myinstants.com")):
+        if await self._deny(inter):
+            return
+        name, url = name.strip().lower(), url.strip()
+        if not NAME_RE.match(name):
+            err = "Название: только буквы, цифры, - и _, до 20 знаков."
+        elif name not in list_sounds() and len(list_sounds()) >= MAX_SOUNDS:
+            err = f"Уже {MAX_SOUNDS} звуков — убери лишние через /sound_remove."
+        else:
+            err = ""
+        if err:
+            await inter.response.send_message(embed=note_embed("⚠️ " + err, "warning"), ephemeral=True)
+            return
+        await inter.response.defer(ephemeral=True)
+        ext = ""
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=25)) as sess:
+                data, ctype, err = await _download(sess, url, 3 * 1024 * 1024)
+                if not err and ctype.startswith("text/html"):
+                    # ссылка на страницу: ищем в ней файл mp3
+                    m = AUDIO_LINK_RE.search(data.decode("utf-8", "ignore"))
+                    if not m:
+                        err = "на странице не нашёл mp3 — дай прямую ссылку на файл"
+                    else:
+                        url = urljoin(url, m.group(0))
+                        data, ctype, err = await _download(sess, url, MAX_BYTES + 1)
+        except Exception as e:
+            data, ctype, err = b"", "", f"не получилось скачать ({e.__class__.__name__})"
+        if not err:
+            ext = CTYPE_EXT.get(ctype) or Path(urlparse(url).path).suffix.lower()
+            if ext not in EXTS:
+                err = "это не звуковой файл (нужен mp3, wav, ogg)"
+            elif len(data) > MAX_BYTES:
+                err = "файл больше 2 МБ"
+            elif not data:
+                err = "файл пустой"
+        if err:
+            await inter.edit_original_response(embed=note_embed("⚠️ " + err, "warning"))
+            return
+        SOUND_DIR.mkdir(exist_ok=True)
+        old = list_sounds().get(name)
+        if old:
+            old.unlink(missing_ok=True)
+        (SOUND_DIR / f"{name}{ext}").write_bytes(data)
         await inter.edit_original_response(embed=note_embed(
             f"✅ Звук **{name}** добавлен. Выложи панель заново через /sounds_panel, чтобы кнопка появилась.",
             "success"))
