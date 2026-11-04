@@ -4203,10 +4203,40 @@ async function pageServers() {
     catch (e) { urlBox.select(); toast('Скопируй вручную: Ctrl+C', 'err'); }
   } }, 'Копировать');
   await load();
-  const rows = (ov.guilds || []).map((g) => h('div', { class: 'row' },
-    imgOk(g.icon) ? h('img', { src: g.icon, alt: '', width: '36', height: '36', style: 'border-radius:50%', referrerpolicy: 'no-referrer' })
-      : h('b', null, (g.name || '?').slice(0, 1).toUpperCase()),
-    h('b', null, g.name), h('small', { class: 'muted' }, (g.members || '?') + ' участников · ID ' + g.id)));
+  const note = h('p', { class: 'muted small' },
+    'Ручка «сайт музыки» решает, может ли этот сервер заказывать треки со страницы и слушать то, что играет в канале. Без неё сайт открыт только своим.');
+  const rows = (ov.guilds || []).map((g) => {
+    // Когда модуля музыки нет, флаг приходит null: рисовать выключенную ручку, которую
+    // всё равно нечем включить, честнее заменить словами «музыка выключена».
+    let tail;
+    if (g.music === null || g.music === undefined) {
+      tail = h('span', { class: 'chip off' }, 'музыка выключена');
+    } else {
+      const sw = h('button', { type: 'button', role: 'switch', class: 'switch' + (g.music ? ' on' : ''),
+        'aria-checked': String(!!g.music), 'aria-label': 'Сайт музыки для ' + g.name,
+        onclick: async () => {
+          sw.disabled = true;
+          try {
+            const r = await api('/api/guilds/music', { method: 'POST', body: { g: g.id, on: !g.music } });
+            g.music = !!r.on;
+            sw.classList.toggle('on', g.music);
+            sw.setAttribute('aria-checked', String(g.music));
+            note.textContent = r.message;
+            toast(r.message, 'ok');
+          } catch (e) { toast(e.message, 'err'); }
+          sw.disabled = false;
+        } });
+      tail = h('span', { class: 'row' }, h('small', { class: 'muted' }, 'сайт музыки'), sw);
+    }
+    return h('div', { class: 'card item' },
+      imgOk(g.icon) ? h('img', { src: g.icon, alt: '', width: '36', height: '36', style: 'border-radius:50%', referrerpolicy: 'no-referrer' })
+        : h('b', null, (g.name || '?').slice(0, 1).toUpperCase()),
+      h('div', { class: 'grow' },
+        h('b', null, g.name, g.home ? h('span', { class: 'chip ok' }, 'свой') : null,
+          g.in_voice ? h('span', { class: 'chip' }, 'в голосовом') : null),
+        h('span', { class: 'muted small' }, (g.members || '?') + ' участников · ID ' + g.id)),
+      tail);
+  });
   return h('div', null,
     pageHead('Серверы', 'Добавь бота на другой сервер по ссылке-приглашению. Добавлять может тот, у кого там есть право «Управлять сервером».'),
     h('div', { class: 'card form' },
@@ -4215,9 +4245,10 @@ async function pageServers() {
       h('label', null, 'Ссылка', urlBox),
       h('div', { class: 'row' }, openBtn, copy),
       h('p', { class: 'muted small' }, 'Если Discord пишет «Бот закрытый» или «Требуется авторизация кода» — в Developer Portal → Bot включи Public Bot и выключи Requires OAuth2 Code Grant.'),
-      h('p', { class: 'warnline small' }, 'Панель и часть модулей работают с одним главным сервером (guild_id в config.json). На новом сервере бот будет отвечать на slash-команды, но разделы панели по-прежнему смотрят на главный.')),
+      h('p', { class: 'warnline small' }, 'Панель работает с тем сервером, который выбран в шапке: каналы, люди и команды — на любом сервере. Музыка на сайте по умолчанию открыта только своему; чужому доступ выдаёт переключатель ниже. Казна, выплаты и набор устроены семейными: на чужом сервере они просто не найдут свои каналы и честно об этом скажут.')),
     h('div', { class: 'card' }, h('h2', null, 'Где бот сейчас (' + rows.length + ')'),
-      rows.length ? h('div', { class: 'form' }, rows) : h('p', { class: 'muted' }, 'Ни одного сервера.')));
+      rows.length ? h('div', { class: 'list' }, rows) : h('p', { class: 'muted' }, 'Ни одного сервера.'),
+      note));
 }
 
 

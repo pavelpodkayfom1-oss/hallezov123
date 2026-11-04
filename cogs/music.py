@@ -498,6 +498,8 @@ COOLDOWNS = (0, 5, 10, 20, 40, 60)
 QUEUES = (10, 25, 40, 60)
 # 🔔 заход толпой не должен превратиться в трезвон: не чаще одного знака в 7 секунд
 JINGLE_GAP = 7.0
+# как давно в зеркало должны были лечь байты, чтобы слушатель ждал их дальше
+MIRROR_FRESH_S = 1.5
 
 
 def _cfg_raw() -> dict:
@@ -524,6 +526,40 @@ def _cfg(guild_id) -> dict:
     out["panel"] = _int(out["panel"], 0)
     out["panel_msg"] = _int(out["panel_msg"], 0)
     return out
+
+
+def site_allowed(bot, guild) -> bool:
+    """Открыт ли этому серверу сайт музыки.
+
+    Бота могут добавить куда угодно, а заказы и ручки в канале — не безобидная
+    игрушка: чужой сервер не должен уметь крутить звук в чужом же голосовом канале.
+    Поэтому явный переключатель решает всегда, а без него доступ есть только у
+    домашнего сервера семьи — ровно там музыка работала и раньше.
+
+    Ключ «site» держится вне DEFAULT_SETTINGS: _cfg_save дописывает дефолты целиком,
+    и одна смена громкости на домашнем сервере молча записала бы site=false — музыка
+    на сайте для своих отвалилась бы без всякого переключателя.
+    """
+    saved = _cfg_raw().get(str(guild.id)) if guild is not None else None
+    saved = saved if isinstance(saved, dict) else {}
+    if "site" in saved:
+        return bool(saved["site"])
+    if guild is None:
+        return False
+    try:
+        from utils import web_tools
+
+        home = web_tools.home_guild(bot)
+    except Exception:
+        home = None
+    if home is not None:
+        return home.id == guild.id
+    return len(getattr(bot, "guilds", []) or []) == 1
+
+
+def set_site(guild_id, on: bool) -> str:
+    """Включает или выключает сайт музыки для сервера; пустая строка — всё хорошо."""
+    return _cfg_save(guild_id, {"site": bool(on)})
 
 
 def _int(value, default: int) -> int:
@@ -929,20 +965,32 @@ class Mirror:
     мог бы увидеть обновлённый счётчик и ещё не обрезанное кольцо.
     """
 
-    __slots__ = ("buf", "total", "lock")
+    __slots__ = ("buf", "total", "lock", "last_push")
 
     def __init__(self):
         self.buf = bytearray()
         self.total = 0
         self.lock = threading.Lock()
+        # 0, а не «сейчас»: кольцо считается живым только пока в него реально льют байты
+        self.last_push = 0.0
 
     def push(self, pcm: bytes) -> None:
         with self.lock:
             self.buf += pcm
             self.total += len(pcm)
+            self.last_push = time.monotonic()
             over = len(self.buf) - SOUND_CAP
             if over > 0:
                 del self.buf[:over]
+
+    def fresh(self, seconds: float) -> bool:
+        """Иду ли в кольцо прямо сейчас.
+
+        Нужно потому, что «бот что-то играет в канале» — не то же самое, что «зеркало
+        живо»: саундборд льёт PCM мимо плеера, и слушатель мог бы висеть в тишине.
+        """
+        with self.lock:
+            return self.last_push > 0 and time.monotonic() - self.last_push <= seconds
 
     def take(self, since):
         """(счётчик, байты после него). None — начать со самого свежего края.
@@ -2043,6 +2091,10 @@ class Music(commands.Cog):
     # Со страницы заказ приходит без Discord-взаимодействия: автора знает только
     # словами, поэтому эти методы принимают сервер и ник, а не `inter`.
 
+    def web_site_allowed(self, guild: disnake.Guild) -> bool:
+        """Открыт ли этому серверу сайт музыки (см. site_allowed)."""
+        return site_allowed(self.bot, guild)
+
     def web_state(self, guild: disnake.Guild) -> dict:
         vc = guild.voice_client
         p = self.players.get(guild.id)
@@ -2160,10 +2212,19 @@ class Music(commands.Cog):
 
         Пауза считается живым состоянием: на ней байты не идут, но слушатель ждёт
         продолжения, и рвать его из-за кратковременной тишины нельзя.
+
+        Раньше хватало `vc.is_playing()`, и это ломалось на чужом звуке в том же
+        канале: саундборд, знак при входе и любая сторонняя запись играют мимо
+        плеера, в кольцо байты не попадают, а слушатель висел в тишине до десяти
+        минут и держал свободное место. Теперь смотрим, растёт ли кольцо.
         """
         p = self.players.get(guild.id)
+        if p is None or p.mirror is None:
+            return False
         vc = guild.voice_client
-        return bool(p and p.mirror and vc and (vc.is_playing() or vc.is_paused()))
+        if vc is None or not vc.is_connected():
+            return False
+        return vc.is_paused() or p.mirror.fresh(MIRROR_FRESH_S)
 
     def web_sound_take(self, guild: disnake.Guild, since):
         """Следующий кусок PCM, который плеер отдал в канал: (счётчик, байты).

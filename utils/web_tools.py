@@ -156,6 +156,22 @@ def guild_of(bot) -> Optional[disnake.Guild]:
     return home_guild(bot)
 
 
+def music_site_state(bot, guild) -> Optional[bool]:
+    """Открыт ли серверу сайт музыки; None — модуль музыки выключен и судить некому.
+
+    Экран «Серверы» по этому значит рисует переключатель, поэтому честный None важнее
+    False: выдуманный «выключено» выглядело бы как будто владелец сам его закрыл.
+    """
+    mod = sys.modules.get("cogs.music")
+    fn = getattr(mod, "site_allowed", None) if mod is not None else None
+    if fn is None:
+        return None
+    try:
+        return bool(fn(bot, guild))
+    except Exception:
+        return None
+
+
 def guild_rows(bot) -> List[dict]:
     """Список серверов для переключателя в шапке: тот, где бот реально состоит."""
     home = home_guild(bot)
@@ -165,7 +181,8 @@ def guild_rows(bot) -> List[dict]:
         out.append({"id": str(g.id), "name": g.name, "icon": icon,
                     "members": int(getattr(g, "member_count", 0) or 0),
                     "home": home is not None and g.id == home.id,
-                    "in_voice": g.voice_client is not None})
+                    "in_voice": g.voice_client is not None,
+                    "music": music_site_state(bot, g)})
     return out
 
 

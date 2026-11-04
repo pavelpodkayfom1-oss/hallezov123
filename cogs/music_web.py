@@ -44,8 +44,31 @@ WRITE_PATHS = frozenset(f"{pre}/api/{name}"
 # хостинг с 256 МБ и одним каналом наружу тянет двоих, третьего — нет.
 SOUND_POLL = 0.02            # как часто заглядываем в кольцо плеера
 SOUND_STREAM_S = 600         # дольше одного соединения не держим: страница сама переподключится
-SOUND_LISTENERS = 2
-_SOUND_ON = [0]              # сколько зеркал открыто прямо сейчас
+SOUND_LISTENERS = 2          # на один сервер
+SOUND_LISTENERS_ALL = 3      # и всего на сайте: хостинг больше не потянет
+_SOUND_ON: Dict[int, int] = {}    # сколько зеркалов открыто на каждом сервере
+
+
+def _sound_open(gid: int) -> int:
+    return _SOUND_ON.get(gid, 0)
+
+
+def _sound_take(gid: int) -> str:
+    """Занимает место слушателя; пустая строка — место есть, дальше — почему отказали."""
+    if sum(_SOUND_ON.values()) >= SOUND_LISTENERS_ALL:
+        return "На сайте уже слушает максимум людей — закрой другую вкладку"
+    if _sound_open(gid) >= SOUND_LISTENERS:
+        return "На этом сервере слушает уже максимум людей — закрой другую вкладку"
+    _SOUND_ON[gid] = _sound_open(gid) + 1
+    return ""
+
+
+def _sound_free(gid: int) -> None:
+    left = _sound_open(gid) - 1
+    if left > 0:
+        _SOUND_ON[gid] = left
+    else:
+        _SOUND_ON.pop(gid, None)
 
 
 def _panel_port() -> int:
@@ -121,20 +144,38 @@ class _Hits:
 
 
 def _guild(bot):
-    """Сервер, где музыка звучит: сначала тот, где бот в голосовом, потом домашний."""
-    for g in bot.guilds:
-        vc = g.voice_client
-        if vc is not None and vc.is_connected():
-            return g
+    """Сервер, чью музыку показывает страница: выбранный слушателем, иначе домашний.
+
+    Здесь и была настоящая причина «сайт багается от музыки»: раньше перебирался
+    список серверов и брался первый, где бот сидит в голосовом. Бот заходит в войс
+    на втором сервере — и у всех слушателей на странице прыгают канал, очередь,
+    обложка и живые полосы, потому что следующий опрос плеера отвечает уже про другой
+    сервер. Выбор теперь явный (`?g=` ставит шапка страницы), а без него — домашний
+    сервер из config.json, то есть ровно то, что было до второго сервера.
+    """
+    try:
+        from utils import web_tools
+
+        got = web_tools.guild_of(bot)
+        if got is not None:
+            return got
+    except Exception:
+        pass
+    if not bot.guilds:
+        return None
     gid = int(_conf().get("guild_id") or 0)
-    if gid:
-        return bot.get_guild(gid)
-    return bot.guilds[0] if bot.guilds else None
+    return bot.get_guild(gid) if gid else (bot.guilds[0] if len(bot.guilds) == 1 else None)
 
 
 @web.middleware
 async def _guard(request: web.Request, handler):
     _note_front(request)
+    try:
+        from utils import web_tools
+
+        web_tools.pick(request.query.get("g"))
+    except Exception:
+        pass
     if request.path in WRITE_PATHS:
         if request.headers.get("X-Requested-With") != "hz-music":
             return web.json_response({"error": "Только со страницы сайта"}, status=403)
@@ -158,6 +199,7 @@ class MusicWeb(commands.Cog):
         self.share_front = bool(self.panel_port and self.panel_port != self.port)
         for pre in ((PREFIX,) if self.share_front else ("", PREFIX)):
             app.router.add_get(pre + "/api/state", self.h_state)
+            app.router.add_get(pre + "/api/guilds", self.h_guilds)
             app.router.add_get(pre + "/api/library", self.h_library)
             app.router.add_get(pre + "/api/playlists", self.h_playlists)
             app.router.add_get(pre + "/api/cover", self.h_cover)
@@ -205,7 +247,38 @@ class MusicWeb(commands.Cog):
         guild = _guild(self.bot)
         if guild is None:
             return None, {"error": "Бот ни на одном сервере — играть негде"}
+        if not cog.web_site_allowed(guild):
+            return None, {"error": "Сайт музыки для этого сервера не открыт",
+                          "hint": "Его включает владелец бота в панели семьи, на экране «Серверы»."}
         return cog, guild
+
+    def _guild_rows(self) -> list:
+        """Серверы, доступ которым открыт: чужих страниц на сайте не видно."""
+        cog = self.bot.get_cog("Music")
+        try:
+            from utils import web_tools
+
+            rows = web_tools.guild_rows(self.bot)
+        except Exception:
+            rows = [{"id": str(g.id), "name": g.name, "icon": None,
+                     "members": int(getattr(g, "member_count", 0) or 0),
+                     "home": False, "in_voice": g.voice_client is not None}
+                    for g in self.bot.guilds]
+        if cog is None:
+            return rows
+        return [r for r in rows if cog.web_site_allowed(self.bot.get_guild(int(r["id"])))]
+
+    async def h_guilds(self, request: web.Request) -> web.Response:
+        rows = self._guild_rows()
+        try:
+            from utils import web_tools
+
+            now = web_tools.picked()
+        except Exception:
+            now = ""
+        if now and not any(r["id"] == now for r in rows):
+            now = ""
+        return _json({"guilds": rows, "picked": now or (rows[0]["id"] if rows else "")})
 
     # ---- маршруты ----
     async def h_page(self, request: web.Request) -> web.Response:
@@ -397,16 +470,20 @@ class MusicWeb(commands.Cog):
         """
         cog, guild = self._player()
         if cog is None:
-            raise web.HTTPNotFound()
-        if _SOUND_ON[0] >= SOUND_LISTENERS:
-            return _json({"error": "Слушает уже максимум людей — закрой другую вкладку"}, 429)
+            # страница читает j.error и показывает словами, почему наушник молчит:
+            # голый 404 превращался бы в непонятное «звук не открылся (404)»
+            return _json(guild, 403)
+        # счётчик на сервер: иначе двое слушателей с одного канала вытеснили бы
+        # слушателя с другого, где музыка играет отдельно
+        why = _sound_take(guild.id)
+        if why:
+            return _json({"error": why}, 429)
         resp = web.StreamResponse(status=200, headers={
             "Content-Type": "application/octet-stream",
             "Cache-Control": "no-store",
             "X-Accel-Buffering": "no",
         })
         await resp.prepare(request)
-        _SOUND_ON[0] += 1
         since = None
         last = time.monotonic()
         end = last + SOUND_STREAM_S
@@ -432,7 +509,7 @@ class MusicWeb(commands.Cog):
         except (ConnectionResetError, asyncio.CancelledError):
             pass
         finally:
-            _SOUND_ON[0] -= 1
+            _sound_free(guild.id)
         try:
             await resp.write_eof()
         except Exception:
@@ -603,6 +680,14 @@ body.amb-on .pill.live i{animation:none;transform:scale(calc(1 + .6 * var(--hit)
   padding:7px 2px;font-size:.88rem}
 .text-input:focus-visible{outline:none}
 .text-input::placeholder{color:var(--text-3)}
+/* список серверов в шапке: та же плашка, что и «я», только choice вместо текста.
+   Появляется лишь когда бот играет больше чем на одном сервере. */
+.pick{background:transparent;border:0;outline:0;min-width:0;max-width:210px;padding:7px 2px;
+  font-size:.88rem;cursor:pointer}
+.pick option{background:#12141a;color:#e9edf5}
+/* .field задаёт display:flex, и он перебивает штатное [hidden]{display:none}:
+   без этой строки плашка «сервер» осталась бы в шапке пустой, когда сервер один */
+.field[hidden]{display:none}
 .icon-btn{width:40px;height:40px;border-radius:var(--r-sm);border:1px solid var(--line);
   background:var(--glass);color:var(--text-2);display:grid;place-items:center;
   transition:transform .2s var(--ease),border-color .3s,color .3s,background-color .3s}
@@ -1141,6 +1226,8 @@ body.amb-on .switch[aria-checked="true"] i{box-shadow:none}
       <button class="chip-btn" id="dockShare" type="button" hidden aria-label="Поделиться"><svg class="ic" aria-hidden="true"><use href="#i-share"></use></svg></button>
       <a class="chip-btn" id="dockOpen" href="#" target="_blank" rel="noopener" aria-label="Открыть в новой вкладке"><svg class="ic" aria-hidden="true"><use href="#i-out"></use></svg></a>
     </div>
+    <div class="field" id="guildBox" hidden><label>сервер</label><select class="pick" id="guildSel"
+      aria-label="Сервер, чью музыку слушать"></select></div>
     <div class="field"><label>я</label><input class="text-input" id="nickInput" maxlength="32"
       placeholder="как вас подписать" autocomplete="nickname"></div>
     <button class="icon-btn" id="motionBtn" title="Анимации: включить/выключить"
@@ -1336,9 +1423,19 @@ body.amb-on .switch[aria-checked="true"] i{box-shadow:none}
 "use strict";
 const P = location.pathname.indexOf("/music") === 0 ? "/music" : "";
 const $ = (id) => document.getElementById(id);
-const KEY = {nick:"hz-nick", fav:"hz-fav", recent:"hz-recent", calm:"hz-calm", tab:"hz-tab"};
+const KEY = {nick:"hz-nick", fav:"hz-fav", recent:"hz-recent", calm:"hz-calm", tab:"hz-tab", guild:"hz-guild"};
 const read = (k, def) => { try { const v = localStorage.getItem(k); return v === null ? def : JSON.parse(v); } catch (e) { return def; } };
 const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+
+/* Сервер, чью музыку слушает эта страница. Выбор едет в адресе каждого запроса:
+   без него страница на глазах прыгала между каналами, потому что бот в голосовом
+   сразу на двух серверах и ответ плеера зависел от того, какой первым лежит в
+   списке. Пусто — сервер один и переключатель не нужен. */
+let GID = String(read(KEY.guild, "") || "");
+function u(path) {
+  if (!GID || String(path).indexOf("/api/") !== 0) return path;
+  return path + (path.indexOf("?") === -1 ? "?" : "&") + "g=" + encodeURIComponent(GID);
+}
 
 let S = null;                  // последнее состояние плеера
 let seenTitle = "";            // чтобы ловить смену трека и проигрывать переход
@@ -1417,7 +1514,7 @@ async function api(path, body) {
     opt.headers["Content-Type"] = "application/json";
     opt.body = JSON.stringify(Object.assign({nick: nick()}, body));
   }
-  const r = await fetch(P + path, opt);
+  const r = await fetch(P + u(path), opt);
   let data = {};
   try { data = await r.json(); } catch (e) {}
   return {code: r.status, data};
@@ -1653,7 +1750,7 @@ async function hearPull() {
   HEAR.ctl = ctl;
   let r;
   try {
-    r = await fetch(P + "/api/sound", {signal: ctl.signal});
+    r = await fetch(P + u("/api/sound"), {signal: ctl.signal});
   } catch (e) {
     return hearRetry();
   }
@@ -1936,7 +2033,7 @@ function liveStart() {
   const now = performance.now();
   if (now - lvsTry < 5000) return;      // падаем обратно не чаще раза в пять секунд
   lvsTry = now;
-  try { LVS = new EventSource(P + "/api/live/stream"); } catch (e) { return; }
+  try { LVS = new EventSource(P + u("/api/live/stream")); } catch (e) { return; }
   LVS.onmessage = (ev) => {
     let d = null;
     try { d = JSON.parse(ev.data); } catch (e) {}
@@ -2787,6 +2884,48 @@ if (navigator.share) {
   });
 }
 
+/* ═════════ сервер, чью музыку слушаем ═════════
+   Переключатель показывается только когда бот играет больше чем на одном сервере и
+   доступ открыт хотя бы двум: на одном лишняя ручка в шапке только мешает. */
+async function loadGuilds() {
+  const box = $("guildBox"), sel = $("guildSel");
+  let out;
+  try { out = await api("/api/guilds"); } catch (e) { return; }
+  const list = (out.data && out.data.guilds) || [];
+  if (list.length < 2) {
+    // один сервер — сбрасываем и сохранённый выбор: он мог указать на сервер,
+    // доступ которому только что закрыли, и страница молча звала бы не тот плеер
+    if (GID) { GID = ""; save(KEY.guild, ""); }
+    box.hidden = true;
+    return;
+  }
+  sel.textContent = "";
+  list.forEach((g) => {
+    const o = document.createElement("option");
+    o.value = String(g.id);
+    o.textContent = g.name;
+    sel.append(o);
+  });
+  const want = String(GID);
+  GID = list.some((g) => String(g.id) === want) ? want
+    : String(out.data.picked || list[0].id);
+  sel.value = GID;
+  save(KEY.guild, GID);
+  box.hidden = false;
+}
+$("guildSel").addEventListener("change", (e) => {
+  GID = e.target.value;
+  save(KEY.guild, GID);
+  const name = (e.target.selectedOptions[0] || {}).textContent || "";
+  // зеркало и живые полосы привязаны к серверу: висящее соединение осталось бы
+  // слушать старый канал, пока человек не перезагрузил страницу
+  hearOff(true);
+  liveStop();
+  S = null;
+  setStatus("сервер: " + name, false);
+  poll(true);
+});
+
 /* старт: сначала скелетон, потом живое состояние; на вкладке не опрашиваем молча */
 $("queueList").append((() => {
   const s = document.createElement("div");
@@ -2799,6 +2938,9 @@ eqNote();
 initSync();
 fillAll();
 poll();
+/* сервер спрашиваем сразу же, не дожидаясь ответа: он мог указывать на закрытый
+   доступ, и тогда первый опрос показал не тот плеер — после ответа переспрашиваем */
+(() => { const was = GID; loadGuilds().then(() => { if (GID !== was) poll(true); }); })();
 setInterval(() => { if (!document.hidden) poll(); }, 2200);
 /* живые полосы нужны, только когда играет поток без готового анализа: файл из
    библиотеки уже лежит целиком, второй раз его спрашивать незачем.

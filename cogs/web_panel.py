@@ -338,6 +338,7 @@ class WebPanel(commands.Cog):
             app.router.add_post("/api/logout", self.h_logout)
             app.router.add_get("/api/overview", self.h_overview)
             app.router.add_get("/api/guilds", self.h_guilds)
+            app.router.add_post("/api/guilds/music", self.h_guild_music)
             app.router.add_get("/api/modules", self.h_modules)
             app.router.add_post("/api/modules/{name}/{action}", self.h_module_action)
             app.router.add_get("/api/files", self.h_files)
@@ -539,7 +540,7 @@ class WebPanel(commands.Cog):
                     icon = None
                 out.append({"id": str(g.id), "name": g.name, "icon": icon,
                             "members": int(getattr(g, "member_count", 0) or 0),
-                            "home": False, "in_voice": False})
+                            "home": False, "in_voice": False, "music": None})
             return out
 
     async def h_guilds(self, request: web.Request) -> web.Response:
@@ -553,6 +554,37 @@ class WebPanel(commands.Cog):
         if now and not any(r["id"] == now for r in rows):
             now = ""
         return _json({"guilds": rows, "picked": now or next((r["id"] for r in rows if r["home"]), "")})
+
+    async def h_guild_music(self, request: web.Request) -> web.Response:
+        """Выдать серверу сайт музыки или забрать его — тот же флаг, что у панели /музыка.
+
+        Доступ нужен именно отсюда: бота могут добавить к себе чужие люди, а ручки в
+        канале — штука не безобидная. Молча открывать сайт каждому новому серверу
+        нельзя, поэтому решение остаётся владельцу, а не тому, кто нажал «пригласить».
+        """
+        mod = sys.modules.get("cogs.music")
+        if mod is None:
+            return _json({"error": "Модуль музыки выключен — доступ отсюда не выдать"}, 400)
+        body = await _body(request)
+        from utils import web_tools
+
+        guild = web_tools.guild_by(self.bot, body.get("g"))
+        if guild is None:
+            return _json({"error": "Такого сервера у бота нет — выбери его в списке"}, 400)
+        on = bool(body.get("on"))
+        err = mod.set_site(guild.id, on)
+        if err:
+            return _json({"error": err}, 500)
+        url = ""
+        try:
+            url = mod._site_url()
+        except Exception:
+            url = ""
+        tail = f" Ссылка: {url}" if on and url else ""
+        message = f"{'🌐 Открыл' if on else '🚫 Закрыл'} сайт музыки для «{guild.name}».{tail}"
+        print(f"🎛 Панель: {message}", flush=True)
+        return _json({"ok": True, "g": str(guild.id), "on": on, "url": url,
+                      "guilds": self._guild_rows(), "message": message})
 
     async def h_overview(self, request: web.Request) -> web.Response:
         from utils.checks import load_config
