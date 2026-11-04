@@ -3,7 +3,7 @@
 Хранилище общее (utils/sound_store.py), поэтому сайт и Discord видят один и тот же
 набор и не могут разойтись. После любой правки просим ког «Soundboard» перекрасить
 панель в канале: иначе звук появится на сайте, а кнопка в Discord — только после
-заново выложенного /sounds_panel, и это выглядит как «сайт не сохранил».
+заново выложенного /sounds panel, и это выглядит как «сайт не сохранил».
 """
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ async def sync(bot) -> str:
     except Exception as e:
         return f"Панель в Discord не обновилась ({e.__class__.__name__})"
     if not done:
-        return "Панели в Discord нет — выложи её через /sounds_panel"
+        return "Панели в Discord нет — выложи её через /sounds panel"
     return f"Панель в Discord обновлена ({done})"
 
 

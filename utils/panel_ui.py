@@ -1351,24 +1351,34 @@ html[data-style=stark] .dot{box-shadow:none}
 /* Цвет звука виден по левой полоске карточки: человек сразу понимает, каким выйдет знак
    на сайте, не открывая редактор. Плашка знака нарочно несимметричная — экран не должен
    читаться как «Эмодзи» или «Стикеры» с их сеткой квадратных плиток. */
-.sndgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:1rem}
-.snd{position:relative;display:flex;flex-direction:column;gap:.65rem;padding:.95rem 1.05rem .95rem 1.25rem;
-  border:1px solid var(--line);border-left:5px solid var(--line2);border-radius:var(--radius-s);
-  background:var(--panel2);transition:border-color .18s}
-.snd:hover{border-color:var(--line2)}
-.sndtop{display:flex;align-items:center;gap:.75rem;min-width:0}
-.sndmark{width:46px;height:46px;flex:none;display:grid;place-items:center;font-size:1.4rem;line-height:1;
-  border-radius:16px 6px 16px 6px;background:var(--panel3);border:1px solid var(--line)}
+.sndgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.7rem}
+.snd{position:relative;display:flex;flex-direction:column;gap:.6rem;padding:.65rem .7rem .65rem .85rem;
+  border:1px solid var(--line);border-left:4px solid var(--line2);border-radius:14px;
+  background:var(--panel2);transition:border-color .18s,transform .18s,box-shadow .18s}
+.snd:hover{border-color:var(--line2);transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,0,0,.18)}
+.snd.on{box-shadow:0 0 0 1px var(--accent) inset}
+.sndtop{display:flex;align-items:center;gap:.65rem;min-width:0}
+.sndplay{width:42px;height:42px;flex:none;display:grid;place-items:center;border-radius:50%;cursor:pointer;
+  border:0;background:var(--accent);color:#fff;font-size:1rem;line-height:1;padding:0 0 0 2px;
+  transition:transform .12s,filter .12s}
+.sndplay:hover{filter:brightness(1.12);transform:scale(1.06)}
+.snd.on .sndplay{padding:0;background:var(--accent2)}
+.sndmark{width:36px;height:36px;flex:none;display:grid;place-items:center;font-size:1.15rem;line-height:1;
+  border-radius:12px;background:var(--panel3);border:1px solid var(--line)}
 .sndtop .grow{flex:1;min-width:0}
-.sndtop b{display:block;font-size:.98rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sndtop b{display:block;font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sndtop small{display:block;color:var(--faint);font-size:.74rem}
-.snd audio{width:100%;height:36px;border-radius:8px}
-.sndacts{display:flex;gap:.45rem;flex-wrap:wrap;align-items:center}
+.sndacts{display:flex;gap:.2rem;flex:none;opacity:.55;transition:opacity .15s}
+.snd:hover .sndacts,.snd.edit .sndacts{opacity:1}
+.sndacts .ib{width:30px;height:30px;display:grid;place-items:center;border-radius:9px;border:0;cursor:pointer;
+  background:transparent;color:var(--muted);font-size:.95rem;padding:0}
+.sndacts .ib:hover{background:var(--panel3);color:var(--text)}
+.sndacts .ib.danger:hover{color:#ff6b6b}
 .sned{display:none;flex-direction:column;gap:.6rem;padding-top:.75rem;border-top:1px dashed var(--line)}
 .snd.edit .sned{display:flex}
 .markpick{display:flex;gap:.3rem;flex-wrap:wrap;max-width:100%}
 .sned .swatches{margin-top:.1rem}
-@media (max-width:640px){.sndgrid{grid-template-columns:1fr}.snd audio{height:40px}}
+@media (max-width:640px){.sndgrid{grid-template-columns:1fr}.sndacts{opacity:1}}
 
 /* ---------- выбор сервера ---------- */
 /* Плашка сервера несимметричная и с косой полосой слева: это переключатель, а не ещё одна
@@ -3064,11 +3074,24 @@ async function pageSounds() {
   const backWrap = h('div', null, h('div', { class: 'section-title' }, 'Спрятано с панели'), backList);
   let busy = false;
 
-  /* Плееры не качают всё сразу (preload=none) и глушат друг друга: на 23 карточках
-     двадцать три играющих трека — это лаг, а не выбор. */
-  grid.addEventListener('play', (e) => {
-    grid.querySelectorAll('audio').forEach((a) => { if (a !== e.target) a.pause(); });
-  }, true);
+  /* Один общий плеер на всю страницу: нажал другой звук, прошлый замолчал. Ничего не качается,
+     пока не нажали, и 23 живых <audio> на экране не висят. */
+  let cur = null, curCard = null;
+  function stopCur() {
+    if (cur) { cur.pause(); cur = null; }
+    if (curCard) { curCard.classList.remove('on'); const b = curCard.querySelector('.sndplay'); if (b) b.textContent = '▶'; curCard = null; }
+  }
+  function togglePlay(r, card) {
+    if (curCard === card) { stopCur(); return; }
+    stopCur();
+    const a = new Audio(r.url);
+    cur = a; curCard = card;
+    card.classList.add('on');
+    card.querySelector('.sndplay').textContent = '⏸';
+    a.addEventListener('ended', () => { if (cur === a) stopCur(); });
+    a.addEventListener('error', () => { if (cur === a) { stopCur(); toast('Звук не играется', 'err'); } });
+    a.play().catch(() => { if (cur === a) stopCur(); });
+  }
 
   async function reload() {
     try { d = await api('/api/sounds'); draw(); }
@@ -3117,22 +3140,20 @@ async function pageSounds() {
     const ed = h('div', { class: 'sned' });
     const el = h('div', { class: 'snd', style: 'border-left-color:' + soundTone(r.color) },
       h('div', { class: 'sndtop' },
-        h('span', { class: 'sndmark' }, r.emoji),
-        h('div', { class: 'grow' }, h('b', { title: r.name }, r.title),
-          h('small', null, r.name + ' · .' + r.ext + ' · ' + r.kb + ' КБ · ~'
-            + Math.max(1, Math.round(r.seconds || 0)) + ' с')),
-        chip(r.local ? 'мой файл' : 'звук пака', r.local ? 'ok' : 'off')),
-      h('audio', { controls: true, preload: 'none', src: r.url, 'aria-label': 'Прослушать ' + r.title }),
-      ed,
-      h('div', { class: 'sndacts' },
-        h('button', { class: 'btn tiny', onclick: open }, 'Править'),
-        h('button', {
-          class: 'btn tiny danger', onclick: async () => {
-            const hard = r.local ? 'Файл удалится с диска.' : 'Файл готового пака останется, звук только спрячется — вернуть можно ниже.';
-            if (!(await confirmBox('Убрать «' + r.title + '»?', hard + ' Кнопка в Discord исчезнет сразу.', 'Убрать', true))) return;
-            await post('/api/sounds/remove', { name: r.name });
-          }
-        }, 'Убрать')));
+        h('button', { class: 'sndplay', type: 'button', title: 'Прослушать', 'aria-label': 'Прослушать ' + r.title,
+          onclick: () => togglePlay(r, el) }, '▶'),
+        h('div', { class: 'grow' }, h('b', { title: r.name }, (r.emoji && r.emoji !== '🔊' ? r.emoji + ' ' : '') + r.title),
+          h('small', null, '~' + Math.max(1, Math.round(r.seconds || 0)) + ' с' + (r.local ? ' · мой файл' : ''))),
+        h('div', { class: 'sndacts' },
+          h('button', { class: 'ib', type: 'button', title: 'Править', 'aria-label': 'Править', onclick: open }, '✎'),
+          h('button', {
+            class: 'ib danger', type: 'button', title: 'Убрать', 'aria-label': 'Убрать', onclick: async () => {
+              const hard = r.local ? 'Файл удалится с диска.' : 'Файл готового пака останется, звук только спрячется — вернуть можно ниже.';
+              if (!(await confirmBox('Убрать «' + r.title + '»?', hard + ' Кнопка в Discord исчезнет сразу.', 'Убрать', true))) return;
+              await post('/api/sounds/remove', { name: r.name });
+            }
+          }, '✕'))),
+      ed);
 
     /* Редактор собирается только когда его открыли, и открыт всегда один: 23 живых формы
        на экране — это лишние сотни узлов и прыгающая вёрстка. */
@@ -3147,11 +3168,9 @@ async function pageSounds() {
   }
 
   function draw() {
-    const kb = Math.round(d.rows.reduce((a, r) => a + (r.bytes || 0), 0) / 1024);
     stats.replaceChildren(
       ...[['На панели', d.total + ' из ' + d.max, d.free ? 'ok' : 'warn'],
         ['Свободно мест', String(d.free), d.free ? '' : 'warn'],
-        ['Весят вместе', kb + ' КБ', ''],
         ['Спрятано', String(d.hidden.length), d.hidden.length ? 'warn' : '']]
         .map(([l, v, k]) => h('div', { class: 'card stat ' + k }, h('small', null, l), h('b', null, v))));
     grid.replaceChildren(...(d.rows.length ? d.rows.map(cardFor)
