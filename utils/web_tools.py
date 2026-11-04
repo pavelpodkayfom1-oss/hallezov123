@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import contextvars
 import json
 import re
 import secrets
@@ -62,16 +63,110 @@ def _mentions_to_names(text: Any, names: Dict[str, str]) -> Any:
     return re.sub(r"<@!?(\d+)>", lambda m: names.get(m.group(1), "@" + m.group(1)), text)
 
 
-def guild_of(bot) -> Optional[disnake.Guild]:
-    if not bot.guilds:
-        return None
+# Сервер, который человек выбрал в шапке панели. contextvar, а не глобальная переменная:
+# панель отвечает нескольким вкладкам сразу, и «выбранный сервер» не должен перетекать из
+# одного запроса в другой. Фоновые циклы когов переменную не видят — для них пустая строка
+# означает «домашний сервер», то есть ровно то поведение, что было до переключателя.
+_PICKED = contextvars.ContextVar("hz_picked_guild", default="")
+
+
+def pick(gid: Any) -> str:
+    """Запоминает сервер текущего запроса; проверяет, что такой сервер действительно есть."""
+    key = str(gid or "").strip()
+    _PICKED.set(key if key.isdigit() else "")
+    return _PICKED.get()
+
+
+def picked() -> str:
+    return _PICKED.get()
+
+
+def home_guild_id() -> int:
     try:
         from utils.checks import load_config
 
-        gid = int(load_config().get("guild_id") or 0)
+        return int(load_config().get("guild_id") or 0)
     except Exception:
-        gid = 0
-    return bot.get_guild(gid) if gid else bot.guilds[0]
+        return 0
+
+
+def _config_ids(cfg: dict) -> List[int]:
+    """Номера каналов и ролей из config.json — по ним и узнаём «свой» сервер."""
+    out: List[int] = []
+    for val in (cfg.get("channels") or {}).values():
+        out.append(val)
+    for one in (cfg.get("voice_channels") or []):
+        out.append((one or {}).get("id") if isinstance(one, dict) else one)
+    for val in (cfg.get("roles") or {}).values():
+        out.append(val)
+    for val in (cfg.get("recruiter_role_ids") or []):
+        out.append(val)
+    return [int(v) for v in out if str(v or "").isdigit()]
+
+
+def home_guild(bot):
+    """Домашний сервер семьи.
+
+    В config.json ключа guild_id исторически нет, зато есть id каналов и ролей — они
+    принадлежат ровно одному серверу, и это надёжнее, чем bot.guilds[0]: порядок в списке
+    никем не обещан, и с приходом чужого сервера «первый» мог оказаться чужим.
+    """
+    want = home_guild_id()
+    if want:
+        hit = bot.get_guild(want)
+        if hit is not None:
+            return hit
+    try:
+        from utils.checks import load_config
+
+        ids = _config_ids(load_config())
+    except Exception:
+        ids = []
+    for g in bot.guilds:
+        try:
+            if any(g.get_channel(i) or g.get_role(i) for i in ids):
+                return g
+        except Exception:
+            continue
+    return bot.guilds[0] if len(bot.guilds) == 1 else None
+
+
+def guild_by(bot, gid: Any) -> Optional[disnake.Guild]:
+    """Сервер по id — и только свой: чужого id в списке бота просто нет."""
+    try:
+        key = int(str(gid or "").strip())
+    except (TypeError, ValueError):
+        return None
+    return bot.get_guild(key) if key else None
+
+
+def guild_of(bot) -> Optional[disnake.Guild]:
+    """Выбранный в шапке сервер, а если не выбран — домашний из config.json.
+
+    Раньше здесь молча стоял bot.guilds[0], и с приходом второго сервера панель начинала
+    показывать каналы и людей не того сервера: первый элемент списка никем не гарантирован.
+    Если выбранный сервер исчез (бота выкинули), отдаём домашний и пусть экран сам скажет,
+    что он видит, — угадывать по списку хуже, чем честно вернуться.
+    """
+    if not bot.guilds:
+        return None
+    hit = guild_by(bot, _PICKED.get())
+    if hit is not None:
+        return hit
+    return home_guild(bot)
+
+
+def guild_rows(bot) -> List[dict]:
+    """Список серверов для переключателя в шапке: тот, где бот реально состоит."""
+    home = home_guild(bot)
+    out = []
+    for g in sorted(bot.guilds, key=lambda g: g.name.lower()):
+        icon = getattr(getattr(g, "icon", None), "url", None)
+        out.append({"id": str(g.id), "name": g.name, "icon": icon,
+                    "members": int(getattr(g, "member_count", 0) or 0),
+                    "home": home is not None and g.id == home.id,
+                    "in_voice": g.voice_client is not None})
+    return out
 
 
 def _names(bot, ids: List[Any]) -> Dict[str, str]:

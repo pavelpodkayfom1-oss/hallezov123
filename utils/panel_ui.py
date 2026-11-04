@@ -1369,6 +1369,30 @@ html[data-style=stark] .dot{box-shadow:none}
 .markpick{display:flex;gap:.3rem;flex-wrap:wrap;max-width:100%}
 .sned .swatches{margin-top:.1rem}
 @media (max-width:640px){.sndgrid{grid-template-columns:1fr}.snd audio{height:40px}}
+
+/* ---------- выбор сервера ---------- */
+/* Плашка сервера несимметричная и с косой полосой слева: это переключатель, а не ещё одна
+   карточка списка — на экране и так прямоугольников больше, чем нужно. */
+.gpick{display:flex;align-items:center;gap:.55rem;margin:.05rem .55rem .55rem;padding:.5rem .7rem;
+  min-width:0;border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:14px 6px 14px 6px;background:var(--panel2);transition:border-color .16s,background .16s}
+.gpick:hover{border-color:var(--line2);border-left-color:var(--accent2)}
+.gpick .ico{flex:none;color:var(--accent2)}
+.gpick b{font-weight:600;font-size:.86rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gpick.one{border-left-color:var(--line2)}
+.gpick.one .ico{color:var(--muted)}
+.gsel{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--text);
+  font:inherit;font-size:.86rem;font-weight:600;cursor:pointer;padding:.05rem 0}
+.gsel option{background:var(--panel2);color:var(--text)}
+.gpick .gn{flex:none;font-size:.7rem;font-weight:700;color:var(--muted);padding:.1em .45em;
+  border:1px solid var(--line2);border-radius:999px 999px 999px 3px}
+/* в полосе сверху на телефоне только название: список живёт в выдвинутом меню */
+.mguildbox{min-width:0;max-width:44%;display:flex}
+.mbar>b{min-width:0;flex:0 1 auto}
+.gpick.mob{margin:0;padding:.3rem .55rem;background:var(--panel2);cursor:pointer;font:inherit;
+  border-radius:12px 4px 12px 4px}
+.gpick.mob b{font-size:.8rem;max-width:9em;display:block}
+@media (max-width:420px){.gpick.mob .ico{display:none}.gpick.mob b{max-width:7em}}
 </style>
 </head>
 <body>
@@ -1379,7 +1403,7 @@ html[data-style=stark] .dot{box-shadow:none}
 (() => {
 'use strict';
 const $app = document.getElementById('app');
-const state = { page: 'overview', timer: null, isDirty: () => false, botName: 'Бот' };
+const state = { page: 'overview', timer: null, isDirty: () => false, botName: 'Бот', gid: '', guilds: [] };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ---------- мелкие помощники ---------- */
@@ -1424,6 +1448,13 @@ function confirmBox(title, text, okLabel, danger) {
   });
 }
 
+function withG(path) {
+  /* Сервер, выбранный в шапке, едет с каждым запросом. Без него разделы берут «домашний»
+     сервер, а когда бот в двух, это лотерея: каналы одного, люди другого. */
+  if (!state.gid || path.indexOf('/api/') !== 0 || /[?&]g=/.test(path)) return path;
+  return path + (path.indexOf('?') === -1 ? '?' : '&') + 'g=' + state.gid;
+}
+
 async function api(path, opts = {}) {
   const init = { method: opts.method || 'GET', credentials: 'same-origin', cache: 'no-store', headers: { 'X-Requested-With': 'hz-panel' } };
   if (opts.body !== undefined) {
@@ -1431,7 +1462,7 @@ async function api(path, opts = {}) {
     init.body = JSON.stringify(opts.body);
   }
   let res;
-  try { res = await fetch(path, init); } catch (e) { throw new Error('Нет связи с панелью'); }
+  try { res = await fetch(withG(path), init); } catch (e) { throw new Error('Нет связи с панелью'); }
   let data = null;
   try { data = await res.json(); } catch (e) { /* пустой ответ */ }
   if (res.status === 401 && path !== '/api/login') { showLogin('Сессия истекла, войдите снова'); throw new Error('Нужен вход'); }
@@ -1710,6 +1741,7 @@ const ICONS = {
   menu: '<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>',
   mic: '<rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/>',
   sound: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.7 5.3a9 9 0 0 1 0 13.4"/>',
+  server: '<rect x="3" y="3.5" width="18" height="7" rx="2"/><rect x="3" y="13.5" width="18" height="7" rx="2"/><line x1="7" y1="7" x2="7.01" y2="7"/><line x1="7" y1="17" x2="7.01" y2="17"/>',
 };
 function icon(name) {
   const el = h('span', { class: 'ico', 'aria-hidden': 'true' });
@@ -1774,6 +1806,70 @@ function bindHotkeys() {
   });
 }
 
+/* ---------- Сервер, которым управляем ---------- */
+async function loadGuilds() {
+  try {
+    const d = await api('/api/guilds');
+    state.guilds = d.guilds || [];
+  } catch (e) {
+    state.guilds = [];
+    return;
+  }
+  const saved = localStorage.getItem('hz_guild') || '';
+  state.gid = state.guilds.some((g) => g.id === saved) ? saved
+    : (d.picked || (state.guilds[0] || {}).id || '');
+  if (state.gid) localStorage.setItem('hz_guild', state.gid);
+}
+
+function currentGuild() { return state.guilds.find((g) => g.id === state.gid) || null; }
+
+function guildPick(mobile) {
+  /* Один сервер — просто название, без списка: прятать его всё равно нельзя, человек обязан
+     видеть, чьи каналы и люди ему показаны. На телефоне список живёт в выдвинутом меню,
+     в полосе сверху остаётся только название — два селекта в ряд не влезают. */
+  const now = currentGuild();
+  if (mobile) {
+    return h('button', { class: 'gpick mob', type: 'button', title: 'Сменить сервер',
+      onclick: () => setMenu(true) },
+      icon('server'), h('b', null, now ? now.name : 'Серверов нет'),
+      state.guilds.length > 1 ? h('span', { class: 'gn' }, String(state.guilds.length)) : null);
+  }
+  if (state.guilds.length < 2) {
+    return h('div', { class: 'gpick one', title: 'Сервер, который показывает панель' },
+      icon('server'), h('b', null, now ? now.name : 'Серверов нет'));
+  }
+  const sel = h('select', { class: 'gsel', title: 'Сервер, которым управляешь',
+    onchange: (e) => chooseGuild(e.target.value) },
+    state.guilds.map((g) => h('option', { value: g.id, selected: g.id === state.gid },
+      g.name + (g.home ? ' · свой' : '') + (g.in_voice ? ' · в голосовом' : ''))));
+  return h('div', { class: 'gpick' }, icon('server'), sel);
+}
+
+async function chooseGuild(id) {
+  if (!id || id === state.gid) return;
+  if (state.isDirty() && !(await confirmBox('Сменить сервер?',
+      'На этом сервере есть несохранённые изменения, они пропадут.', 'Сменить', true))) {
+    redrawPick();
+    return;
+  }
+  state.gid = id;
+  localStorage.setItem('hz_guild', id);
+  const g = currentGuild();
+  toast('Сервер: ' + (g ? g.name : id), 'ok');
+  redrawPick();
+  // согласие на потерю правок уже получено выше: go() спросил бы второй раз
+  state.isDirty = () => false;
+  // на телефоне сервер выбирают в выдвинутом меню — go() его закроет, и сразу видно новый экран
+  await go(state.page);
+}
+
+function redrawPick() {
+  const box = document.getElementById('gpickbox');
+  if (box) box.replaceChildren(guildPick(false));
+  const m = document.getElementById('mguildbox');
+  if (m) m.replaceChildren(guildPick(true));
+}
+
 function renderShell() {
   const nav = h('nav', { class: 'nav', 'aria-label': 'Разделы панели' });
   let group = null;
@@ -1785,6 +1881,7 @@ function renderShell() {
     h('div', { class: 'brand' },
       h('div', { class: 'logo' }, (state.botName || 'H').slice(0, 1).toUpperCase()),
       h('div', null, h('b', null, state.botName), h('span', null, 'Панель управления'))),
+    h('div', { id: 'gpickbox' }, guildPick(false)),
     h('button', { class: 'searchbtn', type: 'button', onclick: openPalette }, icon('search'), h('span', null, 'Поиск'), h('kbd', null, 'Ctrl K')),
     nav,
     h('div', { class: 'sidefoot' },
@@ -1799,6 +1896,7 @@ function renderShell() {
     h('div', { class: 'logo' }, (state.botName || 'H').slice(0, 1).toUpperCase()),
     h('b', null, state.botName),
     h('div', { class: 'spacer' }),
+    h('div', { class: 'mguildbox', id: 'mguildbox' }, guildPick(true)),
     h('button', { class: 'btn icon', 'aria-label': 'Поиск по разделам', onclick: openPalette }, icon('search')));
   const shell = h('div', { class: 'shell', id: 'shell' },
     side,
@@ -4479,6 +4577,9 @@ async function boot() {
   applyTheme();
   state.botName = s.bot_name || 'Бот';
   document.title = state.botName + ' · Панель';
+  // сервер надо узнать до первого экрана: все данные запрашиваются с ?g= и второй раз
+  // их тянуть было бы заметно по скорости
+  await loadGuilds();
   renderShell();
   bindHotkeys();
   go(location.hash.slice(1) || 'overview');
@@ -4500,7 +4601,7 @@ async function apiForm(path, form) {
   /* Тот же api(), но с FormData: файлы в JSON не влезают. */
   let res;
   try {
-    res = await fetch(path, { method: 'POST', body: form, credentials: 'same-origin',
+    res = await fetch(withG(path), { method: 'POST', body: form, credentials: 'same-origin',
       cache: 'no-store', headers: { 'X-Requested-With': 'hz-panel' } });
   } catch (e) { throw new Error('Нет связи с панелью'); }
   let data = null;

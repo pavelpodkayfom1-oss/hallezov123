@@ -337,6 +337,7 @@ class WebPanel(commands.Cog):
             app.router.add_post("/api/login", self.h_login)
             app.router.add_post("/api/logout", self.h_logout)
             app.router.add_get("/api/overview", self.h_overview)
+            app.router.add_get("/api/guilds", self.h_guilds)
             app.router.add_get("/api/modules", self.h_modules)
             app.router.add_post("/api/modules/{name}/{action}", self.h_module_action)
             app.router.add_get("/api/files", self.h_files)
@@ -425,6 +426,7 @@ class WebPanel(commands.Cog):
     async def _middleware(self, request: web.Request, handler):
         # Изменяющие запросы принимаются только со своей страницы: этот заголовок
         # чужой сайт отправить не может (браузер заблокирует без CORS), плюс SameSite=Strict.
+        self._pick_guild(request)
         if request.method not in ("GET", "HEAD", "OPTIONS"):
             if request.headers.get("X-Requested-With") != "hz-panel":
                 return _json({"error": "Запрос отклонён"}, 403)
@@ -516,6 +518,42 @@ class WebPanel(commands.Cog):
         return resp
 
     # ---- обзор ----
+    def _guild_rows(self) -> List[Dict[str, Any]]:
+        """Серверы бота: один список для «Обзора» и для переключателя в шапке.
+
+        Держим в одном месте специально: если формы разъедутся, переключатель начнёт
+        показывать id, который обзор называет по-другому, и это будет выглядеть как баг
+        выбора сервера.
+        """
+        try:
+            from utils import web_tools
+
+            return web_tools.guild_rows(self.bot)
+        except Exception:
+            out = []
+            for g in self.bot.guilds:
+                icon = None
+                try:
+                    icon = g.icon.url if g.icon else None
+                except Exception:
+                    icon = None
+                out.append({"id": str(g.id), "name": g.name, "icon": icon,
+                            "members": int(getattr(g, "member_count", 0) or 0),
+                            "home": False, "in_voice": False})
+            return out
+
+    async def h_guilds(self, request: web.Request) -> web.Response:
+        rows = self._guild_rows()
+        try:
+            from utils import web_tools
+
+            now = web_tools.picked()
+        except Exception:
+            now = ""
+        if now and not any(r["id"] == now for r in rows):
+            now = ""
+        return _json({"guilds": rows, "picked": now or next((r["id"] for r in rows if r["home"]), "")})
+
     async def h_overview(self, request: web.Request) -> web.Response:
         from utils.checks import load_config
 
@@ -531,14 +569,7 @@ class WebPanel(commands.Cog):
         except Exception:
             stats = {}
 
-        guilds = []
-        for g in bot.guilds:
-            icon = None
-            try:
-                icon = g.icon.url if g.icon else None
-            except Exception:
-                icon = None
-            guilds.append({"id": str(g.id), "name": g.name, "members": g.member_count, "icon": icon})
+        guilds = self._guild_rows()
 
         cogs = self._list_cogs()
         return _json(
@@ -665,6 +696,21 @@ class WebPanel(commands.Cog):
         except Exception as e:
             return None, f"Раздел не загрузился: utils/web_tools.py не импортируется ({e.__class__.__name__}: {e}). Смотрите «Логи» при старте бота."
         return web_tools, None
+
+    @staticmethod
+    def _pick_guild(request: web.Request) -> None:
+        """Какой сервер обслуживает этот запрос — тот, что выбран в шапке панели.
+
+        Ставится до обработчика: разделы внутри utils/web_tools.py вызывают guild_of(bot)
+        в десятках мест, и передавать id через каждый из них означало бы переписать весь
+        файл и рискнуть разъехаться с кодами Discord. Пустое значение — «домашний»,
+        то есть ровно то поведение, что было до переключателя.
+        """
+        try:
+            from utils import web_tools
+        except Exception:
+            return
+        web_tools.pick(request.query.get("g"))
 
     @staticmethod
     def _sounds():
