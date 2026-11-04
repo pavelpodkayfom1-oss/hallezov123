@@ -1808,8 +1808,9 @@ function bindHotkeys() {
 
 /* ---------- Сервер, которым управляем ---------- */
 async function loadGuilds() {
+  let d = {};
   try {
-    const d = await api('/api/guilds');
+    d = await api('/api/guilds');
     state.guilds = d.guilds || [];
   } catch (e) {
     state.guilds = [];
@@ -4579,9 +4580,16 @@ async function boot() {
   document.title = state.botName + ' · Панель';
   // сервер надо узнать до первого экрана: все данные запрашиваются с ?g= и второй раз
   // их тянуть было бы заметно по скорости
-  await loadGuilds();
-  renderShell();
-  bindHotkeys();
+  try {
+    await loadGuilds();
+    renderShell();
+    bindHotkeys();
+  } catch (e) {
+    console.error(e);
+    $app.replaceChildren(h('div', { class: 'center' }, h('p', { class: 'err' },
+      'Панель не смогла загрузиться: ' + (e && e.message ? e.message : e) + '. Обновите страницу.')));
+    return;
+  }
   go(location.hash.slice(1) || 'overview');
 }
 
