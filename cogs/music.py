@@ -39,6 +39,7 @@ except ImportError:
 from utils import brand, cdn_assets
 from utils.checks import get_text, is_admin, load_config
 from utils.embeds import bar, card, list_embed, note_embed, panel_embed
+from utils.jingle import Board as JingleBoard
 
 # Кулдаун на заказ музыки (секунд на одного пользователя)
 PLAY_COOLDOWN = 20
@@ -54,6 +55,12 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Библиотека лежит рядом с main.py и в git не попадает (в .gitignore там "*"),
 # поэтому треки переживают деплой и рестарты.
 MEDIA_DIR = os.path.join(BASE_DIR, "media")
+# 🔔 реплики для звука при входе: кладутся в media/jingles/ (в git не попадают).
+# Пустая папка — и всё равно звучит встроенный «дзынь», чтобы фича работала сразу.
+JINGLE_DIR = os.path.join(MEDIA_DIR, "jingles")
+# список реплик для экрана настроек: сам плеер может ещё не существовать, а сказать
+# человеку «в папке три реплики» надо и вне голосового канала
+_JINGLE_PROBE = JingleBoard(JINGLE_DIR)
 SETTINGS_FILE = os.path.join(BASE_DIR, "music_settings.json")
 
 
@@ -485,10 +492,12 @@ def _fmt_duration(sec) -> str:
 # Один файл на все серверы: {id: {громкость, кулдаун, очередь, диджей, авто-выход,
 # канал панели и id самой панели — по нему старая карточка убирается перед новой}}.
 DEFAULT_SETTINGS = {"volume": 50, "cooldown": PLAY_COOLDOWN, "queue": MAX_QUEUE,
-                    "dj": False, "leave": True, "panel": 0, "panel_msg": 0,
+                    "dj": False, "leave": True, "jingle": True, "panel": 0, "panel_msg": 0,
                     "fx": {}, "repeat": "off"}
 COOLDOWNS = (0, 5, 10, 20, 40, 60)
 QUEUES = (10, 25, 40, 60)
+# 🔔 заход толпой не должен превратиться в трезвон: не чаще одного знака в 7 секунд
+JINGLE_GAP = 7.0
 
 
 def _cfg_raw() -> dict:
@@ -511,6 +520,7 @@ def _cfg(guild_id) -> dict:
     out["queue"] = _int(out["queue"], MAX_QUEUE)
     out["dj"] = bool(out["dj"])
     out["leave"] = bool(out["leave"])
+    out["jingle"] = bool(out["jingle"])
     out["panel"] = _int(out["panel"], 0)
     out["panel_msg"] = _int(out["panel_msg"], 0)
     return out
@@ -960,14 +970,22 @@ class _TeeSource(disnake.AudioSource):
     страница крутит сама, иначе на 14 % слушатель слышал бы шёпот.
     """
 
-    def __init__(self, original, live, mirror=None):
+    def __init__(self, original, live, mirror=None, jingles=None):
         self.original = original
         self.live = live
         self.mirror = mirror
+        self.jingles = jingles
 
     def read(self) -> bytes:
         data = self.original.read()
         if data:
+            try:
+                if self.jingles is not None:
+                    # реплика приплетается здесь, а не отдельным игроком: трек не
+                    # прерывается, и в браузер она едет тем же путём, что и в канал
+                    data = self.jingles.mix(data)
+            except Exception:
+                pass
             try:
                 if self.live is not None:
                     self.live.push(data)
@@ -1018,6 +1036,9 @@ class GuildPlayer:
         self.live = None
         # 🔊 те же байты для браузера: зеркало, чтобы музыку слышать вне Discord
         self.mirror = Mirror()
+        # 🔔 реплика при входе человека в канал — накладка поверх трека
+        self.jingles = JingleBoard(JINGLE_DIR, _ffmpeg_exe)
+        self.jingle_at = 0.0
         self.volume = cfg["volume"] / 100.0
         self.text_channel = None
         # 🔁 авто-диджей: когда очередь пустеет, берём случайный трек из библиотеки
@@ -1213,6 +1234,17 @@ def _err(bot, head: str, text: str, guild=None) -> disnake.Embed:
     return note_embed(text, "error", title=f"{warn}  {head}", guild=guild)
 
 
+def _jingle_note() -> str:
+    """Строка про реплики под настройкой «Звук при входе»."""
+    n = len(_JINGLE_PROBE.names())
+    if not n:
+        return "в `media/jingles/` пусто — звучит встроенный «дзынь»"
+    rest, teen = n % 10, n % 100
+    form = "реплика" if rest == 1 and teen != 11 else \
+        ("реплики" if 2 <= rest <= 4 and not 11 <= teen <= 14 else "реплик")
+    return f"в `media/jingles/` {n} {form}, играются наугад"
+
+
 def _cfg_text(cfg: dict) -> dict:
     """Человеческие значения настроек: на экране то, что человек и написал бы словами."""
     cd = cfg["cooldown"]
@@ -1222,6 +1254,7 @@ def _cfg_text(cfg: dict) -> dict:
         "queue": f"{cfg['queue']} треков",
         "dj": "включён" if cfg["dj"] else "выключен",
         "leave": "через 60 с" if cfg["leave"] else "не выходит",
+        "jingle": "звучит" if cfg["jingle"] else "молчит",
     }
 
 
@@ -1498,6 +1531,8 @@ class MusicSettingsView(disnake.ui.View):
              f"**{t['dj']}**\n{pc}  Кончится очередь — возьмёт случайный трек из библиотеки"),
             (f"{_e(bot, 'hz_warn', '⚠️')}  АВТО-ВЫХОД",
              f"**{t['leave']}**\n{book}  Если в канале не осталось никого, кроме бота"),
+            (f"{_e(bot, 'hz_megaphone', '🔔')}  ЗВУК ПРИ ВХОДЕ",
+             f"**{t['jingle']}**\n{book}  {_jingle_note()}"),
             (_T(bot, "music_cfg_channel_head", T_CFG_CHANNEL_HEAD), panel),
         ]
         return panel_embed(
@@ -1551,6 +1586,26 @@ class MusicSettingsView(disnake.ui.View):
                        custom_id="music:cfg:leave", row=1)
     async def leave_def(self, button, inter: disnake.MessageInteraction):
         await self._apply(inter, {"leave": not _cfg(self.guild_id)["leave"]})
+
+    @disnake.ui.button(label="Звук входа", style=disnake.ButtonStyle.secondary,
+                       custom_id="music:cfg:jingle", row=1)
+    async def jingle_def(self, button, inter: disnake.MessageInteraction):
+        await self._apply(inter, {"jingle": not _cfg(self.guild_id)["jingle"]})
+
+    @disnake.ui.button(label="Проверить", style=disnake.ButtonStyle.secondary,
+                       custom_id="music:cfg:jingle_try", row=1)
+    async def jingle_try(self, button, inter: disnake.MessageInteraction):
+        """Знак прямо сейчас: не надо ждать, пока кто-то зайдёт в канал."""
+        cog = inter.bot.get_cog("Music")
+        if cog is None or inter.guild is None:
+            return await inter.response.send_message(
+                embed=_err(inter.bot, "НЕ ПОЛУЧАЕТСЯ", "Модуль музыки выключен"),
+                ephemeral=True)
+        ok, why = await cog.play_jingle(inter.guild)
+        await inter.response.send_message(
+            embed=(_ok if ok else _err)(inter.bot, "ЗВУК ПРИ ВХОДЕ", f"🔔  {why}",
+                                        inter.guild),
+            ephemeral=True)
 
 
 class Music(commands.Cog):
@@ -1977,6 +2032,8 @@ class Music(commands.Cog):
             p.queue.clear()
             p.current = None
             p.source = None
+            # накладка не должна пережить выход: иначе «дзынь» доиграет в пустоту
+            p.jingles.drop()
         vc = guild.voice_client
         if vc:
             await vc.disconnect(force=True)
@@ -2117,6 +2174,41 @@ class Music(commands.Cog):
         if p is None or p.mirror is None:
             return 0, b""
         return p.mirror.take(since)
+
+    async def play_jingle(self, guild: disnake.Guild) -> tuple:
+        """🔔 Короткий знак, что в канал с ботом зашёл человек.
+
+        Возвращает (получилось, словами что произошло) — по этому же ответу проверяется
+        и настройка, и кнопка «Проверить». Три случая: трек играет (реплика приплетается
+        поверх, трек не прерывается), пауза (не трогаем: иначе звук выстрелит при снятии
+        с паузы), тишина (играем сам, иначе человек ничего не услышит).
+        """
+        if not _cfg(guild.id)["jingle"]:
+            return False, "настройка выключена"
+        vc = guild.voice_client
+        if vc is None or not vc.is_connected() or vc.channel is None:
+            return False, "бот не в голосовом"
+        p = self.players.get(guild.id)
+        if p is None:
+            return False, "плеера ещё нет — бот никуда не заходил"
+        now = time.monotonic()
+        if now - p.jingle_at < JINGLE_GAP:
+            return False, f"только что звучал: знак не чаще одного раза в {int(JINGLE_GAP)} с"
+        p.jingle_at = now
+        pcm = await p.jingles.apick()
+        if vc.is_playing():
+            p.jingles.fire(pcm)
+            return True, "поверх трека"
+        if vc.is_paused():
+            p.jingles.drop()
+            return False, "на паузе — не трогаем"
+        src = disnake.PCMVolumeTransformer(
+            _TeeSource(disnake.PCMAudio(io.BytesIO(pcm)), None, p.mirror), volume=p.volume)
+        try:
+            vc.play(src)
+        except Exception as e:
+            return False, f"не дал заиграть: {str(e)[:60]}"
+        return True, "в тишине"
 
     def web_library(self, query: str = "") -> dict:
         """Библиотека для живого поиска: имя, есть ли обложка, ничего лишнего."""
@@ -2480,7 +2572,7 @@ class Music(commands.Cog):
         await self._play_next(inter.guild)
 
     def _make_source(self, track: dict, volume: float, at: int = 0, fx: dict = None,
-                     mirror=None):
+                     mirror=None, jingles=None):
         """Источник ffmpeg + файл, куда он пишет свои ошибки.
 
         stderr в PIPE без читателя опасен: буфер забивается и ffmpeg встаёт посреди
@@ -2494,7 +2586,7 @@ class Music(commands.Cog):
                                          before_options=_before_options(track["stream_url"], at),
                                          options=opts, stderr=err)
             # зеркало живёт и без audioop: полосы требуют его, байты — нет
-            pcm = _TeeSource(raw, LiveBands() if audioop else None, mirror)
+            pcm = _TeeSource(raw, LiveBands() if audioop else None, mirror, jingles)
             src = disnake.PCMVolumeTransformer(pcm, volume=volume)
             src.live = getattr(pcm, "live", None)
             src.mirror = pcm.mirror
@@ -2602,7 +2694,7 @@ class Music(commands.Cog):
             at = min(at, max(0, int(dur) - 1))
         try:
             source, err_file = self._make_source(p.current, p.volume, at=at, fx=p.fx,
-                                                 mirror=p.mirror)
+                                                 mirror=p.mirror, jingles=p.jingles)
         except Exception as e:
             return {"error": f"Так ffmpeg не умеет: {str(e)[:120]}"}
         was_paused = vc.is_paused()
@@ -2663,7 +2755,8 @@ class Music(commands.Cog):
                 # ссылка на чужой стрим могла протухнуть, файл с диска — нет
                 fresh = await self._extract(track["webpage_url"])
                 track.update(fresh)
-            source, err_file = self._make_source(track, p.volume, fx=p.fx, mirror=p.mirror)
+            source, err_file = self._make_source(track, p.volume, fx=p.fx, mirror=p.mirror,
+                                                 jingles=p.jingles)
         except Exception as e:
             p.dj_fails += 1
             gave_up = p.dj and p.dj_fails >= 4
@@ -2880,6 +2973,12 @@ class Music(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
+        # 🔔 человек зашёл в тот же канал, где сидит бот — короткий знак
+        if (not member.bot and after.channel is not None
+                and (before.channel is None or before.channel.id != after.channel.id)):
+            vc = member.guild.voice_client if member.guild else None
+            if vc is not None and vc.channel is not None and vc.channel.id == after.channel.id:
+                await self.play_jingle(member.guild)
         # если бот остался один в канале — выходим (настройка «Авто-выход»)
         vc = member.guild.voice_client
         if vc and vc.channel and len([m for m in vc.channel.members if not m.bot]) == 0:
