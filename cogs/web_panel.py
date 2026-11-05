@@ -353,6 +353,7 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/staff", self.h_staff)
             app.router.add_get("/api/channels", self.h_channels)
             app.router.add_get("/api/members", self.h_members)
+            app.router.add_get("/api/roles", self.h_roles)
             app.router.add_get("/api/voices", self.h_voices)
             app.router.add_post("/api/send", self.h_send)
             app.router.add_get("/api/chat", self.h_chat)
@@ -832,6 +833,12 @@ class WebPanel(commands.Cog):
             return _json({"error": err}, 503)
         return _json(await tools.members_fetch(self.bot, request.query.get("q", ""),
                                                request.query.get("limit") or 50))
+
+    async def h_roles(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        return _json(tools.guild_roles(self.bot))
 
     async def h_voices(self, request: web.Request) -> web.Response:
         tools, err = self._tools()

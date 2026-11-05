@@ -59,6 +59,7 @@ def is_admin(user_or_inter: Any) -> bool:
     1. Владелец сервера
     2. ID пользователя в admin_user_ids
     3. У пользователя есть роль из admin_role_ids
+    4. На чужом сервере — свои привязки сервера (см. utils/guild_cfg.py)
     """
     # Определяем, передали нам взаимодействие (Interaction) или просто пользователя (Member/User)
     if isinstance(user_or_inter, (disnake.ApplicationCommandInteraction, disnake.MessageInteraction)):
@@ -86,6 +87,18 @@ def is_admin(user_or_inter: Any) -> bool:
         for role in user.roles:
             if role.id in admin_roles:
                 return True
+
+    # config.json — настройки основного сервера: его id людей и ролей на чужом сервере не
+    # совпадут ни с кем. Без привязок сервера на втором сервере не было бы ни одного админа
+    # бота, и панель там никто бы не открыл.
+    from utils import guild_cfg
+
+    if user.id in guild_cfg.role_ids("admin_user_ids", guild.id):
+        return True
+    if isinstance(user, disnake.Member):
+        mine_roles = set(guild_cfg.role_ids("admin_role_ids", guild.id))
+        if mine_roles and any(role.id in mine_roles for role in user.roles):
+            return True
 
     return False
 

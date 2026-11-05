@@ -498,6 +498,50 @@ class SendPanelsView(disnake.ui.View):
 # -------------------------------------------------------------
 # 7.5. ПОДМЕНЮ: УПРАВЛЕНИЕ АДМИНИСТРАТОРАМИ (ВЫДАЧА ЧЕЛОВЕКУ)
 # -------------------------------------------------------------
+
+def set_admin(guild, user_id: int, give: bool):
+    """Выдать или забрать админку. Возвращает (изменилось, где, ошибка).
+
+    На основном сервере список общий и лежит в config.json — так было всегда. На чужом
+    сервере админку пишем только в привязки этого сервера: глобальная запись сделала бы
+    человека админом чужих серверов, которые он не админит.
+    """
+    from utils import guild_cfg
+
+    user_id = int(user_id or 0)
+    if not user_id:
+        return False, "", "Непонятно, кому именно выдать админку."
+    gid = int(getattr(guild, "id", 0) or 0)
+    if gid and not guild_cfg.is_home(gid):
+        ids = [int(x) for x in guild_cfg.role_ids("admin_user_ids", gid)]
+        if give:
+            if user_id in ids:
+                return False, "этот сервер", ""
+            ids.append(user_id)
+        else:
+            if user_id not in ids:
+                return False, "этот сервер", ""
+            ids = [i for i in ids if i != user_id]
+        err = guild_cfg.set_one(gid, "role_ids", "admin_user_ids", ids)
+        if err:
+            return False, "", err
+        return True, "этот сервер", ""
+
+    config = load_config()
+    users = [int(x) for x in (config.get("admin_user_ids") or [])]
+    if give:
+        if user_id in users:
+            return False, "весь бот", ""
+        users.append(user_id)
+    else:
+        if user_id not in users:
+            return False, "весь бот", ""
+        users = [i for i in users if i != user_id]
+    config["admin_user_ids"] = users
+    save_config(config)
+    return True, "весь бот", ""
+
+
 class AddAdminUserSelect(disnake.ui.UserSelect):
     def __init__(self):
         super().__init__(
@@ -510,17 +554,15 @@ class AddAdminUserSelect(disnake.ui.UserSelect):
     async def callback(self, inter: disnake.MessageInteraction):
         await inter.response.defer(ephemeral=True)
         selected_user = self.values[0]
-        config = load_config()
-        admin_users = config.get("admin_user_ids", [])
-        if selected_user.id not in admin_users:
-            admin_users.append(selected_user.id)
-            config["admin_user_ids"] = admin_users
-            save_config(config)
-
+        changed, where, err = set_admin(inter.guild, selected_user.id, True)
+        if err:
+            return await inter.edit_original_response(content=f"❌ {err}", view=None)
         view = AdminUsersView(inter.guild)
         emb = AdminUsersView.generate_embed(inter.guild)
         await inter.edit_original_response(
-            content=f"✅ Пользователю {selected_user.mention} (ID: `{selected_user.id}`) успешно выданы права администратора бота!",
+            content=(f"✅ {selected_user.mention} (ID: `{selected_user.id}`) — админка бота "
+                     f"выдана: {where}." if changed else
+                     f"ℹ️ У {selected_user.mention} админка бота уже есть ({where})."),
             view=view
         )
         try:
@@ -541,17 +583,15 @@ class RemoveAdminUserSelect(disnake.ui.UserSelect):
     async def callback(self, inter: disnake.MessageInteraction):
         await inter.response.defer(ephemeral=True)
         selected_user = self.values[0]
-        config = load_config()
-        admin_users = config.get("admin_user_ids", [])
-        if selected_user.id in admin_users:
-            admin_users.remove(selected_user.id)
-            config["admin_user_ids"] = admin_users
-            save_config(config)
-
+        changed, where, err = set_admin(inter.guild, selected_user.id, False)
+        if err:
+            return await inter.edit_original_response(content=f"❌ {err}", view=None)
         view = AdminUsersView(inter.guild)
         emb = AdminUsersView.generate_embed(inter.guild)
         await inter.edit_original_response(
-            content=f"❌ Права администратора бота у {selected_user.mention} (ID: `{selected_user.id}`) успешно сняты!",
+            content=(f"❌ Права администратора бота у {selected_user.mention} "
+                     f"(ID: `{selected_user.id}`) сняты: {where}." if changed else
+                     f"ℹ️ У {selected_user.mention} админки бота и не было ({where})."),
             view=view
         )
         try:
@@ -589,6 +629,22 @@ class AdminUsersView(disnake.ui.View):
             users_list = "*Пока нет добавленных пользователей. Выберите человека в списке ниже, чтобы выдать доступ.*"
 
         emb.add_field(name=f"👥 Авторизованные администраторы ({len(admin_users)})", value=users_list, inline=False)
+
+        # На чужом сервере config.json — настройки основного, поэтому там список свой.
+        from utils import guild_cfg
+
+        gid = int(getattr(guild, "id", 0) or 0)
+        if gid and not guild_cfg.is_home(gid):
+            own = guild_cfg.role_ids("admin_user_ids", gid)
+            emb.add_field(
+                name=f"🛡 Админки только этого сервера ({len(own)})",
+                value="\n".join([f"• <@{uid}> (ID: `{uid}`)" for uid in own]) or
+                      "*Пока никто. Список ниже пишет админку только этому серверу.*",
+                inline=False)
+            emb.add_field(name="ℹ️ Как это работает",
+                          value="На этом сервере выдача касается **только его**: "
+                                "основной сервер и другие списки не меняются.",
+                          inline=False)
         return emb
 
     @disnake.ui.button(label="🔙 Главное меню", style=disnake.ButtonStyle.secondary, row=2)
@@ -888,8 +944,6 @@ def dev_card(bot) -> disnake.Embed:
              "Остальные экраны открывает `/панель` — уже на сервере.")
     return panel_embed(f"⚜️ Команды разработчика · {brand_name()}", sections,
                        guild=None, intro=intro)
-
-
 class AdminCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -963,6 +1017,23 @@ class AdminCog(commands.Cog):
 
         await inter.edit_original_response(content="✅ Все основные тексты отправлены в канал для проверки!")
 
+    @commands.slash_command(
+        name="админка",
+        description="Выдать или забрать админку бота: список выбора людей на этом сервере",
+        default_member_permissions=disnake.Permissions(manage_guild=True)
+    )
+    async def admin_users_panel(self, inter: disnake.ApplicationCommandInteraction):
+        """Экран выдачи админки одной кнопкой: /панель открывает его, а не слэш-команду."""
+        if not is_admin(inter):
+            return await inter.response.send_message("❌ Доступ запрещен!", ephemeral=True)
+        await inter.response.send_message(
+            embed=AdminUsersView.generate_embed(inter.guild),
+            view=AdminUsersView(inter.guild), ephemeral=True)
+
+    @commands.slash_command(
+        name="addadmin",
+        description="Выдать права администратора бота конкретному человеку"
+    )
     async def add_admin_command(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -972,15 +1043,13 @@ class AdminCog(commands.Cog):
             await inter.response.send_message("❌ Доступ запрещен!", ephemeral=True)
             return
 
-        config = load_config()
-        admin_users = config.get("admin_user_ids", [])
-        if user.id not in admin_users:
-            admin_users.append(user.id)
-            config["admin_user_ids"] = admin_users
-            save_config(config)
-
+        changed, where, err = set_admin(inter.guild, user.id, True)
+        if err:
+            return await inter.response.send_message(f"❌ {err}", ephemeral=True)
         await inter.response.send_message(
-            f"✅ Пользователю {user.mention} (ID: `{user.id}`) успешно выданы права администратора бота!",
+            f"✅ Пользователю {user.mention} (ID: `{user.id}`) выдана админка бота: {where}."
+            if changed else
+            f"ℹ️ У {user.mention} админка бота уже есть ({where}).",
             ephemeral=True
         )
 
@@ -997,15 +1066,13 @@ class AdminCog(commands.Cog):
             await inter.response.send_message("❌ Доступ запрещен!", ephemeral=True)
             return
 
-        config = load_config()
-        admin_users = config.get("admin_user_ids", [])
-        if user.id in admin_users:
-            admin_users.remove(user.id)
-            config["admin_user_ids"] = admin_users
-            save_config(config)
-
+        changed, where, err = set_admin(inter.guild, user.id, False)
+        if err:
+            return await inter.response.send_message(f"❌ {err}", ephemeral=True)
         await inter.response.send_message(
-            f"❌ Права администратора бота у {user.mention} (ID: `{user.id}`) успешно сняты!",
+            f"❌ Права администратора бота у {user.mention} (ID: `{user.id}`) сняты: {where}."
+            if changed else
+            f"ℹ️ У {user.mention} админки бота и не было ({where}).",
             ephemeral=True
         )
 

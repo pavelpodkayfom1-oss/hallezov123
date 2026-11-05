@@ -86,6 +86,7 @@ SECTIONS = [
     ]),
     ("⚙️", "Настройки бота", [
         ("🎛", "Главная админ-панель", "AdminCog.admin_command", "/admin"),
+        ("👑", "Выдать админку", "AdminCog.admin_users_panel", "/админка"),
         ("🧪", "Проверка текстов", "AdminCog.test_texts", "/test_texts"),
         ("😀", "Эмодзи пака", "HallTools.hz_emojis", "/hz_emojis"),
         ("🔤", "Эмодзи сервера", "BannerPanel.emoji_list", "/emoji_list"),
@@ -111,6 +112,7 @@ SECTIONS = [
         ("🗳", "Опросы: активные", "Polls.poll_list", "/опросы"),
         ("🗓", "Календарь семьи", "Dates.dates_panel", "/даты"),
         ("📡", "Стримы: анонсы", "Streams.streams_panel", "/стримы"),
+        ("🛡", "Жалобы: форма и приёмка", "Complaints.complaints_panel", "/жалобы"),
     ]),
     ("💰", "Казна и выплаты", [
         ("👑", "Казна: банк и отчёты", "Treasury.kazna_panel", "/казна"),
@@ -131,7 +133,7 @@ HR_REF = "HallRecruit.hr"
 # /codex — алиас /admin, тот же экран. Приказы (/баллы, /выговоры, /ранг, /ник, /сборы)
 # спрятали вместе с ними: аргументы им подставляет форма, так что команда им больше не нужна.
 HIDDEN = (
-    "admin", "codex", "test_texts", "hall", "hallpanel", "hz_emojis", "центр",
+    "admin", "админка", "codex", "test_texts", "hall", "hallpanel", "hz_emojis", "центр",
     "activity_check", "for_improve", "отпуск-список", "афк-список", "famq-recruiters",
     "golos", "golos-server", "govorit-panel", "zamolchi", "teg", "teg_access",
     "emoji_list", "mem", "prank_panel", "media_send", "hr_access",
@@ -151,7 +153,6 @@ EXTRA_SCREENS = [
     ("🧹", "ЧС: убрать запись", "FamqControl.bl_remove", "/famq-blacklist remove"),
     ("📁", "Логи: привязать канал", "FamLogs.logs_set", "/logs set"),
     ("🔕", "Логи: отвязать категорию", "FamLogs.logs_clear", "/logs clear"),
-    ("👑", "Забрать админку", "AdminCog.remove_admin_command", "/removeadmin"),
     ("🎧", "Музыка: отправить панель", "Music.music_panel", "/music_panel"),
     ("🎤", "Комнаты: отправить панель", "VoiceRooms.rooms_panel", "/rooms_panel"),
 ]

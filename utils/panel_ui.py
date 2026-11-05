@@ -4442,6 +4442,26 @@ function embedNode(e) {
   return box;
 }
 
+/* списки для «живых» селектов: в Discord их заполняет сам Discord, панели приходится спрашивать */
+async function pickOptions(kind) {
+  if (kind === 'role') {
+    const d = await api('/api/roles');
+    if (d.error) throw new Error(d.error);
+    return (d.rows || []).map((r) => [r.id, r.name]);
+  }
+  if (kind === 'channel') {
+    const d = await api('/api/channels');
+    if (d.error) throw new Error(d.error);
+    return (d.rows || []).map((c) => [c.id, chanLabel(c)]);
+  }
+  const d = await api('/api/members?limit=200');
+  if (d.error) throw new Error(d.error);
+  const people = (d.rows || []).map((m) => [m.id, m.name]);
+  if (kind !== 'mention') return people;
+  const roles = await pickOptions('role').catch(() => []);
+  return [...people, ...roles];
+}
+
 function screenNode(res, actorSel, refresh) {
   const box = h('div');
   if (res.kind === 'deleted') box.append(h('p', { class: 'muted' }, 'Ответ удалён.'));
@@ -4465,11 +4485,26 @@ function screenNode(res, actorSel, refresh) {
           post('/api/commands/press', { token: res.token, index: c.index, actor: actorSel.value }, ctr) },
           (c.emoji ? c.emoji + ' ' : '') + (c.label || 'кнопка')));
       } else if (c.kind === 'select') {
-        const sel = h('select', null, (c.options || []).map((o) => h('option', { value: o.value }, (o.emoji ? o.emoji + ' ' : '') + o.label)));
+        const multi = (c.max || 1) > 1;
+        const sel = h('select', multi ? { multiple: true, size: '5' } : { 'aria-label': c.label });
+        const fill = (pairs) => sel.replaceChildren(...(pairs.length
+          ? pairs.map(([v, t]) => h('option', { value: String(v) }, t))
+          : [h('option', { value: '' }, 'нет вариантов')]));
+        const done = () => Array.from(sel.selectedOptions).map((o) => o.value).filter(Boolean);
+        if ((c.options || []).length) {
+          fill(c.options.map((o) => [o.value, (o.emoji ? o.emoji + ' ' : '') + o.label]));
+        } else {
+          fill([['', 'загружаю…']]);
+          pickOptions(c.pick).then((pairs) => {
+            fill(pairs);
+            (c.chosen || []).forEach((id) => { const o = sel.querySelector('option[value="' + id + '"]'); if (o) o.selected = true; });
+          }).catch((e) => fill([['', e.message || 'не удалось загрузить']]));
+        }
         pick[c.index] = sel;
         ctr.append(h('div', { class: 'row' }, h('small', { class: 'muted' }, c.label), sel,
           h('button', { class: 'btn', onclick: () =>
-            post('/api/commands/press', { token: res.token, index: c.index, actor: actorSel.value, values: [sel.value] }, ctr) }, 'Выбрать')));
+            post('/api/commands/press', { token: res.token, index: c.index, actor: actorSel.value, values: done() }, ctr) },
+            multi ? 'Выбрать роли' : 'Выбрать')));
       } else if (c.kind === 'input') {
         ctr.append(h('p', { class: 'muted small' }, 'Поле «' + (c.label || '') + '» — его заполняют в форме ниже.'));
       }

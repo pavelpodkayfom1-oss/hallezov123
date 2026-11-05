@@ -788,6 +788,17 @@ async def members_fetch(bot, q: str = "", limit: Any = 50) -> Dict[str, Any]:
     return member_rows(bot, q, limit)
 
 
+def guild_roles(bot) -> Dict[str, Any]:
+    """Роли выбранного сервера — ими панель наполняет списки выбора на экранах."""
+    guild = guild_of(bot)
+    if guild is None:
+        return {"rows": [], "error": "Бот ни на одном сервере"}
+    rows = [{"id": str(r.id), "name": r.name}
+            for r in sorted([x for x in guild.roles if not x.managed and x.id != guild.id],
+                            key=lambda r: -r.position)]
+    return {"rows": rows}
+
+
 def _compose_embed(title: Any, text: str, color: Any, author: Any):
     """Рамка нужна, если есть заголовок или подпись «от кого»; иначе текст идёт просто сообщением."""
     title, author = str(title or "").strip(), str(author or "").strip()
@@ -1374,6 +1385,34 @@ def _field_label(item) -> str:
     return str(getattr(inner if inner is not None else item, "label", "") or "")
 
 
+def _pick_kind(ch) -> str:
+    """Что список выбирает сам: Discord заполняет такие селенты на своей стороне."""
+    for cls, name in ((disnake.ui.RoleSelect, "role"), (disnake.ui.UserSelect, "member"),
+                      (disnake.ui.ChannelSelect, "channel"),
+                      (disnake.ui.MentionableSelect, "mention")):
+        if isinstance(ch, cls):
+            return name
+    return ""
+
+
+def _pick_objects(bot, guild, kind: str, raw: List[str]) -> list:
+    """ID из панели — в людей и роли: disnake заполняет select сам только при настоящем клике."""
+    out: list = []
+    for one in raw or []:
+        s = str(one).strip()
+        if not s.isdigit():
+            continue
+        i = int(s)
+        obj = guild.get_role(i) if (guild and kind in ("role", "mention")) else None
+        if obj is None and kind in ("member", "mention"):
+            obj = (guild.get_member(i) if guild else None) or bot.get_user(i)
+        if obj is None and kind == "channel":
+            obj = bot.get_channel(i)
+        if obj is not None:
+            out.append(obj)
+    return out
+
+
 def _component_spec(view) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     for i, ch in enumerate(getattr(view, "children", []) or []):
@@ -1385,6 +1424,9 @@ def _component_spec(view) -> List[Dict[str, Any]]:
             out.append({"kind": "select", "index": i, "label": ch.placeholder or "Выбрать",
                         "disabled": bool(ch.disabled), "row": int(ch.row or 0),
                         "max": int(getattr(ch, "max_values", 1) or 1),
+                        "pick": _pick_kind(ch),
+                        "chosen": [str(getattr(d, "id", "") or "")
+                                   for d in (getattr(ch, "default_values", []) or [])],
                         "options": [{"label": o.label, "value": o.value,
                                      "emoji": _emoji_str(o.emoji), "hint": o.description or ""}
                                     for o in getattr(ch, "options", [])]})
@@ -1771,6 +1813,10 @@ async def press(bot, token: Any, index: Any, actor_id: Any,
     cap = _Cap(bot, entry.get("channel"))
     inter = WebInter(bot, actor, entry.get("channel"), cap,
                      component=child, values=[str(v) for v in (values or [])])
+    kind = _pick_kind(child)
+    if kind:
+        # без этого select.values остался бы пустым и кнопка стёрла бы уже привязанное
+        child._selected_values = _pick_objects(bot, inter.guild, kind, inter.values)
     try:
         await child.callback(inter)
     except Exception as e:
@@ -2302,6 +2348,7 @@ def _text_limit(kind: str) -> int:
 _GROUP_BY_PREFIX = (
     ("kazna_", "Казна"),
     ("pay_", "Выплаты"),
+    ("cmp_", "Жалобы"),
     ("modal_recruit", "Набор и заявки"), ("btn_recruit", "Набор и заявки"),
     ("modal_reject", "Набор и заявки"), ("select_voice", "Набор и заявки"),
     ("recruit_", "Набор и заявки"),
@@ -2315,7 +2362,7 @@ _GROUP_BY_PREFIX = (
     ("remind_", "Напоминания"),
 )
 # Порядок разделов в списке: то, что чаще правят, выше.
-_GROUP_ORDER = ("Приветствия", "Казна", "Выплаты", "Набор и заявки", "Повышения", "Сборы",
+_GROUP_ORDER = ("Приветствия", "Казна", "Выплаты", "Жалобы", "Набор и заявки", "Повышения", "Сборы",
                 "Наказания", "Опросы", "Календарь", "Стримы", "Напоминания", "Прочее")
 
 
