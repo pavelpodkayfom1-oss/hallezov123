@@ -76,6 +76,12 @@ try:
 except TypeError:
     bot = commands.Bot(**_bot_kwargs)
 
+# С какого сервера пришёл запрос: без этого привязки каналов и ролей читались бы
+# общие на всех (см. utils/guild_cfg.py).
+from utils import guild_cfg  # noqa: E402
+
+guild_cfg.install(bot)
+
 # Автозагрузка: подхватывает ВСЕ файлы из папки cogs (логи, emoji, голос, теги и т.д.)
 COGS_DIR = BASE_DIR / "cogs"
 

@@ -339,6 +339,8 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/overview", self.h_overview)
             app.router.add_get("/api/guilds", self.h_guilds)
             app.router.add_post("/api/guilds/music", self.h_guild_music)
+            app.router.add_get("/api/guild/bindings", self.h_guild_bindings)
+            app.router.add_post("/api/guild/bindings", self.h_guild_binding_save)
             app.router.add_get("/api/modules", self.h_modules)
             app.router.add_post("/api/modules/{name}/{action}", self.h_module_action)
             app.router.add_get("/api/files", self.h_files)
@@ -588,6 +590,27 @@ class WebPanel(commands.Cog):
         print(f"🎛 Панель: {message}", flush=True)
         return _json({"ok": True, "g": str(guild.id), "on": on, "url": url,
                       "guilds": self._guild_rows(), "message": message})
+
+    async def h_guild_bindings(self, request: web.Request) -> web.Response:
+        """Привязки выбранного сервера: каналы заявок, роли, кто привязал."""
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        return _json(tools.bindings(self.bot))
+
+    async def h_guild_binding_save(self, request: web.Request) -> web.Response:
+        """Привязать канал или роль — только своему серверу; основной отвечает отказом."""
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        if str(body.get("g") or "").isdigit():
+            tools.pick(str(body.get("g")))
+        key = str(body.get("key") or "")[:64]
+        if not key:
+            return _json({"error": "Не указано, что привязывать"}, 400)
+        res = await tools.binding_save(self.bot, key, body.get("value"))
+        return _json(res, 400 if self._fail(res) else 200)
 
     async def h_overview(self, request: web.Request) -> web.Response:
         from utils.checks import load_config

@@ -27,7 +27,7 @@ import disnake
 from disnake.ext import commands, tasks
 
 import database as db
-from utils import brand, cdn_assets, state_backup
+from utils import brand, cdn_assets, guild_cfg, state_backup
 from utils.embeds import note_embed as _note_embed
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -872,16 +872,48 @@ def steps_block():
 
 # ───────────────────────────── ПРАВА / КАНАЛЫ ─────────────────────────────
 
+def gid_of(obj=None) -> int:
+    """Id сервера, к которому относится объект; без объекта — сервер текущего запроса.
+
+    Нужен потому, что id каналов и ролей принадлежат ровно одному серверу: без него
+    второй сервер читал бы привязки первого.
+    """
+    if obj is None:
+        return guild_cfg.guild_now()
+    if isinstance(obj, int):
+        return obj
+    g = getattr(obj, "guild", None)
+    if g is None and all(hasattr(obj, a) for a in ("channels", "roles", "members")):
+        g = obj                    # это сам сервер: у канала таких три поля одновременно нет
+    try:
+        return int(getattr(g, "id", 0) or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def own_bindings(gid: int) -> bool:
+    """True, если у сервера свои привязки (guild_settings.json), а не общие из config.json."""
+    return bool(gid) and not guild_cfg.is_home(gid)
+
+
+def admin_role_ids(guild=None) -> list:
+    cfg = get_cfg()
+    gid = gid_of(guild)
+    if own_bindings(gid):
+        return sorted(set(guild_cfg.role_ids("admin_role_ids", gid)) - {0})
+    return sorted(set(cfg.get("admin_role_ids", [])) - {0})
+
+
 def is_admin(member) -> bool:
     if not isinstance(member, disnake.Member):
         return False
     p = member.guild_permissions
     if p.administrator or p.manage_guild:
         return True
-    cfg = get_cfg()
-    if member.id in set(cfg.get("admin_user_ids", [])):
+    # id пользователя одинаковы на всех серверах, поэтому админки из панели действуют везде
+    if member.id in set(get_cfg().get("admin_user_ids", [])):
         return True
-    ids = set(cfg.get("admin_role_ids", [])) - {0}
+    ids = set(admin_role_ids(member.guild))
     return any(r.id in ids for r in member.roles)
 
 
@@ -890,12 +922,22 @@ def is_staff(member) -> bool:
         return True
     if not isinstance(member, disnake.Member):
         return False
-    cfg = get_cfg()
-    ids = (set(cfg.get("recruiter_role_ids", [])) | set(S["staff_roles"])) - {0}
+    ids = set(recruiter_role_ids(member.guild))
     return any(r.id in ids for r in member.roles)
 
 
-def chan_id(kind: str) -> int:
+def chan_id(kind: str, guild=None) -> int:
+    gid = gid_of(guild)
+    if own_bindings(gid):
+        v = guild_cfg.chan(kind, gid)
+        if v:
+            return v
+        if kind == "orders":
+            return guild_cfg.chan("review", gid) or guild_cfg.chan("recruitment_channel_id", gid)
+        if kind == "points_panel":
+            return guild_cfg.chan("panel", gid) or guild_cfg.chan("recruitment_channel_id", gid)
+        # основного сервера здесь быть не может: чужой сервер не наследует его каналы
+        return guild_cfg.chan("recruitment_channel_id", gid)
     v = S["channels"].get(kind, 0)
     if v:
         return v
@@ -905,6 +947,109 @@ def chan_id(kind: str) -> int:
     if kind == "points_panel":
         return S["channels"].get("panel") or base
     return base
+
+
+def logs_cid(guild=None) -> int:
+    gid = gid_of(guild)
+    if own_bindings(gid):
+        return guild_cfg.chan("logs_channel_id", gid)
+    return int(get_cfg().get("channels", {}).get("logs_channel_id", 0) or 0)
+
+
+def fam_role_id(key: str, guild=None) -> int:
+    """Роль семьи/ранга: у своего сервера — только его собственные привязки."""
+    gid = gid_of(guild)
+    if own_bindings(gid):
+        return guild_cfg.role(key, gid)
+    cfg = get_cfg()
+    if key.startswith("rank_"):
+        rank = key.split("_", 1)[1].split("_")[0]
+        return (cfg.get("ranks", {}).get(rank, {}) or {}).get("role_id") or cfg.get("roles", {}).get(key, 0)
+    return cfg.get("roles", {}).get(key, 0)
+
+
+def published(kind: str, guild=None) -> list:
+    gid = gid_of(guild)
+    if own_bindings(gid):
+        return list(guild_cfg.get(gid, "published", kind, [0, 0]) or [0, 0])
+    return list(S["published"].get(kind, [0, 0]) or [0, 0])
+
+
+def set_published(kind: str, ch, msg, guild=None):
+    gid = gid_of(guild)
+    if own_bindings(gid):
+        guild_cfg.set_one(gid, "published", kind, [int(ch.id), int(msg.id)],
+                          by=getattr(getattr(msg, "author", None), "id", 0))
+        return
+    S["published"][kind] = [ch.id, msg.id]
+    save_settings()
+
+
+def bind_chan(key: str, guild=None) -> int:
+    """Канал, привязанный именно к этому пункту, — без подмены общим каналом заявок.
+
+    chan_id() для незаданного пункта отдаёт канал заявок (так было всегда), а для
+    «правил» или служебного канала это означало бы пост в заявку.
+    """
+    gid = gid_of(guild)
+    if own_bindings(gid):
+        return guild_cfg.chan(key, gid)
+    return int(S["channels"].get(key) or 0)
+
+
+def set_chan(key: str, cid: int, guild=None, by: int = 0):
+    """Пишет привязку канала. Возвращает текст ошибки или None."""
+    gid = gid_of(guild)
+    if own_bindings(gid):
+        return guild_cfg.set_one(gid, "channels", key, int(cid or 0), by=by)
+    S["channels"][key] = int(cid or 0)
+    save_settings()
+    return None
+
+
+def set_staff_roles(ids: list, guild=None, by: int = 0):
+    gid = gid_of(guild)
+    if own_bindings(gid):
+        return guild_cfg.set_one(gid, "role_ids", "recruiter_role_ids", [int(i) for i in ids], by=by)
+    S["staff_roles"] = list(ids)
+    save_settings()
+    return None
+
+
+def bind_show(key: str, guild=None):
+    """Что привязано к пункту — для экранов: свои привязки, иначе S/config.json."""
+    sec, kind = guild_cfg.where(key)
+    gid = gid_of(guild)
+    if own_bindings(gid):
+        val = guild_cfg.get(gid, sec, key, [] if kind == "roles" else 0)
+        return [int(x) for x in val] if kind == "roles" else int(val or 0)
+    cfg = get_cfg()
+    if sec == "channels":
+        if key in S["channels"]:
+            return int(S["channels"].get(key) or 0)
+        return int(cfg.get("channels", {}).get(key) or 0)
+    if sec == "roles":
+        if key.startswith("rank_"):
+            rank = key.split("_", 1)[1].split("_")[0]
+            return int((cfg.get("ranks", {}).get(rank, {}) or {}).get("role_id")
+                       or cfg.get("roles", {}).get(key) or 0)
+        return int(cfg.get("roles", {}).get(key) or 0)
+    if key == "recruiter_role_ids":
+        return sorted((set(cfg.get("recruiter_role_ids", [])) | set(S["staff_roles"])) - {0})
+    return sorted(set(cfg.get("admin_role_ids", [])) - {0})
+
+
+async def refresh_recruiter_access(guild) -> str:
+    """Перевыдаёт ролям рекрутеров «Управлять ветками» в канале заявок этого сервера."""
+    global _roles_acc_ts
+    ch = await get_channel(chan_id("review", guild))
+    if not isinstance(ch, disnake.TextChannel):
+        return "Канал заявок ещё не привязан — доступ ролям не выдан."
+    _roles_acc_ts = time.time()
+    fixed = await ensure_recruiter_role_access(ch)
+    if fixed:
+        return "Право «Управлять ветками» в " + ch.mention + " получили: " + ", ".join(r.name for r in fixed)
+    return f"В {ch.mention} всё было выдано."
 
 
 async def get_channel(cid: int):
@@ -942,7 +1087,10 @@ _IN_THREAD: set = set()
 _roles_acc_ts = 0.0
 
 
-def recruiter_role_ids(guild: disnake.Guild) -> list:
+def recruiter_role_ids(guild=None) -> list:
+    gid = gid_of(guild)
+    if own_bindings(gid):
+        return sorted(set(guild_cfg.role_ids("recruiter_role_ids", gid)) - {0})
     ids = (set(get_cfg().get("recruiter_role_ids", [])) | set(S["staff_roles"])) - {0}
     return sorted(ids)
 
@@ -1051,11 +1199,17 @@ async def cdn_upload_channel():
     """
     if _BOT is None:
         return None
-    ch = await get_channel(S["channels"].get("cdn") or 0)
+    _gid = guild_cfg.guild_now()
+    _cdn = guild_cfg.chan("cdn", _gid) if own_bindings(_gid) else (S["channels"].get("cdn") or 0)
+    ch = await get_channel(_cdn)
     if isinstance(ch, disnake.TextChannel) and _can_post(ch):
         return ch
     busy = {S["channels"].get(k) or 0 for k in ("panel", "review", "orders", "points_panel")}
     busy.add(get_cfg().get("channels", {}).get("recruitment_channel_id", 0) or 0)
+    # каналы, привязанные на других серверах: служебная картинка не должна попасть в чужую заявку
+    for one in guild_cfg.servers():
+        for k in ("panel", "review", "orders", "points_panel", "recruitment_channel_id"):
+            busy.add(guild_cfg.chan(k, one))
     for guild in _BOT.guilds:
         me = guild.me
         if me is None:
@@ -1065,7 +1219,7 @@ async def cdn_upload_channel():
                 continue
             if not c.permissions_for(guild.default_role).view_channel:
                 return c      # @everyone его не видит — служебное сообщение никто не заметит
-    ch = await get_channel(get_cfg().get("channels", {}).get("logs_channel_id", 0) or 0)
+    ch = await get_channel(logs_cid())
     if isinstance(ch, disnake.TextChannel) and _can_post(ch):
         return ch
     return None
@@ -1397,7 +1551,7 @@ async def submit_application(inter: disnake.ModalInteraction):
             return await inter.response.send_message(embed=note_embed("❌ Возраст укажите числом, например `18`."), ephemeral=True)
         age = int(d["age"])
 
-    ch = await get_channel(chan_id("review"))
+    ch = await get_channel(chan_id("review", inter.guild))
     if not isinstance(ch, disnake.TextChannel):
         return await inter.response.send_message(
             embed=note_embed("❌ Канал для заявок не настроен. Администратору: `/hr` → «Каналы и роли»."), ephemeral=True)
@@ -1418,7 +1572,7 @@ async def submit_application(inter: disnake.ModalInteraction):
 
     await inter.response.defer(ephemeral=True)
     emb = card_embed(nick, inter.author, answers, f"{em('apply')} **Новая заявка**", cfg_color("warning_color", 0xF39C12))
-    roles = (set(get_cfg().get("recruiter_role_ids", [])) | set(S["staff_roles"])) - {0}
+    roles = set(recruiter_role_ids(ch.guild))
     ping = " ".join(f"<@&{r}>" for r in roles)
 
     # Только приватная ветка: в самом канале не появляется НИ ОДНОГО сообщения
@@ -1642,10 +1796,13 @@ def _thread_dump(messages: List[disnake.Message]) -> str:
 
 async def archive_thread_to_logs(th, app: Dict[str, Any], reviewer, result: str, color: int):
     """Сохраняет переписку ветки заявки файлом .txt в канал логов. Возвращает текст ошибки или None."""
-    cid = int(get_cfg().get("channels", {}).get("logs_channel_id", 0) or 0)
+    gid = gid_of(th)
+    cid = logs_cid(gid)
     log_ch = await get_channel(cid)
     if log_ch is None:
-        return "архив ветки не отправлен: канал логов не найден (channels.logs_channel_id в config.json)"
+        return ("архив ветки не отправлен: канал логов не найден ("
+                + ("привяжите его: «Каналы и роли»" if own_bindings(gid)
+                   else "channels.logs_channel_id в config.json") + ")")
     try:
         messages = [m async for m in th.history(limit=None, oldest_first=True)]
         data = _thread_dump(messages) or "(в ветке нет сообщений)"
@@ -1788,8 +1945,8 @@ async def h_accept(inter: disnake.MessageInteraction):
 
     # 2) роли
     role_ids = []
-    fam = cfg.get("roles", {}).get("family_role_id", 0)
-    rk1 = (cfg.get("ranks", {}).get("1", {}) or {}).get("role_id") or cfg.get("roles", {}).get("rank_1_role_id", 0)
+    fam = fam_role_id("family_role_id", guild)
+    rk1 = fam_role_id("rank_1_role_id", guild)
     for rid in (fam, rk1):
         if rid:
             role = guild.get_role(rid)
@@ -1801,7 +1958,8 @@ async def h_accept(inter: disnake.MessageInteraction):
         except Exception as e:
             warnings.append(f"роли не выданы ({e.__class__.__name__}) — проверьте иерархию ролей бота")
     else:
-        warnings.append("роли семьи не настроены в config.json")
+        warnings.append("роли семьи не привязаны на этом сервере: `/hr` → «Каналы и роли»"
+                        if own_bindings(gid_of(guild)) else "роли семьи не настроены в config.json")
 
     await db.upsert_member(app["user_id"], app["nick"], app["static_id"], 1)
     # внутри вызывается хук, который начисляет баллы рекруту и приглашающему
@@ -1939,7 +2097,7 @@ class ReferralModal(disnake.ui.Modal):
             return await inter.response.send_message(embed=note_embed("ℹ️ Этот игрок уже в семье — приглашение не засчитывается."), ephemeral=True)
         if await db.find_active_referral_by_static(v["inv_static"]):
             return await inter.response.send_message(embed=note_embed("ℹ️ На этого игрока уже подана заявка о приглашении."), ephemeral=True)
-        ch = await get_channel(chan_id("orders"))
+        ch = await get_channel(chan_id("orders", inter.guild))
         if not isinstance(ch, disnake.TextChannel):
             return await inter.response.send_message(embed=note_embed("❌ Канал для приглашений не настроен (`/hr` → «Каналы и роли»)."), ephemeral=True)
 
@@ -2091,7 +2249,7 @@ async def _shop_buy(inter: disnake.MessageInteraction, key: str):
         return await inter.response.edit_message(content="❌ Приз недоступен.", embed=None, view=None)
     if item.get("stock", -1) == 0:
         return await inter.response.edit_message(content="❌ Приз закончился.", embed=None, view=None)
-    ch = await get_channel(chan_id("orders"))
+    ch = await get_channel(chan_id("orders", inter.guild))
     if not isinstance(ch, disnake.TextChannel):
         return await inter.response.edit_message(content="❌ Канал заказов не настроен — обратитесь к администрации.", embed=None, view=None)
 
@@ -2175,13 +2333,19 @@ async def h_order_no(inter: disnake.MessageInteraction):
 
 def dash_embed() -> disnake.Embed:
     ch = lambda k: (f"<#{chan_id(k)}>" if chan_id(k) else "не задан")
-    pub = S["published"]
     p = S["points"]
+    gid = guild_cfg.guild_now()
     is_open = get_cfg().get("recruitment_open", True)
     emb = disnake.Embed(
         title=f"{em('crown')} Рекрут-центр • Панель управления", color=main_color(),
         description=("Всё настраивается кнопками ниже — править файлы не нужно.\n"
                      f"**Набор сейчас:** {'🟢 открыт' if is_open else '🔴 закрыт'}"))
+    if own_bindings(gid):
+        # на втором сервере админ должен видеть, что он настраивает именно его, а не общий конфиг
+        gname = getattr(_BOT.get_guild(gid), "name", "") if _BOT is not None else ""
+        free = len(guild_cfg.missing(gid))
+        emb.description += (f"\n**{gname}:** каналы и роли привязываются свои, "
+                            f"не привязано — **{free}**")
     try:
         emb.set_thumbnail(url=_BOT.user.display_avatar.url)
     except Exception:
@@ -2208,7 +2372,8 @@ def dash_embed() -> disnake.Embed:
                   value=f"Панель заявки: {ch('panel')}\nКарточки заявок: {ch('review')}\nЗаказы/приглашения: {ch('orders')}\nРекрут-центр: {ch('points_panel')}",
                   inline=False)
     emb.add_field(name="📌 Опубликовано",
-                  value=f"Заявка: {'✅' if pub['apply'][1] else '—'} • Рекрут-центр: {'✅' if pub['points'][1] else '—'}", inline=False)
+                  value=f"Заявка: {'✅' if published('apply', gid)[1] else '—'} "
+                        f"• Рекрут-центр: {'✅' if published('points', gid)[1] else '—'}", inline=False)
     emb.set_footer(text="Изменили оформление, кнопки или тексты? Нажмите «Опубликовать», чтобы обновить панели в каналах.")
     return emb
 
@@ -2806,13 +2971,9 @@ class ItemModal(disnake.ui.Modal):
 
 # ───── Каналы и роли ─────
 
-CHANNEL_TARGETS = {
-    "panel": "Панель заявки (где кнопка «Подать заявку»)",
-    "review": "Карточки заявок для рекрутеров",
-    "orders": "Заказы магазина и приглашения",
-    "points_panel": "Панель «Рекрут-центр» (баллы/магазин)",
-    "cdn": "Служебный канал для баннеров (не заявочный)",
-}
+# Один список на Discord-экран и на сайт (см. utils/guild_cfg.BIND_CHANNELS),
+# чтобы подписи не разъезжались.
+CHANNEL_TARGETS = {k: lbl for k, lbl, _ in guild_cfg.BIND_CHANNELS}
 
 
 class ChannelsView(AdminView):
@@ -2828,11 +2989,23 @@ class ChannelsView(AdminView):
         self.add_item(_back_button(author_id))
 
     def embed(self) -> disnake.Embed:
-        lines = [f"**{v}:** " + (f"<#{S['channels'][k]}>" if S["channels"].get(k) else "по умолчанию")
-                 for k, v in CHANNEL_TARGETS.items()]
-        roles = " ".join(f"<@&{r}>" for r in S["staff_roles"]) or "только роли из config.json"
+        gid = guild_cfg.guild_now()
+        own = own_bindings(gid)
+
+        def show(k: str) -> str:
+            chan = bind_chan(k, gid)
+            if not chan and not own:
+                # у основного сервера часть каналов живёт в config.json
+                chan = int(get_cfg().get("channels", {}).get(k) or 0)
+            return f"<#{chan}>" if chan else ("не привязано" if own else "по умолчанию")
+
+        lines = [f"**{v}:** {show(k)}" for k, v in CHANNEL_TARGETS.items()]
+        roles = " ".join(f"<@&{r}>" for r in recruiter_role_ids(gid)) or (
+            "не привязано" if own else "только роли из config.json")
+        gname = getattr(_BOT.get_guild(gid), "name", "") if _BOT is not None else ""
+        head = f"**{gname}** — привязки только этого сервера.\n\n" if own else ""
         return disnake.Embed(title="📍 Каналы и роли", color=main_color(),
-                             description="\n".join(lines) + f"\n\n**Роли рекрутеров:** {roles}\n\n"
+                             description=head + "\n".join(lines) + f"\n\n**Роли рекрутеров:** {roles}\n\n"
                                          f"Сейчас выбран пункт: **{CHANNEL_TARGETS[self.target]}**")
 
     async def pick_target(self, inter, values):
@@ -2841,14 +3014,16 @@ class ChannelsView(AdminView):
 
     async def pick_channel(self, inter, ids):
         if ids:
-            S["channels"][self.target] = ids[0]
-            save_settings()
+            err = set_chan(self.target, ids[0], inter.guild, by=inter.author.id)
+            if err:
+                return await inter.response.send_message(embed=note_embed(f"❌ {err}"), ephemeral=True)
         await inter.response.edit_message(embed=self.embed(), view=self)
 
     async def pick_roles(self, inter, ids):
         global _roles_acc_ts
-        S["staff_roles"] = ids
-        save_settings()
+        err = set_staff_roles(ids, inter.guild, by=inter.author.id)
+        if err:
+            return await inter.response.send_message(embed=note_embed(f"❌ {err}"), ephemeral=True)
         _roles_acc_ts = 0.0   # сменили роли — права на ветки надо перевыдать
         await inter.response.edit_message(embed=self.embed(), view=self)
 
@@ -2901,7 +3076,7 @@ class RulesView(AdminView):
 
     def embed(self) -> disnake.Embed:
         e = rules_embed()
-        cid = S["channels"].get("rules") or 0
+        cid = bind_chan("rules")
         cur = "новый" if S.get("rules_style") == "new" else "старый"
         e.description += (f"\n\n​\n*Сейчас используется: **{cur}** вид. «Отправить новый» / «Вернуть старый» "
                           "удаляют прошлый пост правил и публикуют выбранный.*")
@@ -2911,8 +3086,7 @@ class RulesView(AdminView):
 
     async def pick_channel(self, inter, ids):
         if ids:
-            S["channels"]["rules"] = ids[0]
-            save_settings()
+            set_chan("rules", ids[0], inter.guild, by=inter.author.id)
         await inter.response.edit_message(embed=self.embed(), view=self)
 
     async def send_new(self, inter):
@@ -2922,14 +3096,15 @@ class RulesView(AdminView):
         await self._publish(inter, "old")
 
     async def _publish(self, inter, style: str):
-        cid = S["channels"].get("rules") or 0
+        gid = gid_of(inter.guild)
+        cid = bind_chan("rules", gid)
         if not cid:
             return await inter.response.send_message(embed=note_embed("❌ Сначала выберите канал."), ephemeral=True)
         ch = await get_channel(cid)
         if not isinstance(ch, disnake.TextChannel):
             return await inter.response.send_message(embed=note_embed("❌ Канал недоступен боту."), ephemeral=True)
         await inter.response.defer(ephemeral=True)
-        old = S["published"].get("rules") or [0, 0]
+        old = published("rules", gid)
         try:
             emb, file = rules_embed(with_file=True, style=style)
             msg = await (ch.send(embed=emb, file=file) if file else ch.send(embed=emb))
@@ -2944,8 +3119,7 @@ class RulesView(AdminView):
             except Exception:
                 pass
         S["rules_style"] = style
-        S["published"]["rules"] = [ch.id, msg.id]
-        save_settings()
+        set_published("rules", ch, msg, gid)
         await inter.followup.send(embed=note_embed(
             f"✅ {'Новый' if style == 'new' else 'Старый'} вид правил отправлен в {ch.mention}"), ephemeral=True)
 
@@ -3158,12 +3332,13 @@ def publish_embed() -> disnake.Embed:
                      f"Видео под заявкой: {'✅ загружено' if video_path() else '—'} (команда `/hr_video`)"))
 
 
-async def publish_panel(kind: str):
+async def publish_panel(kind: str, guild=None):
     """Возвращает (ok, текст)."""
-    ch = await get_channel(chan_id("panel" if kind == "apply" else "points_panel"))
+    gid = gid_of(guild)
+    ch = await get_channel(chan_id("panel" if kind == "apply" else "points_panel", gid))
     if not isinstance(ch, disnake.TextChannel):
         return False, "Канал не настроен: «Каналы и роли»."
-    old = S["published"].get(kind, [0, 0])
+    old = published(kind, gid)
     if old and old[0]:
         oc = await get_channel(old[0])
         if oc:
@@ -3179,8 +3354,7 @@ async def publish_panel(kind: str):
         msg = await ch.send(embed=emb, file=file, view=view) if file else await ch.send(embed=emb, view=view)
     except disnake.Forbidden:
         return False, f"Нет прав писать в {ch.mention} (нужны: отправка сообщений, встраивание ссылок, прикрепление файлов)."
-    S["published"][kind] = [ch.id, msg.id]
-    save_settings()
+    set_published(kind, ch, msg, gid)
     return True, f"Опубликовано в {ch.mention}: {msg.jump_url}{warn}"
 
 
@@ -3242,13 +3416,16 @@ class HallRecruit(commands.Cog):
             await ensure_cdn_assets()
         except Exception as e:
             print(f"[hall_recruit] баннеры на CDN не залиты: {e!r}", file=sys.stderr, flush=True)
-        try:
-            ch = await get_channel(chan_id("review"))
-            if isinstance(ch, disnake.TextChannel):
-                _roles_acc_ts = time.time()
-                await ensure_recruiter_role_access(ch)
-        except Exception as e:
-            print(f"[hall_recruit] доступ рекрутеров к веткам не настроен: {e!r}", file=sys.stderr, flush=True)
+        for g in list(_BOT.guilds) if _BOT else []:
+            # каждый сервер со своим каналом заявок: права выдаём там, где они нужны
+            try:
+                ch = await get_channel(chan_id("review", g))
+                if isinstance(ch, disnake.TextChannel):
+                    _roles_acc_ts = time.time()
+                    await ensure_recruiter_role_access(ch)
+            except Exception as e:
+                print(f"[hall_recruit] {g.name}: доступ рекрутеров к веткам не настроен: {e!r}",
+                      file=sys.stderr, flush=True)
         if not self.remind_loop.is_running():
             self.remind_loop.start()
 
@@ -3317,7 +3494,7 @@ class HallRecruit(commands.Cog):
             return
         global _roles_acc_ts
         try:
-            ch = await get_channel(chan_id("review"))
+            ch = await get_channel(chan_id("review", after.guild))
             if isinstance(ch, disnake.TextChannel):
                 _roles_acc_ts = time.time()
                 await ensure_recruiter_role_access(ch)
@@ -3360,7 +3537,7 @@ class HallRecruit(commands.Cog):
         await inter.response.defer(ephemeral=True)
         global _roles_acc_ts
         lines = []
-        ch = await get_channel(chan_id("review"))
+        ch = await get_channel(chan_id("review", inter.guild))
         if isinstance(ch, disnake.TextChannel):
             _roles_acc_ts = time.time()
             fixed = await ensure_recruiter_role_access(ch)

@@ -232,6 +232,30 @@ input[type=color]{padding:3px;height:2.5em;cursor:pointer}
   font-weight:650;display:flex;align-items:center;gap:.8rem}
 .section-title::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line2),transparent)}
 
+/* ---------- привязки сервера ---------- */
+.bindhead{display:flex;flex-wrap:wrap;gap:.7rem;align-items:baseline;justify-content:space-between}
+.bindhead b{font-size:1.02rem}
+.bindgroup{margin-top:1.1rem}
+.bindtitle{display:flex;align-items:center;gap:.6rem;margin:0 0 .55rem;font-size:.73rem;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.bindtitle::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line2),transparent)}
+.bindtitle i{font-style:normal;font-weight:600;letter-spacing:0;text-transform:none;color:var(--faint)}
+.bindrows{display:grid;grid-template-columns:repeat(auto-fill,minmax(292px,1fr));gap:.7rem}
+.bindrow{display:grid;align-content:start;gap:.45rem;padding:.8rem .9rem;border:1px dashed var(--line2);
+  border-radius:18px 6px 18px 6px;background:rgba(255,255,255,.012)}
+.bindrow:nth-child(3n+2){border-radius:6px 18px 6px 18px}
+.bindrow:nth-child(3n+3){border-radius:12px}
+.bindrow.on{border-style:solid;border-color:var(--accent-line);
+  background:linear-gradient(180deg,var(--accent-soft),rgba(255,255,255,0) 72%)}
+.bindrow>label{font-size:.8rem;font-weight:650}
+.bindcur{display:flex;flex-wrap:wrap;gap:.3rem}
+.bindcur .chip{margin-left:0}
+.bindrow select{width:100%;background:var(--field)}
+.bindrow.multi{grid-column:1/-1;border-radius:22px}
+.bindrow.multi select[multiple]{height:7rem;border-radius:14px 14px 6px 6px}
+.bindmiss{margin-top:.85rem;padding:.6rem .85rem;border-left:3px solid var(--warn);
+  border-radius:0 12px 12px 0;background:rgba(245,165,36,.08);font-size:.82rem}
+
 /* ---------- модули ---------- */
 .list{display:flex;flex-direction:column;gap:.55rem}
 .item{display:flex;align-items:center;gap:.9rem;padding:.8rem 1.1rem}
@@ -4288,6 +4312,72 @@ async function pageServers() {
   await load();
   const note = h('p', { class: 'muted small' },
     'Ручка «сайт музыки» решает, может ли этот сервер заказывать треки со страницы и слушать то, что играет в канале. Без неё сайт открыт только своим.');
+  const bindBox = h('div', { class: 'card', hidden: true });
+
+  async function renderBind(id) {
+    /* Привязки того сервера, который выбран в шапке: каналы заявок и роли этого сервера.
+       Основной сервер показывает значения только что — они лежат в config.json, и править
+       их отсюда нельзя, иначе одна кнопка могла бы переписать настройки старых серверов. */
+    bindBox.hidden = false;
+    bindBox.replaceChildren(h('p', { class: 'muted' }, 'Читаю привязки…'));
+    bindBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    let d;
+    try { d = await api('/api/guild/bindings?g=' + id); }
+    catch (e) { bindBox.replaceChildren(h('p', { class: 'warnline' }, e.message)); return; }
+    if (d.error && !(d.rows || []).length) {
+      bindBox.replaceChildren(h('p', { class: 'warnline' }, d.error));
+      return;
+    }
+    const save = async (key, value) => {
+      try {
+        const r = await api('/api/guild/bindings', { method: 'POST', body: { g: id, key, value } });
+        toast(r.note || 'Привязано', 'ok');
+      } catch (e) { toast(e.message, 'err'); }
+      await renderBind(id);
+    };
+    const lock = !!(d.guild && d.guild.home);
+    const rows = (d.rows || []).map((r) => {
+      const src = (r.kind === 'role' || r.kind === 'roles') ? (d.roles || []) : (d.channels || []);
+      const on = (v) => r.ids.indexOf(v) >= 0;
+      let sel;
+      if (r.kind === 'roles') {
+        sel = h('select', { 'aria-label': r.label, multiple: true, size: 4, disabled: lock },
+          src.map((o) => h('option', { value: o.id, selected: on(o.id) }, o.name)));
+        sel.addEventListener('change', () => save(r.key, Array.from(sel.selectedOptions).map((o) => o.value)));
+      } else {
+        sel = h('select', { 'aria-label': r.label, disabled: lock, onchange: () => save(r.key, sel.value) },
+          h('option', { value: '' }, '— не привязано —'),
+          src.map((o) => h('option', { value: o.id, selected: on(o.id) }, o.name)));
+      }
+      // пустая строка короче занятой и без второй подписи: селект уже говорит «не привязано»
+      const done = r.ids.length > 0;
+      return { group: r.group || 'Привязки', done,
+        node: h('div', { class: 'bindrow' + (done ? ' on' : '') + (r.kind === 'roles' ? ' multi' : '') },
+          h('label', null, r.label),
+          done ? h('div', { class: 'bindcur' }, r.names.map((n) => chip(n, 'ok'))) : null,
+          sel) };
+    });
+    const groups = [];
+    for (const r of rows) {
+      const last = groups[groups.length - 1];
+      if (last && last.name === r.group) last.items.push(r);
+      else groups.push({ name: r.group, items: [r] });
+    }
+    const groupNodes = groups.map((g) => h('div', { class: 'bindgroup' },
+      h('h3', { class: 'bindtitle' }, g.name,
+        h('i', null, g.items.filter((r) => r.done).length + ' из ' + g.items.length)),
+      h('div', { class: 'bindrows' }, g.items.map((r) => r.node))));
+    bindBox.replaceChildren(
+      h('div', { class: 'bindhead' },
+        h('b', null, 'Привязки: ' + ((d.guild || {}).name || '?')),
+        h('span', { class: 'muted small' }, lock ? 'основной сервер — только просмотр'
+          : ('привязано ' + (d.at || 'никогда')))),
+      h('p', { class: 'muted small' }, d.note || ''),
+      ...groupNodes,
+      (d.missing || []).length ? h('p', { class: 'bindmiss' },
+        'Пока не привязано и потому не работает: ' + d.missing.join(', ')) : null);
+  }
+
   const rows = (ov.guilds || []).map((g) => {
     // Когда модуля музыки нет, флаг приходит null: рисовать выключенную ручку, которую
     // всё равно нечем включить, честнее заменить словами «музыка выключена».
@@ -4318,6 +4408,9 @@ async function pageServers() {
         h('b', null, g.name, g.home ? h('span', { class: 'chip ok' }, 'свой') : null,
           g.in_voice ? h('span', { class: 'chip' }, 'в голосовом') : null),
         h('span', { class: 'muted small' }, (g.members || '?') + ' участников · ID ' + g.id)),
+      h('button', { class: 'btn small', title: 'Каналы и роли этого сервера',
+        onclick: () => { state.gid = g.id; localStorage.setItem('hz_guild', g.id); redrawPick(); renderBind(g.id); } },
+        'Привязки'),
       tail);
   });
   return h('div', null,
@@ -4328,10 +4421,11 @@ async function pageServers() {
       h('label', null, 'Ссылка', urlBox),
       h('div', { class: 'row' }, openBtn, copy),
       h('p', { class: 'muted small' }, 'Если Discord пишет «Бот закрытый» или «Требуется авторизация кода» — в Developer Portal → Bot включи Public Bot и выключи Requires OAuth2 Code Grant.'),
-      h('p', { class: 'warnline small' }, 'Панель работает с тем сервером, который выбран в шапке: каналы, люди и команды — на любом сервере. Музыка на сайте по умолчанию открыта только своему; чужому доступ выдаёт переключатель ниже. Казна, выплаты и набор устроены семейными: на чужом сервере они просто не найдут свои каналы и честно об этом скажут.')),
+      h('p', { class: 'warnline small' }, 'Панель работает с тем сервером, который выбран в шапке: каналы, люди и команды — на любом сервере. Музыка на сайте по умолчанию открыта только своему; чужому доступ выдаёт переключатель ниже. У набора привязки свои на каждом сервере: основной читает config.json, а остальным каналы и роли назначает кнопка «Привязки».')),
     h('div', { class: 'card' }, h('h2', null, 'Где бот сейчас (' + rows.length + ')'),
       rows.length ? h('div', { class: 'list' }, rows) : h('p', { class: 'muted' }, 'Ни одного сервера.'),
-      note));
+      note),
+    bindBox);
 }
 
 

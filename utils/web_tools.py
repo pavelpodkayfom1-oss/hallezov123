@@ -3004,3 +3004,80 @@ async def kazna_report(bot, fields: Dict[str, Any], photos: List[tuple]) -> Dict
                                   str(fields.get("на_что") or ""),
                                   str(fields.get("кому") or ""),
                                   str(fields.get("детали") or ""), photos)
+
+
+# ─────────────────────────── привязки сервера ───────────────────────────
+
+def _recruit_mod():
+    return sys.modules.get("cogs.hall_recruit")
+
+
+def bindings(bot) -> Dict[str, Any]:
+    """Экран «Привязки сервера»: какие каналы и роли бот видит на выбранном сервере.
+
+    У основного сервера привязки лежат в config.json и recruit_plus.json — экран их только
+    показывает, чтобы ни одна настройка Hallez не поехала. У всех остальных значения берутся
+    из guild_settings.json этого сервера, и наследовать нечего: канал с одного сервера на
+    другом просто не существует.
+    """
+    from utils import guild_cfg
+
+    guild = guild_of(bot)
+    if guild is None:
+        return {"rows": [], "error": "Бот ни на одном сервере"}
+    hr = _recruit_mod()
+    if hr is None:
+        return {"rows": [], "error": "Набор выключен — ког HallRecruit не загружен"}
+    home = guild_cfg.is_home(guild.id)
+    chans = [{"id": str(c.id), "name": c.name}
+             for c in sorted(guild.text_channels, key=lambda c: (getattr(c, "category_id", 0) or 0, c.position))]
+    roles = [{"id": str(r.id), "name": r.name}
+             for r in sorted([x for x in guild.roles if not x.managed and x.id != guild.id],
+                             key=lambda r: -r.position)]
+    rnames = {r["id"]: r["name"] for r in roles}
+    cnames = {c["id"]: c["name"] for c in chans}
+    rows = []
+    for key, label, kind in guild_cfg.labels():
+        val = hr.bind_show(key, guild)
+        ids = [str(v) for v in val] if isinstance(val, list) else ([str(val)] if val else [])
+        rows.append({"key": key, "label": label, "kind": kind, "ids": ids,
+                     "group": guild_cfg.group_of(key),
+                     "names": [cnames.get(i) or rnames.get(i) or i for i in ids]})
+    out = {"guild": {"id": str(guild.id), "name": guild.name, "home": home},
+           "rows": rows, "channels": chans, "roles": roles,
+           "note": (guild_cfg.home_note() if home else
+                    "Привязки только этого сервера — с основного сюда ничего не переносится.")}
+    if not home:
+        one = guild_cfg.of(guild.id)
+        out["missing"] = guild_cfg.missing(guild.id)
+        out["at"] = str(one.get("at") or "")
+    return out
+
+
+async def binding_save(bot, key: str, value: Any) -> Dict[str, Any]:
+    """Привязка канала или роли выбранному серверу (основной — намеренно отказывается)."""
+    from utils import guild_cfg
+
+    guild = guild_of(bot)
+    if guild is None:
+        return {"error": "Бот ни на одном сервере"}
+    sec, kind = guild_cfg.where(key)
+    if kind == "roles":
+        val = [int(v) for v in (value or []) if str(v).isdigit()][:10]
+    else:
+        val = int(value) if str(value or "").isdigit() else 0
+    err = guild_cfg.set_one(guild.id, sec, key, val, by=0)
+    if err:
+        return {"error": err}
+    label = next((l for k, l, _ in guild_cfg.labels() if k == key), key)
+    shown = ", ".join(str(x) for x in val) if isinstance(val, list) else str(val)
+    note = f"✅ {label}: " + (shown if val else "убрано")
+    if key == "recruiter_role_ids" and val:
+        hr = _recruit_mod()
+        if hr is not None:
+            try:
+                note += ". " + await hr.refresh_recruiter_access(guild)
+            except Exception as e:
+                note += f". Доступ к веткам не обновлён: {str(e)[:60]}"
+    print(f"🎛 Панель: привязки «{guild.name}» — {note}", flush=True)
+    return {"ok": True, "key": key, "note": note}
