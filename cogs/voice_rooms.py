@@ -17,6 +17,7 @@ from typing import Dict
 import disnake
 from disnake.ext import commands
 
+from utils.checks import is_admin
 from utils.embeds import note_embed, panel_embed
 
 ROOM_LIMIT = 4
@@ -272,8 +273,8 @@ class VoiceRooms(commands.Cog):
             ephemeral=True)
 
     # ---------- экран для веб-панели ----------
-    @commands.slash_command(name="rooms_panel", description="Отправить панель временных комнат в этот канал",
-                            default_member_permissions=disnake.Permissions(manage_guild=True))
+    @commands.slash_command(name="rooms_panel", description="Отправить панель временных комнат в этот канал")
+    @commands.check(is_admin)
     async def rooms_panel(self, inter: disnake.ApplicationCommandInteraction):
         embed = panel_embed("🎤 Временные комнаты", [
             ("🎤 Создать комнату",

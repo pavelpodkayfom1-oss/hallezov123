@@ -23,6 +23,7 @@ from pathlib import Path
 import disnake
 from disnake.ext import commands
 
+from utils.checks import is_admin
 from utils.embeds import get_color, list_embed, note_embed
 
 BASE = Path(__file__).resolve().parent.parent
@@ -496,12 +497,13 @@ class FamLogs(commands.Cog):
 
     # ───────────── управление ─────────────
     def _allowed(self, inter):
-        if inter.author.guild_permissions.manage_guild:
-            return True
-        return inter.author.id in read_json(BASE / "config.json").get("admin_user_ids", [])
+        # Право «Управлять сервером» на чужом сервере админам бота никто не выдаёт, поэтому
+        # спрашиваем админку бота именно этого сервера (utils/guild_cfg.py), а не Discord-роль.
+        return is_admin(inter)
 
     @commands.slash_command(name="logs", description="Настройка логов семьи",
-                            default_member_permissions=disnake.Permissions(manage_guild=True), contexts=disnake.InteractionContextTypes(guild=True))
+                            contexts=disnake.InteractionContextTypes(guild=True))
+    @commands.check(is_admin)
     async def logs(self, inter: disnake.ApplicationCommandInteraction):
         pass
 

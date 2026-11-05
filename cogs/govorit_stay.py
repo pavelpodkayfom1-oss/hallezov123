@@ -9,6 +9,7 @@ import disnake
 import edge_tts
 from disnake.ext import commands
 
+from utils.checks import is_admin
 from utils.embeds import get_color
 from utils.ffmpeg_path import ffmpeg_exe
 
@@ -498,8 +499,8 @@ class GovoritStay(commands.Cog):
     @commands.slash_command(
         name="golos-server",
         description="Панель сервера: канал, режим «всегда в войсе», приветствие",
-        default_member_permissions=disnake.Permissions(manage_guild=True),
     )
+    @commands.check(is_admin)
     async def golos_server(self, inter: disnake.ApplicationCommandInteraction):
         if not inter.guild:
             await inter.response.send_message("Только на сервере.", ephemeral=True)

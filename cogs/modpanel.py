@@ -217,8 +217,8 @@ class ModPanel(commands.Cog):
 
     @commands.slash_command(name="наказания",
                             description="Панель таймаутов и журнал наказаний",
-                            default_member_permissions=disnake.Permissions(manage_guild=True),
                             contexts=disnake.InteractionContextTypes(guild=True))
+    @commands.check(is_admin)
     async def mod_panel(self, inter: disnake.ApplicationCommandInteraction):
         embed = card(get_text("mod_panel_title", "⚖️ Наказания семьи"),
                      guild=inter.guild)

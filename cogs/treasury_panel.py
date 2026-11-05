@@ -676,7 +676,6 @@ class Treasury(commands.Cog):
 
     # ── команда ──
     @commands.slash_command(name="казна", description="Казна семьи: банк, отчёты, приёмка",
-                            default_member_permissions=disnake.Permissions(manage_guild=True),
                             contexts=disnake.InteractionContextTypes(guild=True))
     async def kazna_panel(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter):

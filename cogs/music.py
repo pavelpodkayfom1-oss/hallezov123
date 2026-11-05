@@ -2901,8 +2901,8 @@ class Music(commands.Cog):
     # У команды нет аргумента-канала: человек ошибается в списке, а панель потом лежит
     # неизвестно где. Канал выбирается списком на самой панели — там же, где видно итог.
     @commands.slash_command(name="music_panel",
-                            description="Панель музыки: в настроенный канал или в этот",
-                            default_member_permissions=disnake.Permissions(manage_guild=True))
+                            description="Панель музыки: в настроенный канал или в этот")
+    @commands.check(is_admin)
     async def music_panel(self, inter: disnake.ApplicationCommandInteraction):
         cfg = _cfg(inter.guild.id)
         ch = self.panel_channel(inter.guild) or inter.channel

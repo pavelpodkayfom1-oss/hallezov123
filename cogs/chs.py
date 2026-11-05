@@ -336,8 +336,8 @@ class Chs(commands.Cog):
 
     # ---------- команды ----------
     @commands.slash_command(name="чс", description="Чёрный список: выгнать при заходе",
-                            default_member_permissions=disnake.Permissions(kick_members=True),
                             contexts=disnake.InteractionContextTypes(guild=True))
+    @commands.check(is_admin)
     async def chs(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_message(embed=note_embed(
             get_text("chs_usage", "Используй кнопки ниже: `Добавить` / `Убрать` / `Список`.")),

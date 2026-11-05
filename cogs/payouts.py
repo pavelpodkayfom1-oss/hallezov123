@@ -690,7 +690,6 @@ class Payouts(commands.Cog):
 
     # ── команда ──
     @commands.slash_command(name="выплаты", description="Выплаты семьи: фонд, заявки, приёмка",
-                            default_member_permissions=disnake.Permissions(manage_guild=True),
                             contexts=disnake.InteractionContextTypes(guild=True))
     async def payouts_panel(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter):

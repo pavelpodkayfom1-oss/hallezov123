@@ -195,8 +195,8 @@ class Streams(commands.Cog):
             self.watch.start()
 
     @commands.slash_command(name="стримы", description="Панель авто-анонсов Twitch-стримов",
-                            contexts=disnake.InteractionContextTypes(guild=True),
-                            default_member_permissions=disnake.Permissions(manage_guild=True))
+                            contexts=disnake.InteractionContextTypes(guild=True))
+    @commands.check(is_admin)
     async def streams_panel(self, inter: disnake.ApplicationCommandInteraction):
         await inter.channel.send(embed=await _panel(inter.bot, inter.guild), view=StreamsView())
         await inter.response.send_message(embed=note_embed("✅ Панель стримов отправлена."),

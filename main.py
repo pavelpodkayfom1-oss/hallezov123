@@ -45,7 +45,7 @@ logging.getLogger("disnake.client").setLevel(logging.INFO)
 
 from database import init_db
 from utils import state_backup
-from utils.checks import load_config
+from utils.checks import load_config, save_config
 from utils.embeds import set_default_icon
 from cogs.recruitment import RecruitLaunchView
 from cogs.promotions import PromotionLaunchView
@@ -178,6 +178,21 @@ async def on_ready():
     if panel is not None:
         await panel.apply_saved_presence()
 
+    # Разработчик бота (владелец приложения) — единственный человек, чьи права действуют
+    # на каждом сервере. Запоминаем его id один раз: на чужих серверах списки админов
+    # свои, и без этой записи создатель бота не смог бы поправить то, что сам же сделал.
+    try:
+        cfg = load_config()
+        if not cfg.get("dev_user_ids"):
+            app = await bot.fetch_application()
+            owner = getattr(app, "owner", None)
+            if owner is not None:
+                cfg["dev_user_ids"] = [owner.id]
+                save_config(cfg)
+                print(f"🛠 Разработчик бота: {owner} (ID: {owner.id})", flush=True)
+    except Exception as e:
+        print(f"⚠️ Не удалось узнать владельца приложения: {e}", file=sys.stderr, flush=True)
+
     print("=" * 60, flush=True)
     print(f"⚜️  Бот {bot_name} успешно запущен!", flush=True)
     print(f"👤  Авторизован как: {bot.user} (ID: {bot.user.id})", flush=True)
@@ -213,7 +228,8 @@ async def _handle_error(inter: disnake.Interaction, error: Exception, kind: str)
     elif isinstance(error, commands.BotMissingPermissions):
         text = "⚠️ У бота не хватает прав: " + ", ".join(error.missing_permissions)
     elif isinstance(error, commands.CheckFailure):
-        text = "⛔ Эта команда вам недоступна."
+        text = "⛔ Нужна админка бота на ЭТОМ сервере. Её выдаёт экран «Админка» в /панель " \
+               "— владелец сервера или тот, у кого она уже есть."
     elif isinstance(error, commands.CommandOnCooldown):
         text = f"⏳ Подождите {error.retry_after:.0f} сек. перед повтором."
     else:

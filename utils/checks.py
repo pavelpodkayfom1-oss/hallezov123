@@ -53,6 +53,15 @@ def rank_title(config: Dict[str, Any], rank: int, default: Optional[str] = None)
     name = ((config.get("ranks", {}) or {}).get(str(rank), {}) or {}).get("name")
     return name or (default if default is not None else f"{rank} ранг")
 
+def _is_developer(user: Any) -> bool:
+    """Разработчик бота: он остаётся с правами на чужих серверах, иначе не смог бы
+    поправить собственного бота там, куда его добавили. Список пишется на старте
+    из Discord-приложения (main.py), руками его держать не нужно."""
+    try:
+        return bool(user) and user.id in set(load_config().get("dev_user_ids", []) or [])
+    except Exception:
+        return False
+
 def is_admin(user_or_inter: Any) -> bool:
     """
     Проверяет, является ли пользователь администратором:
@@ -67,7 +76,7 @@ def is_admin(user_or_inter: Any) -> bool:
         guild = user_or_inter.guild
     elif isinstance(user_or_inter, disnake.Member):
         user = user_or_inter
-        guild = user.guild
+        guild = user_or_inter.guild
     else:
         return False
 
@@ -76,6 +85,20 @@ def is_admin(user_or_inter: Any) -> bool:
 
     if user.id == guild.owner_id:
         return True
+
+    from utils import guild_cfg
+
+    # Чужой сервер: права там выдаются только ему, списки основного сервера сюда не
+    # переезжают — иначе люди с первого сервера молча становились бы админами чужих.
+    if not guild_cfg.is_home(guild.id):
+        if _is_developer(user):
+            return True
+        if user.id in guild_cfg.role_ids("admin_user_ids", guild.id):
+            return True
+        mine_roles = set(guild_cfg.role_ids("admin_role_ids", guild.id))
+        if mine_roles and isinstance(user, disnake.Member):
+            return any(role.id in mine_roles for role in user.roles)
+        return False
 
     config = load_config()
     admin_users = config.get("admin_user_ids", [])
@@ -88,29 +111,21 @@ def is_admin(user_or_inter: Any) -> bool:
             if role.id in admin_roles:
                 return True
 
-    # config.json — настройки основного сервера: его id людей и ролей на чужом сервере не
-    # совпадут ни с кем. Без привязок сервера на втором сервере не было бы ни одного админа
-    # бота, и панель там никто бы не открыл.
-    from utils import guild_cfg
-
-    if user.id in guild_cfg.role_ids("admin_user_ids", guild.id):
-        return True
-    if isinstance(user, disnake.Member):
-        mine_roles = set(guild_cfg.role_ids("admin_role_ids", guild.id))
-        if mine_roles and any(role.id in mine_roles for role in user.roles):
-            return True
-
     return False
 
 def is_recruiter(member: disnake.Member) -> bool:
     """
     Проверяет, имеет ли пользователь права рекрутера или админа.
     """
-    if member.id == member.guild.owner_id:
+    if is_admin(member):
         return True
-    config = load_config()
-    admin_users = config.get("admin_user_ids", [])
-    if member.id in admin_users:
-        return True
-    allowed_roles = set(config.get("admin_role_ids", []) + config.get("recruiter_role_ids", []))
-    return any(role.id in allowed_roles for role in member.roles)
+    guild = getattr(member, "guild", None)
+    if guild is None:
+        return False
+    from utils import guild_cfg
+
+    if not guild_cfg.is_home(guild.id):
+        mine = set(guild_cfg.role_ids("recruiter_role_ids", guild.id))
+        return bool(mine) and any(role.id in mine for role in member.roles)
+    allowed = set(load_config().get("recruiter_role_ids", []) or [])
+    return any(role.id in allowed for role in member.roles)

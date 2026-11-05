@@ -608,12 +608,17 @@ class AdminUsersView(disnake.ui.View):
 
     @staticmethod
     def generate_embed(guild: Optional[disnake.Guild]) -> disnake.Embed:
-        config = load_config()
-        admin_users = config.get("admin_user_ids", [])
+        from utils import guild_cfg
+
+        gid = int(getattr(guild, "id", 0) or 0)
+        home = guild_cfg.is_home(gid)
+        admin_users = load_config().get("admin_user_ids", []) if home else \
+            guild_cfg.role_ids("admin_user_ids", gid)
 
         emb = base_embed(
             "👤 Управление администраторами (по пользователям)",
-            "Здесь вы можете **выдать или забрать доступ к боту конкретному человеку** (без необходимости создавать роль).\n\n"
+            "Здесь вы можете **выдать или забрать доступ к боту конкретному человеку** "
+            "(без необходимости создавать роль).\n\n"
             "👇 Используйте списки выбора ниже:\n"
             "• **1-й список (➕):** выбрать человека, чтобы ВЫДАТЬ админку\n"
             "• **2-й список (➖):** выбрать человека, чтобы ЗАБРАТЬ админку",
@@ -628,23 +633,22 @@ class AdminUsersView(disnake.ui.View):
         else:
             users_list = "*Пока нет добавленных пользователей. Выберите человека в списке ниже, чтобы выдать доступ.*"
 
-        emb.add_field(name=f"👥 Авторизованные администраторы ({len(admin_users)})", value=users_list, inline=False)
+        emb.add_field(name=f"👥 Администраторы этого сервера ({len(admin_users)})",
+                      value=users_list, inline=False)
 
-        # На чужом сервере config.json — настройки основного, поэтому там список свой.
-        from utils import guild_cfg
-
-        gid = int(getattr(guild, "id", 0) or 0)
-        if gid and not guild_cfg.is_home(gid):
-            own = guild_cfg.role_ids("admin_user_ids", gid)
+        if home:
             emb.add_field(
-                name=f"🛡 Админки только этого сервера ({len(own)})",
-                value="\n".join([f"• <@{uid}> (ID: `{uid}`)" for uid in own]) or
-                      "*Пока никто. Список ниже пишет админку только этому серверу.*",
+                name="ℹ️ Как это работает",
+                value="Это основной сервер: его админки лежат в общем config.json и действуют "
+                      "на нём. На других серверах список выдаётся заново — здесь.",
                 inline=False)
-            emb.add_field(name="ℹ️ Как это работает",
-                          value="На этом сервере выдача касается **только его**: "
-                                "основной сервер и другие списки не меняются.",
-                          inline=False)
+        else:
+            emb.add_field(
+                name="ℹ️ Как это работает",
+                value="Админка выдаётся **только этому серверу**: список основного сервера "
+                      "и других серверов не меняется. Создатель бота остаётся с правами "
+                      "везде, чтобы мог поправить своего бота.",
+                inline=False)
         return emb
 
     @disnake.ui.button(label="🔙 Главное меню", style=disnake.ButtonStyle.secondary, row=2)
@@ -1019,13 +1023,14 @@ class AdminCog(commands.Cog):
 
     @commands.slash_command(
         name="админка",
-        description="Выдать или забрать админку бота: список выбора людей на этом сервере",
-        default_member_permissions=disnake.Permissions(manage_guild=True)
+        description="Выдать или забрать админку бота: список выбора людей на этом сервере"
     )
     async def admin_users_panel(self, inter: disnake.ApplicationCommandInteraction):
         """Экран выдачи админки одной кнопкой: /панель открывает его, а не слэш-команду."""
         if not is_admin(inter):
-            return await inter.response.send_message("❌ Доступ запрещен!", ephemeral=True)
+            return await inter.response.send_message(
+                "⛔ Админку бота на этом сервере выдаёт его владелец или тот, "
+                "у кого она уже есть.", ephemeral=True)
         await inter.response.send_message(
             embed=AdminUsersView.generate_embed(inter.guild),
             view=AdminUsersView(inter.guild), ephemeral=True)

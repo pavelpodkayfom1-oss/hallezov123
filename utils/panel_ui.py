@@ -256,6 +256,21 @@ input[type=color]{padding:3px;height:2.5em;cursor:pointer}
 .bindmiss{margin-top:.85rem;padding:.6rem .85rem;border-left:3px solid var(--warn);
   border-radius:0 12px 12px 0;background:rgba(245,165,36,.08);font-size:.82rem}
 
+/* ---------- доступы: чей пароль куда пускает ---------- */
+.acclist{display:flex;flex-direction:column;gap:.7rem}
+.accrow{display:grid;grid-template-columns:1fr minmax(0,17rem);gap:.7rem 1rem;align-items:center;
+  padding:.85rem 1rem;border:1px solid var(--line);border-radius:4px 16px 4px 16px;background:var(--panel)}
+.accrow:nth-child(2n){border-radius:16px 4px 16px 4px}
+.accrow.locked{border-style:dashed;opacity:.82}
+.accrow>b,.accrow .accmain{grid-column:1}
+.accmain{display:flex;flex-wrap:wrap;align-items:baseline;gap:.45rem;min-width:0}
+.accmain b{font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acctail{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center}
+.accform{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center}
+.accform input{flex:1 1 8rem;min-width:0}
+.accnote{margin:.2rem 0 0;color:var(--muted);font-size:.8rem}
+@media (max-width:760px){.accrow{grid-template-columns:1fr}}
+
 /* ---------- модули ---------- */
 .list{display:flex;flex-direction:column;gap:.55rem}
 .item{display:flex;align-items:center;gap:.9rem;padding:.8rem 1.1rem}
@@ -709,6 +724,29 @@ html[data-theme=light] .reactor{filter:none}
 .hud.checking .hudbtn::after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-40%;
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.3),transparent);animation:sweepbtn 1s linear infinite}
 @keyframes sweepbtn{to{left:110%}}
+/* ---------- выбор, куда войти ---------- */
+/* Плашки нарочно разной формы: два одинаковых квадрата рядом человек читает как «то же
+   самое», а здесь сервер и разработчик — принципиально разные входы. */
+.gatelbl{font:600 .6rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.28em;
+  text-transform:uppercase;color:var(--faint);margin-top:.35rem}
+.hudgates{display:flex;flex-wrap:wrap;gap:.4rem;margin:.1rem 0 .2rem}
+.gate{flex:1 1 44%;display:grid;grid-template-columns:auto 1fr;column-gap:.5rem;text-align:left;
+  padding:.5rem .6rem;cursor:pointer;color:var(--text);background:transparent;
+  border:1px solid var(--line2);border-radius:2px 11px 2px 11px;transition:border-color .15s,background .15s,transform .12s}
+.gate:hover:not(:disabled){border-color:var(--text);transform:translateY(-1px)}
+.gate:focus-visible{outline:2px solid var(--text);outline-offset:2px}
+.gate i{grid-row:1/3;align-self:center;font:600 .95rem/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-style:normal;color:var(--faint)}
+.gate b{font-size:.82rem;font-weight:600;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gate em{grid-column:2;font:400 .58rem/1.25 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-style:normal}
+.gate.on{border-color:var(--text);background:rgba(255,255,255,.07)}
+.gate.on i{color:var(--text)}
+.gate.on em{color:var(--text)}
+html[data-theme=light] .gate.on{background:rgba(20,18,12,.06)}
+.gate.dev{flex-basis:100%;border-style:dashed;border-radius:13px 3px 13px 3px}
+.gate:disabled{opacity:.4;cursor:not-allowed}
+.gate.wait{opacity:.55}
 .hudstat{font:.72rem/1.2 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);min-height:1em}
 .hudstat::after{content:"_";animation:blink 1s steps(1) infinite}
 @keyframes blink{50%{opacity:0}}
@@ -1442,7 +1480,7 @@ html[data-style=stark] .dot{box-shadow:none}
 (() => {
 'use strict';
 const $app = document.getElementById('app');
-const state = { page: 'overview', timer: null, isDirty: () => false, botName: 'Бот', gid: '', guilds: [] };
+const state = { page: 'overview', timer: null, isDirty: () => false, botName: 'Бот', gid: '', guilds: [], dev: false, gate: [], gateI: '' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ---------- мелкие помощники ---------- */
@@ -1572,6 +1610,31 @@ function showLogin(msg) {
   const METER = 14;
   const meter = h('div', { class: 'hudmeter', 'aria-hidden': 'true' }, Array.from({ length: METER }, () => h('i')));
   const caps = h('div', { class: 'hudcaps', role: 'status' }, '');
+  const gateLbl = h('div', { class: 'gatelbl' }, 'Куда войти');
+  const gates = h('div', { class: 'hudgates', role: 'group', 'aria-label': 'Куда войти' });
+  const plate = () => (state.gate || []).find((p) => String(p.i) === String(state.gateI)) || null;
+  function paintGates() {
+    const list = state.gate || [];
+    gateLbl.hidden = gates.hidden = !list.length;
+    if (!list.length) return;
+    if (!plate()) {
+      const first = list.find((p) => p.set) || list[0];
+      state.gateI = String(first.i);
+    }
+    gates.replaceChildren(...list.map((p) => h('button', {
+      class: 'gate' + (p.kind === 'dev' ? ' dev' : '') + (String(p.i) === String(state.gateI) ? ' on' : ''),
+      type: 'button', disabled: !p.set,
+      title: p.set ? 'Войти на «' + p.name + '»' : 'Этому серверу пароль ещё не задан — откроет его вход разработчика',
+      onclick: () => {
+        state.gateI = String(p.i);
+        localStorage.setItem('hz_gate', state.gateI);
+        paintGates();
+        input.focus();
+      }
+    }, h('i', null, String(p.i).padStart(2, '0')), h('b', null, p.name),
+      h('em', null, !p.set ? 'пароль не задан'
+        : p.kind === 'dev' ? 'все серверы' : p.home ? 'основной сервер' : (p.members + ' участников')))));
+  }
   const eye = h('button', { class: 'hudeye', type: 'button', 'aria-pressed': 'false', 'aria-label': 'Показать пароль', tabindex: '-1',
     onclick: () => {
       const show = input.type === 'password';
@@ -1594,9 +1657,10 @@ function showLogin(msg) {
       form.classList.remove('deny');
       form.classList.add('checking');
       btn.disabled = true;
-      stat.textContent = 'Проверка доступа';
+      const where = plate();
+      stat.textContent = 'Проверка доступа' + (where ? ': ' + where.name : '');
       try {
-        await api('/api/login', { method: 'POST', body: { password: input.value } });
+        await api('/api/login', { method: 'POST', body: { i: state.gateI, password: input.value } });
         form.classList.remove('checking');
         form.classList.add('granted');
         wrap.classList.add('granted');
@@ -1620,6 +1684,8 @@ function showLogin(msg) {
     h('h1', null, 'Панель управления'),
     say,
     log,
+    gateLbl,
+    gates,
     h('label', { class: 'hudfield' }, input, eye),
     meter,
     caps,
@@ -1636,6 +1702,10 @@ function showLogin(msg) {
     form,
     h('div', { class: 'hudflash' }));
   $app.replaceChildren(wrap);
+  if (!state.gateI) state.gateI = localStorage.getItem('hz_gate') || '';
+  // плашки рисует сервер: сначала показываем то, что уже знали, и обновляем, когда придёт ответ
+  paintGates();
+  api('/api/gate').then((d) => { state.gate = (d && d.gate) || []; paintGates(); }, () => {});
   state.timer = setInterval(() => { const c = document.getElementById('hudclock'); if (c) c.textContent = clockText(); }, 1000);
 
   // приветствие печатается по буквам; если экран уже заменили, печать сама останавливается
@@ -1754,7 +1824,12 @@ const PAGES = [
   ['settings', 'Настройки', 'sliders', 'Служба'],
   ['logs', 'Логи', 'term', 'Служба'],
   ['control', 'Управление', 'power', 'Служба'],
+  ['access', 'Доступ', 'key', 'Служба', true],
 ];
+
+/* Экран «Доступ» показывает чужие пароли входа — человеку, вошедшему по паролю своего
+   сервера, его видеть некому и незачем. */
+function pages() { return PAGES.filter((p) => !p[4] || state.dev); }
 
 /* значки — свои константы, поэтому вставка через innerHTML безопасна */
 const ICONS = {
@@ -1781,6 +1856,7 @@ const ICONS = {
   mic: '<rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/>',
   sound: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.7 5.3a9 9 0 0 1 0 13.4"/>',
   server: '<rect x="3" y="3.5" width="18" height="7" rx="2"/><rect x="3" y="13.5" width="18" height="7" rx="2"/><line x1="7" y1="7" x2="7.01" y2="7"/><line x1="7" y1="17" x2="7.01" y2="17"/>',
+  key: '<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.8 12.2 8-8"/><path d="m15.5 3.5 5 5"/><path d="m17.5 5.5 3 3"/>',
 };
 function icon(name) {
   const el = h('span', { class: 'ico', 'aria-hidden': 'true' });
@@ -1800,7 +1876,7 @@ function openPalette() {
   const dlg = h('dialog', { id: 'pal', class: 'pal' });
   const input = h('input', { type: 'search', placeholder: 'Куда перейти или что сделать…', 'aria-label': 'Поиск по разделам' });
   const list = h('div', { class: 'palist', role: 'listbox' });
-  const items = PAGES.map(([id, label, ico, g]) => ({ label, hint: g, ico, run: () => go(id) })).concat([
+  const items = pages().map(([id, label, ico, g]) => ({ label, hint: g, ico, run: () => go(id) })).concat([
     { label: 'Обновить страницу', hint: 'Действие', ico: 'pulse', run: () => go(state.page) },
     { label: 'Сменить тему', hint: 'Действие', ico: 'screen', run: toggleTheme },
     { label: 'Стиль оформления', hint: 'Действие', ico: 'screen', run: openStyles },
@@ -1913,7 +1989,7 @@ function redrawPick() {
 function renderShell() {
   const nav = h('nav', { class: 'nav', 'aria-label': 'Разделы панели' });
   let group = null;
-  for (const [id, label, ico, g] of PAGES) {
+  for (const [id, label, ico, g] of pages()) {
     if (g !== group) { group = g; nav.append(h('div', { class: 'navgroup' }, g)); }
     nav.append(h('button', { 'data-page': id, title: label, onclick: () => go(id) }, icon(ico), label));
   }
@@ -1964,7 +2040,7 @@ async function go(page) {
   if (state.isDirty() && !(await confirmBox('Уйти со страницы?', 'Есть несохранённые изменения, они пропадут.', 'Уйти', true))) return;
   stopTimer();
   state.isDirty = () => false;
-  if (!PAGES.some(([id]) => id === page)) page = 'overview';
+  if (!pages().some(([id]) => id === page)) page = 'overview';
   state.page = page;
   history.replaceState(null, '', '#' + page);
   document.querySelectorAll('.nav button').forEach((b) => b.classList.toggle('active', b.dataset.page === page));
@@ -1976,7 +2052,8 @@ async function go(page) {
     const view = await ({ overview: pageOverview, apps: pageApps, send: pageSend, servers: pageServers, chat: pageChat, voice: pageVoice, plan: pagePlan, notes: pageNotes, screens: pageScreens,
       texts: pageTexts, stickers: pageStickers, kazna: pageKazna, emojis: pageEmojis, sounds: pageSounds,
       diag: pageDiag, audit: pageAudit, shots: pageShots,
-      modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl })[page]();
+      modules: pageModules, settings: pageSettings, logs: pageLogs, control: pageControl,
+      access: pageAccess })[page]();
     if (state.page === page) content.replaceChildren(view);
     markLive(true);
   } catch (e) {
@@ -4827,6 +4904,74 @@ async function pageShots() {
 }
 
 /* ---------- запуск ---------- */
+/* ---------- доступ: чей пароль куда пускает ---------- */
+async function pageAccess() {
+  /* Экран только назначает пароли: ни один существующий пароль здесь не показывается,
+     иначе чужой пароль уезжал бы в ответе сервера и оседал в истории браузера. */
+  const d = await api('/api/access');
+  const save = async (body) => {
+    try {
+      const r = await api('/api/access', { method: 'POST', body });
+      toast(r.note || 'Сохранено', 'ok');
+    } catch (e) { toast(e.message, 'err'); return; }
+    await go('access');
+  };
+  const eye = (inp) => h('button', { class: 'btn icon', type: 'button', title: 'Показать или скрыть пароль',
+    onclick: () => { inp.type = inp.type === 'text' ? 'password' : 'text'; } }, '👁');
+
+  const devPass = h('input', { type: 'password', maxlength: '64', autocomplete: 'new-password', spellcheck: 'false',
+    placeholder: 'новый пароль, минимум 8 символов', 'aria-label': 'Новый пароль разработчика' });
+  const devRow = h('div', { class: 'accrow' },
+    h('div', { class: 'accmain' }, h('b', null, 'Вход разработчика'),
+      chip(d.dev_from_env ? 'по PANEL_PASSWORD' : 'из ' + d.file, d.dev_from_env ? 'off' : 'ok')),
+    h('div', { class: 'accform' }, devPass, eye(devPass),
+      h('button', { class: 'btn primary', type: 'button',
+        onclick: () => {
+          if (!devPass.value) { toast('Сначала напишите новый пароль', 'err'); return; }
+          save({ action: 'dev', password: devPass.value });
+        } }, 'Сменить')));
+
+  const rows = (d.guilds || []).map((g) => {
+    const pass = h('input', { type: 'password', maxlength: '64', autocomplete: 'new-password', spellcheck: 'false',
+      placeholder: g.set ? 'новый пароль' : 'придумайте пароль', 'aria-label': 'Пароль сервера ' + g.name });
+    const label = h('input', { type: 'text', maxlength: '32', value: g.label || '',
+      placeholder: 'как подписать на входе: ' + g.name, 'aria-label': 'Надпись на входе для ' + g.name });
+    return h('div', { class: 'accrow' + (g.set ? '' : ' locked') },
+      h('div', { class: 'accmain' },
+        h('b', null, g.label || g.name),
+        g.home ? chip('свой сервер', 'ok') : null,
+        g.set ? chip('вход открыт', 'ok') : chip('пароля нет', 'off'),
+        h('span', { class: 'muted small' }, (g.members || 0) + ' участников · ID ' + g.id)),
+      h('div', { class: 'accform' },
+        label, pass, eye(pass),
+        h('button', { class: 'btn' + (g.set ? '' : ' primary'), type: 'button',
+          onclick: () => {
+            if (pass.value) { save({ action: 'server', g: g.id, password: pass.value, name: label.value }); return; }
+            if (label.value.trim() && label.value.trim() !== (g.label || '')) {
+              save({ action: 'rename', g: g.id, name: label.value });
+              return;
+            }
+            toast('Напишите пароль — иначе менять нечего', 'err');
+          } }, g.set ? 'Сохранить' : 'Открыть вход'),
+        g.set ? h('button', { class: 'btn danger', type: 'button',
+          onclick: async () => {
+            if (!(await confirmBox('Закрыть вход?', 'Сервер останется без пароля: на сайт сможет войти только разработчик.', 'Закрыть', true))) return;
+            save({ action: 'drop', g: g.id });
+          } }, 'Закрыть вход') : null));
+  });
+
+  return h('div', null,
+    pageHead('Доступ', 'У каждого сервера свой пароль входа на сайт: пароль одного сервера чужой не открывает.'),
+    h('p', { class: 'accnote' },
+      'Вход разработчика видит все серверы и сразу получает новый пароль, стоит его сохранить. '
+      + 'Если файла доступов на хостинге нет, разработчик входит по PANEL_PASSWORD — заблокировать '
+      + 'себя окончательно здесь не получается.'),
+    h('p', { class: 'accnote' },
+      'Пароли пишутся в ' + d.file + ' рядом с ботом, а он в git не попадает: репа публичная. '
+      + 'Экран ничего из файла не показывает — только записывает новое.'),
+    h('div', { class: 'acclist' }, devRow, ...rows));
+}
+
 async function boot() {
   let s;
   try {
@@ -4839,6 +4984,7 @@ async function boot() {
   if (!s.authed) { showLogin(); return; }
   applyTheme();
   state.botName = s.bot_name || 'Бот';
+  state.dev = !!s.dev;
   document.title = state.botName + ' · Панель';
   // сервер надо узнать до первого экрана: все данные запрашиваются с ?g= и второй раз
   // их тянуть было бы заметно по скорости

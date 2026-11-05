@@ -557,7 +557,6 @@ class Complaints(commands.Cog):
 
     # ── экран раздела ──
     @commands.slash_command(name="жалобы", description="Жалобы на игроков: форма, приёмка, итог",
-                            default_member_permissions=disnake.Permissions(manage_guild=True),
                             contexts=disnake.InteractionContextTypes(guild=True))
     async def complaints_panel(self, inter: disnake.ApplicationCommandInteraction):
         if not is_admin(inter):

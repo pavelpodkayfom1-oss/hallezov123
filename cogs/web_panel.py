@@ -14,9 +14,12 @@
   • статус бота в Discord, перезапуск и выключение
 
 Переменные окружения (задаются на хостинге рядом с BOT_TOKEN):
-  PANEL_PASSWORD  пароль входа, минимум 8 символов. Без него панель НЕ запускается.
+  PANEL_PASSWORD  пароль входа разработчика, минимум 8 символов. Без него панель НЕ запускается.
   PANEL_PORT      порт панели (если не задан, берётся PORT, иначе 8080).
   PANEL_HOST      адрес прослушивания (по умолчанию 0.0.0.0).
+
+Пароли отдельных серверов лежат не в окружении, а в panel_access.json рядом с ботом
+(utils/web_access.py): переменная одна на весь процесс, а серверов у бота теперь несколько.
 """
 from __future__ import annotations
 
@@ -52,13 +55,16 @@ SELF_COG = "cogs.web_panel"
 COOKIE_NAME = "hz_panel"
 SESSION_TTL = 12 * 3600
 MIN_PASSWORD_LEN = 8
+DEVELOPER = "dev"
 SLEEP_MAX = 720
 MAX_FILE_BYTES = 1_000_000
 KAZNA_PHOTOS = 3
 KAZNA_FILE_MB = 8
 FILE_NAME_RE = re.compile(r"^[A-Za-z0-9_\-]{1,64}\.json$")
 HIDDEN_FILES = {"panel_state.json"}
-PUBLIC_API = {"/api/session", "/api/login", "/api/logout"}
+# /api/gate открыт всем: на нём экран входа показывает, куда можно войти. id серверов
+# там нет — только порядковые номера, а пароль проверяется уже тут.
+PUBLIC_API = {"/api/session", "/api/login", "/api/logout", "/api/gate"}
 STATUSES = {"online", "idle", "dnd", "invisible"}
 ACTIVITY_KINDS = {
     "playing": disnake.ActivityType.playing,
@@ -68,6 +74,8 @@ ACTIVITY_KINDS = {
 }
 
 _PROCESS_START = time.time()
+_ACCESS = None
+_ACCESS_FAILED = False
 
 
 # ───────────────────────── Перехват консоли ─────────────────────────
@@ -232,31 +240,71 @@ async def _body(request: web.Request) -> Dict[str, Any]:
 
 
 class _Sessions:
-    def __init__(self) -> None:
-        self._tokens: Dict[str, float] = {}
+    """Токен → (когда истёк, куда пускает).
 
-    def create(self) -> str:
+    Адресат хранится здесь специально: вход по паролю одного сервера не должен давать
+    доступ к чужому, даже если человек подменит ?g= в адресной строке.
+    """
+
+    def __init__(self) -> None:
+        self._tokens: Dict[str, Any] = {}
+
+    def create(self, scope: str = DEVELOPER) -> str:
         now = time.time()
-        for tok in [t for t, exp in self._tokens.items() if exp < now]:
+        for tok in [t for t, rec in self._tokens.items() if rec[0] < now]:
             del self._tokens[tok]
         tok = secrets.token_urlsafe(32)
-        self._tokens[tok] = now + SESSION_TTL
+        self._tokens[tok] = (now + SESSION_TTL, str(scope or DEVELOPER))
         return tok
 
     def valid(self, tok: Optional[str]) -> bool:
         if not tok:
             return False
-        exp = self._tokens.get(tok)
-        if exp is None:
+        rec = self._tokens.get(tok)
+        if rec is None:
             return False
-        if exp < time.time():
+        if rec[0] < time.time():
             self._tokens.pop(tok, None)
             return False
         return True
 
+    def scope_of(self, tok: Optional[str]) -> str:
+        rec = self._tokens.get(tok) if tok else None
+        if rec is None or rec[0] < time.time():
+            return ""
+        return str(rec[1])
+
     def drop(self, tok: Optional[str]) -> None:
         if tok:
             self._tokens.pop(tok, None)
+
+
+def _access():
+    """Доступы по серверам (utils/web_access.py).
+
+    Импорт на месте и с памятью: без этого файла панель обязана работать как раньше, а
+    не молча отказываться запускаться — и жаловаться в консоль при каждом входе тоже.
+    """
+    global _ACCESS, _ACCESS_FAILED
+    if _ACCESS is not None:
+        return _ACCESS
+    if _ACCESS_FAILED:
+        return None
+    try:
+        from utils import web_access
+    except Exception as e:
+        _ACCESS_FAILED = True
+        print(f"❌ Не загрузился utils/web_access.py: {e}", file=sys.stderr, flush=True)
+        return None
+    _ACCESS = web_access
+    return web_access
+
+
+def _eq(supplied: str, want: str) -> bool:
+    """Сравнение паролей без раннего выхода: угадывать по времени ответа не даём."""
+    if not supplied or not want:
+        return False
+    return hmac.compare_digest(str(supplied).encode("utf-8"), str(want).encode("utf-8"))
 
 
 class _LoginLimiter:
@@ -296,7 +344,6 @@ class WebPanel(commands.Cog):
         self.bot = bot
         self.sessions = _Sessions()
         self.limiter = _LoginLimiter()
-        self.password = os.getenv("PANEL_PASSWORD", "")
         self.runner: Optional[web.AppRunner] = None
         self._task: Optional[asyncio.Task] = None
         self._sleep_task: Optional[asyncio.Task] = None
@@ -305,7 +352,7 @@ class WebPanel(commands.Cog):
 
         _install_tee()
 
-        if len(self.password) < MIN_PASSWORD_LEN:
+        if len(self._dev_password()) < MIN_PASSWORD_LEN:
             print(
                 f"ℹ️ Веб-панель выключена: задайте PANEL_PASSWORD (минимум {MIN_PASSWORD_LEN} символов) "
                 "в переменных окружения хостинга.",
@@ -314,6 +361,14 @@ class WebPanel(commands.Cog):
             return
         self._task = bot.loop.create_task(self._start())
         self._sched_task = bot.loop.create_task(self._sched_loop())
+
+    @staticmethod
+    def _dev_password() -> str:
+        """Пароль разработчика: из panel_access.json, а если его там нет — из PANEL_PASSWORD."""
+        acc = _access()
+        if acc is None:
+            return os.getenv("PANEL_PASSWORD", "")
+        return acc.dev_password()
 
     def cog_unload(self) -> None:
         if self._task:
@@ -334,8 +389,11 @@ class WebPanel(commands.Cog):
             app.router.add_get("/", self.h_index)
             app.router.add_get("/favicon.ico", self.h_favicon)
             app.router.add_get("/api/session", self.h_session)
+            app.router.add_get("/api/gate", self.h_gate)
             app.router.add_post("/api/login", self.h_login)
             app.router.add_post("/api/logout", self.h_logout)
+            app.router.add_get("/api/access", self.h_access)
+            app.router.add_post("/api/access", self.h_access_save)
             app.router.add_get("/api/overview", self.h_overview)
             app.router.add_get("/api/guilds", self.h_guilds)
             app.router.add_post("/api/guilds/music", self.h_guild_music)
@@ -461,6 +519,13 @@ class WebPanel(commands.Cog):
     def _authed(self, request: web.Request) -> bool:
         return self.sessions.valid(request.cookies.get(COOKIE_NAME))
 
+    def _scope(self, request: web.Request) -> str:
+        """Куда пущена эта сессия: id сервера или «разработчик»."""
+        return self.sessions.scope_of(request.cookies.get(COOKIE_NAME))
+
+    def _is_dev(self, request: web.Request) -> bool:
+        return self._scope(request) == DEVELOPER
+
     @staticmethod
     def _is_https(request: web.Request) -> bool:
         return request.secure or request.headers.get("X-Forwarded-Proto", "").lower() == "https"
@@ -491,38 +556,129 @@ class WebPanel(commands.Cog):
             return _json({"authed": False})
         from utils.checks import load_config
 
-        return _json({"authed": True, "bot_name": load_config().get("bot_name") or "Бот"})
+        scope = self._scope(request)
+        return _json({"authed": True, "dev": scope == DEVELOPER,
+                      "bot_name": load_config().get("bot_name") or "Бот"})
+
+    # ---- экран входа: куда и по какому паролю ----
+    async def h_gate(self, request: web.Request) -> web.Response:
+        """Список плашек «куда войти». Публичный: пароль ещё не введён.
+
+        id серверов наружу не уходят — экран входа оперирует порядковыми номерами, а
+        номер превращается в сервер уже здесь, при проверке пароля.
+        """
+        acc = _access()
+        if acc is None:
+            return _json({"gate": [{"i": 1, "name": "Панель управления", "kind": DEVELOPER,
+                                    "set": bool(self._dev_password()), "members": 0, "home": False}]})
+        gate = []
+        for n, one in enumerate(acc.entries(self.bot), start=1):
+            gate.append({"i": n, "name": one["name"], "members": one["members"],
+                         "set": bool(one["set"]), "home": bool(one["home"]),
+                         "kind": DEVELOPER if one["scope"] == DEVELOPER else "server"})
+        return _json({"gate": gate})
+
+    def _login_scope(self, body: Dict[str, Any]) -> tuple:
+        """(куда пускать, чем ответить при отказе): плашка экрана входа + проверка тут."""
+        acc = _access()
+        supplied = str(body.get("password", ""))
+        if acc is None:
+            return (DEVELOPER, "") if _eq(supplied, os.getenv("PANEL_PASSWORD", "")) else ("", "")
+        index = str(body.get("i", "") or "").strip()
+        if not index:
+            # страница старого образца: выбора там не было, значит это вход разработчика
+            return (DEVELOPER, "") if _eq(supplied, acc.dev_password()) else ("", "")
+        scope = acc.scope_at(self.bot, index)
+        if not scope:
+            return "", "Такого варианта входа нет — обновите страницу."
+        want = acc.dev_password() if scope == DEVELOPER else acc.guild_password(scope)
+        if not want:
+            return "", "Этому серверу пароль ещё не задан. Откроет его вход разработчика."
+        return (scope, "") if _eq(supplied, want) else ("", "")
 
     async def h_login(self, request: web.Request) -> web.Response:
         ip = request.remote or "?"
         wait = self.limiter.retry_after(ip)
         if wait:
             return _json({"error": f"Слишком много попыток. Подождите {max(1, wait // 60)} мин."}, 429)
-        supplied = str((await _body(request)).get("password", ""))
-        if hmac.compare_digest(supplied.encode("utf-8"), self.password.encode("utf-8")):
+        body = await _body(request)
+        scope, why = self._login_scope(body)
+        if scope:
             self.limiter.ok(ip)
             resp = _json({"ok": True})
             resp.set_cookie(
                 COOKIE_NAME,
-                self.sessions.create(),
+                self.sessions.create(scope),
                 max_age=SESSION_TTL,
                 httponly=True,
                 samesite="Strict",
                 secure=self._is_https(request),
                 path="/",
             )
-            print(f"🔐 Вход в веб-панель с {ip}", flush=True)
+            print(f"🔐 Вход в веб-панель с {ip}: {'разработчик' if scope == DEVELOPER else scope}", flush=True)
             return resp
         self.limiter.fail(ip)
         print(f"⚠️ Неверный пароль веб-панели с {ip}", flush=True)
         await asyncio.sleep(0.6)
-        return _json({"error": "Неверный пароль"}, 403)
+        return _json({"error": why or "Неверный пароль"}, 403)
 
     async def h_logout(self, request: web.Request) -> web.Response:
         self.sessions.drop(request.cookies.get(COOKIE_NAME))
         resp = _json({"ok": True})
         resp.del_cookie(COOKIE_NAME, path="/")
         return resp
+
+    # ---- доступы: чей пароль куда пускает ----
+    def _access_guard(self, request: web.Request):
+        """Экран «Доступ» принадлежит разработчику: вход по паролю сервера не должен
+        давать возможность назначить пароль себе или соседнему серверу."""
+        acc = _access()
+        if acc is None:
+            return None, _json({"error": "utils/web_access.py не загрузился — доступы не настроить"}, 503)
+        if not self._is_dev(request):
+            return None, _json({"error": "Пароли серверов меняет только вход разработчика"}, 403)
+        return acc, None
+
+    async def h_access(self, request: web.Request) -> web.Response:
+        acc, deny = self._access_guard(request)
+        if deny:
+            return deny
+        rows = []
+        for one in acc.entries(self.bot):
+            if one["scope"] == DEVELOPER:
+                continue
+            rows.append({"id": one["scope"], "name": one["name"], "label": acc.guild_name(one["scope"]),
+                         "members": one["members"], "set": bool(one["set"]), "home": bool(one["home"])})
+        return _json({"dev_set": bool(acc.dev_password()), "dev_from_env": acc.dev_is_env(),
+                      "file": os.path.basename(acc.ACCESS_PATH), "guilds": rows})
+
+    async def h_access_save(self, request: web.Request) -> web.Response:
+        acc, deny = self._access_guard(request)
+        if deny:
+            return deny
+        body = await _body(request)
+        action = str(body.get("action") or "")
+        gid = str(body.get("g") or "").strip()
+        password = str(body.get("password") or "")
+        name = str(body.get("name") or "")
+        if action == "dev":
+            err, note = acc.set_dev(password), "Пароль разработчика обновлён."
+        else:
+            if gid not in {str(g.id) for g in self.bot.guilds}:
+                return _json({"error": "Такого сервера у бота нет — выбраните его из списка"}, 400)
+            if action == "server":
+                err, note = acc.set_guild(gid, password, name), "Пароль сервера обновлён."
+            elif action == "rename":
+                err, note = acc.rename_guild(gid, name), "Название обновлено."
+            elif action == "drop":
+                err, note = acc.drop_guild(gid), "Серверу закрыт вход: пароль удалён."
+            else:
+                err, note = "Неизвестное действие.", ""
+        if err:
+            return _json({"error": err}, 400)
+        who = "разработчик" if action == "dev" else gid
+        print(f"🔑 Доступ на сайте изменён: {action} для {who}", flush=True)
+        return _json({"ok": True, "note": note})
 
     # ---- обзор ----
     def _guild_rows(self) -> List[Dict[str, Any]]:
@@ -551,6 +707,11 @@ class WebPanel(commands.Cog):
 
     async def h_guilds(self, request: web.Request) -> web.Response:
         rows = self._guild_rows()
+        scope = self._scope(request)
+        if scope and scope != DEVELOPER:
+            # человек вошёл по паролю одного сервера: список из одной строки честно
+            # показывает это в шапке и не даёт выбрать чужой
+            rows = [r for r in rows if r["id"] == scope]
         try:
             from utils import web_tools
 
@@ -756,18 +917,24 @@ class WebPanel(commands.Cog):
             return None, f"Раздел не загрузился: utils/web_tools.py не импортируется ({e.__class__.__name__}: {e}). Смотрите «Логи» при старте бота."
         return web_tools, None
 
-    @staticmethod
-    def _pick_guild(request: web.Request) -> None:
-        """Какой сервер обслуживает этот запрос — тот, что выбран в шапке панели.
+    def _pick_guild(self, request: web.Request) -> None:
+        """Какой сервер обслуживает этот запрос.
 
         Ставится до обработчика: разделы внутри utils/web_tools.py вызывают guild_of(bot)
         в десятках мест, и передавать id через каждый из них означало бы переписать весь
         файл и рискнуть разъехаться с кодами Discord. Пустое значение — «домашний»,
         то есть ровно то поведение, что было до переключателя.
+
+        Вход по паролю конкретного сервера закрепляет его за сессией: что бы человек ни
+        написал в ?g=, чужой сервер он не получит. Переключатель остаётся разработчику.
         """
         try:
             from utils import web_tools
         except Exception:
+            return
+        scope = self._scope(request)
+        if scope and scope != DEVELOPER:
+            web_tools.pick(scope)
             return
         web_tools.pick(request.query.get("g"))
 

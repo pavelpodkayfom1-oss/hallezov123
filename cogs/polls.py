@@ -178,8 +178,8 @@ class Polls(commands.Cog):
         print(f"[polls] цикл закрытия: {error}")
 
     @commands.slash_command(name="опрос", description="Создать опрос с кнопками",
-                            contexts=disnake.InteractionContextTypes(guild=True),
-                            default_member_permissions=disnake.Permissions(manage_messages=True))
+                            contexts=disnake.InteractionContextTypes(guild=True))
+    @commands.check(is_admin)
     async def poll_new(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.send_modal(PollModal())
 

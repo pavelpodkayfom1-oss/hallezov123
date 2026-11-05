@@ -13,6 +13,7 @@ from collections import Counter
 import disnake
 from disnake.ext import commands, tasks
 
+from utils.checks import is_admin
 from utils.embeds import get_color, note_embed
 
 REPORT_INTERVAL_MIN = 10
@@ -168,8 +169,8 @@ class Memory(commands.Cog):
     @commands.slash_command(
         name="mem",
         description="Сколько памяти ест бот и кто главный потребитель",
-        default_member_permissions=disnake.Permissions(manage_guild=True),
     )
+    @commands.check(is_admin)
     async def mem(self, inter: disnake.ApplicationCommandInteraction):
         await inter.response.defer(ephemeral=True)
         st = await asyncio.to_thread(_proc_status)
