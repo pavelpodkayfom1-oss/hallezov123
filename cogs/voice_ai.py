@@ -115,6 +115,20 @@ def _voice_settings(user_id: int) -> dict:
         return {}
 
 
+def _brain_settings() -> dict:
+    """Настройки «ИИ-собеседника» — включён ли, чью манеру держать, какие каналы.
+
+    Та же грабля, что с голосом: get_settings — функция модуля cogs/ai_chat.py,
+    а не метод кога, поэтому bot.get_cog("AIChat").get_settings() падает.
+    """
+    try:
+        from cogs import ai_chat as brain_mod
+
+        return dict(brain_mod.get_settings() or {})
+    except Exception:
+        return {}
+
+
 # ────────────────────────── данные, о которых можно спросить ──────────────────────────
 
 def context(guild: disnake.Guild) -> str:
@@ -324,7 +338,7 @@ class VoiceAI(commands.Cog):
         brain = self.bot.get_cog("AIChat")
         if brain is None:
             raise RuntimeError("ког «ИИ-собеседник» выключен — отвечать нечем")
-        s = brain.get_settings()
+        s = _brain_settings() or {"enabled": True}
         if not s.get("enabled"):
             raise RuntimeError("ИИ-собеседник выключен (команда /ai toggle)")
         persona = str(s.get("persona") or "") or ASK_SYSTEM
@@ -397,13 +411,8 @@ class VoiceAI(commands.Cog):
 
     def _in_ai_channel(self, message: disnake.Message) -> bool:
         """Канал, который руководство явно отвело под ИИ: там спрашивают без упоминаний."""
-        try:
-            from cogs import ai_chat as brain_mod
-
-            allowed = [int(c) for c in (brain_mod.get_settings().get("channels") or []) if str(c).isdigit()]
-            return message.channel.id in allowed
-        except Exception:
-            return False
+        allowed = [int(c) for c in (_brain_settings().get("channels") or []) if str(c).isdigit()]
+        return message.channel.id in allowed
 
     # ---- слух ----
     @commands.Cog.listener()
