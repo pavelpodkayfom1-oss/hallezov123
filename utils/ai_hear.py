@@ -8,6 +8,10 @@
 Цепочка: файл .ogg (opus) → ffmpeg → wav 16 кГц моно → inline_data в Gemini → текст.
 Здесь же think() — ответ моделью одним текстом: тот же ключ спасает, когда мозгу
 не хватило ANTHROPIC_API_KEY.
+
+Gemini часто отвечает 503 «model is currently experiencing high demand» или 429. Это
+временная перегрузка конкретной модели, поэтому на такие коды мы один раз повторяем
+запрос и затем переходим к следующей модели, а не падаем сразу.
 """
 import asyncio
 import base64
@@ -15,6 +19,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from typing import List, Optional
 
 _GEM = "https://generativelanguage.googleapis.com/v1beta"
@@ -24,17 +29,26 @@ _MAX_SECONDS = 150
 # Свежие flash умеют аудио, старые — нет.
 _FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-flash-latest"]
 
+# Что в списке моделей не годится для расшифровки и ответов текстом.
+_SKIP_WORDS = ("tts", "image", "imagen", "embed", "veo", "aqa", "robotics", "computer-use",
+               "learnlm", "gemma", "live", "native-audio", "vision", "thinking-exp")
+_MAX_MODELS = 6                          # больше шести моделей подряд пробовать незачем
+_TRANSIENT = (429, 500, 502, 503, 504)   # временные сбои: перегрузка, лимит, сервер упал
+_RETRY_PAUSE = 1.5                       # пауза перед повтором на той же модели, секунд
+
 HEAR_PROMPT = (
     "Перед тобой запись человеческого голоса. Точно расшифруй, что сказано, по-русски, "
     "одним абзацем, без пояснений и без кавычек. Если слов нет или неразборчиво — "
     "ответь ровно: пусто"
 )
 
+_EMPTY_MARKS = ("пусто", "empty", "нет слов")
+
 _cache = {"models": None, "at": 0.0}
 
 
 class HearError(RuntimeError):
-    """Причина, которую можно показать человеку безexplainа кода."""
+    """Причина, которую можно показать человеку без кода и трейсбеков."""
 
 
 def available() -> bool:
@@ -77,8 +91,6 @@ def _to_wav(data: bytes) -> bytes:
 
 
 async def _models(session, key: str) -> List[str]:
-    import time
-
     now = time.time()
     if _cache["models"] and now - _cache["at"] < 3600:
         return _cache["models"]
@@ -86,28 +98,110 @@ async def _models(session, key: str) -> List[str]:
     try:
         async with session.get(f"{_GEM}/models", headers={"x-goog-api-key": key},
                                params={"page_size": 600}) as r:
-            blob = await r.json()
+            blob = await r.json(content_type=None)
             for m in blob.get("models", []) or []:
                 if "generateContent" in (m.get("supportedGenerationMethods") or []):
                     names.append(str(m.get("name", "")).split("/")[-1])
     except Exception:
         names = []
-    _cache.update(models=names or list(_FALLBACK_MODELS), at=now)
-    return _cache["models"]
+    names = [n for n in names if n]
+    # Пустой список (сеть моргнула, ключ не тот) не кладём в кэш на час — иначе
+    # временный сбой на старте отравит все ответы запасным списком надолго.
+    if names:
+        _cache.update(models=names, at=now)
+        return names
+    return list(_FALLBACK_MODELS)
 
 
 def _order(models: List[str]) -> List[str]:
-    """Сначала те, что точно умеют аудио, остальное — как было."""
-    audio = [m for m in models if "live" in m or "native-audio" in m]
-    plain = [m for m in models if m not in audio]
-    head = [m for m in _FALLBACK_MODELS if m in plain or m in audio]
-    return head + audio + [m for m in plain if m not in head]
+    """Проверенные flash — первыми, дальше остальные текстовые gemini, не больше шести."""
+    ok = [m for m in models
+          if m.startswith("gemini") and not any(w in m for w in _SKIP_WORDS)]
+    head = [m for m in _FALLBACK_MODELS if m in ok]
+    rest = [m for m in ok if m not in head and "flash" in m]
+    chain = (head + rest)[:_MAX_MODELS]
+    return chain or list(_FALLBACK_MODELS)
+
+
+def _extract_text(blob: dict) -> str:
+    parts = (((blob.get("candidates") or [{}])[0]).get("content") or {}).get("parts") or []
+    return "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+
+
+async def _generate(body: dict, timeout: float) -> str:
+    """Один запрос к Gemini с повтором и запасными моделями.
+
+    Возвращает первый непустой текст. Временные сбои (503/429/5xx) не фатальны: один
+    повтор, потом следующая модель. Фатальны только неверный ключ и сеть.
+    """
+    import aiohttp
+
+    key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not key:
+        raise HearError("в переменных хостинга нет GEMINI_API_KEY")
+
+    deadline = time.monotonic() + timeout
+    hdr = {"x-goog-api-key": key, "Content-Type": "application/json"}
+    err = ""
+    busy = False
+    per_request = aiohttp.ClientTimeout(total=min(30.0, timeout))
+
+    async with aiohttp.ClientSession(timeout=per_request) as session:
+        for model in _order(await _models(session, key)):
+            for attempt in range(2):
+                if time.monotonic() > deadline:
+                    break
+                try:
+                    async with session.post(f"{_GEM}/models/{model}:generateContent",
+                                            headers=hdr, json=body) as r:
+                        try:
+                            blob = await r.json(content_type=None)
+                        except Exception:
+                            blob = {}
+                        if not isinstance(blob, dict):
+                            blob = {}
+                        status = r.status
+                except aiohttp.ClientError as e:
+                    err = f"сеть до Gemini: {e}"
+                    break
+                except asyncio.TimeoutError:
+                    err = f"модель {model} не успела ответить"
+                    busy = True
+                    break
+                except Exception as e:
+                    err = f"{type(e).__name__}: {e}"
+                    break
+
+                if status == 200:
+                    text = _extract_text(blob)
+                    if text:
+                        return text
+                    err = "модель ответила пустотой"
+                    break
+                msg = str((blob.get("error") or {}).get("message", status))[:200]
+                if status in (401, 403):
+                    raise HearError(f"Gemini не принял ключ GEMINI_API_KEY ({status}): {msg}")
+                if status in _TRANSIENT:
+                    busy = True
+                    err = f"Gemini: {msg}"
+                    if attempt == 0 and time.monotonic() + _RETRY_PAUSE < deadline:
+                        await asyncio.sleep(_RETRY_PAUSE)
+                        continue          # один повтор на той же модели
+                    break                 # потом — следующая модель
+                # 400/404 и прочее: модель не умеет такой запрос — пробуем следующую
+                err = f"Gemini: {msg}"
+                break
+            if time.monotonic() > deadline:
+                break
+
+    if busy:
+        raise HearError("Gemini сейчас перегружен (высокий спрос) — попробуй ещё раз через минуту")
+    raise HearError(err or "ни одна модель не ответила")
 
 
 async def transcribe(data: bytes, timeout: float = 45.0) -> str:
     """Голосовой файл → текст. Бросает HearError с человеческой причиной."""
-    key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not key:
+    if not os.getenv("GEMINI_API_KEY", "").strip():
         raise HearError("в переменных хостинга нет GEMINI_API_KEY")
     if not data:
         raise HearError("вложение пустое")
@@ -121,36 +215,10 @@ async def transcribe(data: bytes, timeout: float = 45.0) -> str:
                                 {"inline_data": {"mime_type": "audio/wav", "data": b64}}]}],
         "generationConfig": {"temperature": 0.1, "maxOutputTokens": 500},
     }
-
-    import aiohttp
-
-    err = ""
-    timeout_cfg = aiohttp.ClientTimeout(total=timeout)
-    async with aiohttp.ClientSession(timeout=timeout_cfg) as session:
-        hdr = {"x-goog-api-key": key, "Content-Type": "application/json"}
-        for model in _order(await _models(session, key)):
-            try:
-                async with session.post(f"{_GEM}/models/{model}:generateContent",
-                                        headers=hdr, json=body) as r:
-                    blob = await r.json()
-                    if r.status != 200:
-                        err = str(blob.get("error", {}).get("message", r.status))[:200]
-                        if r.status in (400, 404):
-                            continue          # модель не умеет аудио — пробуем следующую
-                        raise HearError(f"Gemini: {err}")
-                    parts = (((blob.get("candidates") or [{}])[0]).get("content") or {}).get("parts") or []
-                    text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
-                    if not text or text.lower() in ("пусто", "empty", "нет слов"):
-                        raise HearError("в записи не слышно слов")
-                    return text[:1200]
-            except HearError:
-                raise
-            except aiohttp.ClientError as e:
-                err = f"сеть до Gemini: {e}"
-                break
-            except Exception as e:
-                err = f"{type(e).__name__}: {e}"
-    raise HearError(err or "ни одна модель не взяла аудио")
+    text = await _generate(body, timeout)
+    if text.lower().strip(" .!") in _EMPTY_MARKS:
+        raise HearError("в записи не слышно слов")
+    return text[:1200]
 
 
 async def think(system: str, prompt: str, timeout: float = 45.0) -> str:
@@ -159,43 +227,15 @@ async def think(system: str, prompt: str, timeout: float = 45.0) -> str:
     Это запасной мозг: ключ GEMINI_API_KEY на хостинге уже есть, а ANTHROPIC_API_KEY
     может не быть — без него бот не обязан молчать.
     """
-    key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not key:
+    if not os.getenv("GEMINI_API_KEY", "").strip():
         raise HearError("в переменных хостинга нет ни ANTHROPIC_API_KEY, ни GEMINI_API_KEY")
-
-    import aiohttp
 
     body = {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.5, "maxOutputTokens": 700},
     }
-    err = ""
-    hdr = {"x-goog-api-key": key, "Content-Type": "application/json"}
-    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
-        for model in _order(await _models(session, key)):
-            try:
-                async with session.post(f"{_GEM}/models/{model}:generateContent",
-                                        headers=hdr, json=body) as r:
-                    blob = await r.json()
-                    if r.status != 200:
-                        err = str(blob.get("error", {}).get("message", r.status))[:200]
-                        if r.status in (400, 404):
-                            continue
-                        raise HearError(f"Gemini: {err}")
-                    parts = (((blob.get("candidates") or [{}])[0]).get("content") or {}).get("parts") or []
-                    text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
-                    if text:
-                        return text
-                    err = "модель ответила пустотой"
-            except HearError:
-                raise
-            except aiohttp.ClientError as e:
-                err = f"сеть до Gemini: {e}"
-                break
-            except Exception as e:
-                err = f"{type(e).__name__}: {e}"
-    raise HearError(err or "ни одна модель не ответила")
+    return await _generate(body, timeout)
 
 
 def size_guard(attachment) -> str:

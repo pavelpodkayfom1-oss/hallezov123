@@ -74,13 +74,22 @@ class AIChat(commands.Cog):
         body = {"model": model, "max_tokens": 500, "system": system,
                 "messages": [{"role": "user", "content": prompt}]}
         headers = {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as sess:
-            async with sess.post(API_URL, headers=headers, json=body) as r:
-                data = await r.json()
-                if r.status != 200:
-                    raise RuntimeError(str(data.get("error", {}).get("message", r.status))[:200])
-        text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
-        return text.strip()
+        try:
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as sess:
+                async with sess.post(API_URL, headers=headers, json=body) as r:
+                    data = await r.json(content_type=None)
+                    if r.status != 200:
+                        raise RuntimeError(str(data.get("error", {}).get("message", r.status))[:200])
+            text = "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
+            return text.strip()
+        except Exception as e:
+            # Anthropic лёг или лимит — если есть ключ Gemini, отвечаем им, а не молчим.
+            from utils import ai_hear
+
+            if not ai_hear.available():
+                raise
+            print(f"⚠️ ИИ-собеседник: Anthropic не ответил ({e}), думаю через Gemini", flush=True)
+            return await ai_hear.think(system, prompt)
 
     def _quota_ok(self, limit: int) -> bool:
         today = date.today()
