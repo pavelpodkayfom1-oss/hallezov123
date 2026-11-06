@@ -26,7 +26,7 @@ from utils.embeds import note_embed, panel_embed
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE_FILE = os.path.join(BASE_DIR, "voice_ai.json")
 
-DEFAULT = {"on": True, "speak": False, "max_len": 420}
+DEFAULT = {"on": True, "speak": True, "max_len": 420}
 
 COOLDOWN = 25            # секунд между расшифровками одного человека: Gemini за звук платит
 MAX_TTS = 700            # вслух длиннее этого не читают
