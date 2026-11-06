@@ -5,7 +5,11 @@
 у ИИ. Обычный участник может только заказать музыку и убавить громкость; мут, роли и
 кик — только руководство (is_admin), и только тех, кто ниже по иерархии.
 """
+import asyncio
+import importlib
 import json
+import os
+import random
 import re
 from datetime import timedelta
 from typing import Optional, Tuple
@@ -168,6 +172,70 @@ async def run(cog, message: disnake.Message, asker: disnake.Member, act: dict) -
     return False, "не знаю такого действия"
 
 
+def _search_sync(music, query: str, n: int = 12) -> list:
+    """Быстрый поиск на YouTube без разбора каждого ролика: только названия и ссылки."""
+    import yt_dlp
+
+    try:
+        mod = importlib.import_module(type(music).__module__)
+    except Exception:
+        mod = None
+    opts = {"quiet": True, "no_warnings": True, "skip_download": True, "extract_flat": True,
+            "socket_timeout": 10, "cachedir": False}
+    cookies = getattr(mod, "COOKIES_FILE", "") if mod else ""
+    if cookies and os.path.exists(cookies):
+        opts["cookiefile"] = cookies
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(f"ytsearch{n}:{query}", download=False)
+    out = []
+    for e in (info or {}).get("entries") or []:
+        if not e or not e.get("id"):
+            continue
+        out.append({"title": str(e.get("title") or ""),
+                    "url": e.get("url") or f"https://www.youtube.com/watch?v={e['id']}",
+                    "duration": e.get("duration")})
+    return out
+
+
+def _same(a: str, b: str) -> bool:
+    a, b = a.lower().strip(), b.lower().strip()
+    return bool(a and b and (a == b or a in b or b in a))
+
+
+async def _pick_query(music, guild, asker, query: str) -> str:
+    """Общий запрос («фонк») каждый раз давал первый результат поиска — один и тот же трек.
+    Здесь берём несколько результатов и выбираем случайный из тех, что не играли недавно."""
+    q = query.strip()
+    if q.lower().startswith(("http://", "https://")):
+        return q
+    try:
+        want = " ".join(q.lower().split())
+        if any(music._stem(f).lower() == want for f in music._library()):
+            return q                      # точное имя из библиотеки — играем как просили
+    except Exception:
+        pass
+    recent = []
+    p = getattr(music, "players", {}).get(guild.id)
+    if p is not None:
+        for tr in list(getattr(p, "history", []) or []) + list(getattr(p, "queue", []) or []) + [getattr(p, "current", None)]:
+            if isinstance(tr, dict) and tr.get("title"):
+                recent.append(str(tr["title"]))
+    try:
+        from utils import ai_taste
+
+        recent += ai_taste.recent(asker.id, 15)
+    except Exception:
+        pass
+    try:
+        found = await asyncio.wait_for(asyncio.to_thread(_search_sync, music, q, 12), timeout=12)
+    except Exception:
+        return q                          # поиск не вышел — пусть музыка разбирается сама
+    short = [r for r in found if r["duration"] is None or r["duration"] <= 900] or found
+    fresh = [r for r in short if not any(_same(r["title"], x) for x in recent)]
+    pool = (fresh or short)[:8]
+    return random.choice(pool)["url"] if pool else q
+
+
 async def _music(cog, guild, asker, query: str) -> Tuple[bool, str]:
     music = cog.bot.get_cog("Music")
     if music is None:
@@ -185,7 +253,8 @@ async def _music(cog, guild, asker, query: str) -> Tuple[bool, str]:
         if vc.is_playing() or vc.is_paused():
             return False, f"я уже играю в «{vc.channel.name}» — зайди туда"
         await vc.move_to(voice.channel)
-    res = await music.web_enqueue(guild, query, asker.mention, key=str(asker.id))
+    picked = await _pick_query(music, guild, asker, query)
+    res = await music.web_enqueue(guild, picked, asker.mention, key=str(asker.id))
     if res.get("ok"):
         did = str(res.get("did") or "включил")
         try:

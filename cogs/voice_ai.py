@@ -538,6 +538,14 @@ class VoiceAI(commands.Cog):
 
         await self.respond(message, heard, mark, loading)
 
+    def _music_busy(self, guild: disnake.Guild) -> bool:
+        vc = guild.voice_client
+        if vc and (vc.is_playing() or vc.is_paused()):
+            return True
+        music = self.bot.get_cog("Music")
+        p = getattr(music, "players", {}).get(guild.id) if music else None
+        return bool(p and getattr(p, "queue", None))
+
     def wants_text(self, message: disnake.Message) -> bool:
         """ИИ-собеседник передаёт сюда ответы на упоминания: тут есть и действия, и голос."""
         return bool(message.guild) and _srv(message.guild.id)["on"]
@@ -581,9 +589,10 @@ class VoiceAI(commands.Cog):
 
         # Музыка и озвучка делят один голосовой клиент: озвучка останавливает трек.
         # Поэтому при заказе говорим только пока тишина, а сам трек запускаем после.
-        vc = guild.voice_client
-        playing = bool(vc and (vc.is_playing() or vc.is_paused()))
-        if _srv(guild.id)["speak"] and not (music and playing):
+        # Если музыка играет, стоит на паузе или это команда музыке («следующий»), вслух не
+        # говорим: озвучка рвёт трек, а следующий после неё уже не запускается.
+        ctl = bool(act) and act.get("type") == "music_ctl"
+        if _srv(guild.id)["speak"] and not ctl and not self._music_busy(guild):
             ch = _speak_channel(asker)
             if ch:
                 err = await self.speak_in(guild, ch, speech, asker.id)

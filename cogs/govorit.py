@@ -428,7 +428,7 @@ class Govorit(commands.Cog):
         if _stay_on(guild.id):
             return
         vc = guild.voice_client
-        if vc and not vc.is_playing():
+        if vc and not (vc.is_playing() or vc.is_paused()):
             await vc.disconnect()
 
     def _schedule_idle(self, guild: disnake.Guild):
