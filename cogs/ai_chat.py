@@ -17,6 +17,7 @@ import aiohttp
 import disnake
 from disnake.ext import commands
 
+from utils import ai_self
 from utils.checks import is_admin
 from utils.embeds import note_embed
 
@@ -64,6 +65,12 @@ class AIChat(commands.Cog):
 
     # ---- запрос к модели ----
     async def _ask(self, system: str, prompt: str, json_mode: bool = False) -> str:
+        # Модель не знает, что умеет сам бот, и на «что ты умеешь» или «какие идеи
+        # добавить» льёт общую воду. Список собирается из загруженных когов, поэтому
+        # не устаревает и не может соврать про то, чего уже нет.
+        card = ai_self.catalogue(self.bot)
+        if card:
+            system = f"{system}\n\n{card}"
         key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         if not key:
             # Ключ Gemini на хостинге есть почти всегда — без Anthropic бот думает им.
