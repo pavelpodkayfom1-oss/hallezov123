@@ -486,7 +486,7 @@ class VoiceAI(commands.Cog):
 
         self.used_today += 1
         try:
-            answer = await asyncio.wait_for(self.ask(message.guild, message.author, heard), timeout=50)
+            answer = await asyncio.wait_for(self.ask(message.guild, message.author, heard), timeout=10)
         except asyncio.TimeoutError:
             await loading.edit(embed=note_embed("🧠 Не дождался ответа от ИИ — попробуй ещё раз.", "error"))
             return

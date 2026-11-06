@@ -144,7 +144,7 @@ async def _generate(body: dict, timeout: float) -> str:
     hdr = {"x-goog-api-key": key, "Content-Type": "application/json"}
     err = ""
     busy = False
-    per_request = aiohttp.ClientTimeout(total=min(15.0, timeout))
+    per_request = aiohttp.ClientTimeout(total=min(5.0, timeout))
 
     async with aiohttp.ClientSession(timeout=per_request) as session:
         for model in _order(await _models(session, key)):
@@ -221,7 +221,7 @@ async def transcribe(data: bytes, timeout: float = 45.0) -> str:
     return text[:1200]
 
 
-async def think(system: str, prompt: str, timeout: float = 30.0) -> str:
+async def think(system: str, prompt: str, timeout: float = 9.0) -> str:
     """Думать текст по-человечески через Gemini.
 
     Это запасной мозг: ключ GEMINI_API_KEY на хостинге уже есть, а ANTHROPIC_API_KEY
