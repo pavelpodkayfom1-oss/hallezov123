@@ -57,7 +57,7 @@ def _srv(gid) -> dict:
     if isinstance(one, dict):
         out.update({k: v for k, v in one.items() if k in DEFAULT})
     out["on"] = bool(out["on"])
-    out["speak"] = bool(out["speak"])
+    out["speak"] = True  # всегда говорим сразу; старая сохранённая настройка не мешает
     try:
         out["max_len"] = max(120, min(1200, int(out["max_len"])))
     except (TypeError, ValueError):
