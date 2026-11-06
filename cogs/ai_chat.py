@@ -147,7 +147,7 @@ class AIChat(commands.Cog):
             self.own_replies.append(sent.id)
             voice = self.bot.get_cog("VoiceAI")
             if voice is not None:
-                voice.decorate(sent, answer[:MAX_REPLY])
+                voice.decorate(sent, answer[:MAX_REPLY], message.author)
         except Exception as e:
             print(f"⚠️ ИИ-собеседник: не смог ответить: {e}", flush=True)
 

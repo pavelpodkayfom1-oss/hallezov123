@@ -100,6 +100,21 @@ def _speak_channel(member) -> Optional[disnake.VoiceChannel]:
     return vs.channel if vs else None
 
 
+def _voice_settings(user_id: int) -> dict:
+    """Чей голос, темп и высота — из «Говорит».
+
+    get_settings живёт в модуле кога, а не у самого кога: спрашивать её через
+    bot.get_cog("Govorit") нельзя, AttributeError прилетает на каждую озвучку.
+    """
+    try:
+        import importlib
+
+        mod = importlib.import_module("cogs.govorit")
+        return dict(mod.get_settings(int(user_id)) or {})
+    except Exception:
+        return {}
+
+
 # ────────────────────────── данные, о которых можно спросить ──────────────────────────
 
 def context(guild: disnake.Guild) -> str:
@@ -223,15 +238,15 @@ class SettingsView(disnake.ui.View):
     def embed(self, inter: disnake.MessageInteraction) -> disnake.Embed:
         st = _srv(self.gid)
         govo = inter.bot.get_cog("Govorit")
-        who = "не найден ког «Говорит»"
-        if govo:
-            s = govo.get_settings(int(inter.author.id))
-            who = f"{s.get('voice')}, темп {s.get('rate')}%, высота {s.get('pitch')} Гц"
+        s = _voice_settings(int(inter.author.id))
+        who = ("не найден ког «Говорит»" if not govo else
+               f"{s.get('voice')}, темп {s.get('rate')}%, высота {s.get('pitch')} Гц" if s else
+               "настройки голоса не читаются")
         return panel_embed(
             "🧠 ИИ в войсе",
             [
                 ("Отвечать на вопросы",
-                 "✅ включено — бот отвечает, когда его позовут упоминанием"
+                 "✅ включено — слышит войс-сообщения, упоминания и текст в ИИ-канале"
                  if st["on"] else "⛔ выключено — бот молчит"),
                 ("Отвечать вслух сразу",
                  "🔊 да — если спрашивающий сидит в войсе, ответ прозвучит там"
@@ -239,7 +254,8 @@ class SettingsView(disnake.ui.View):
                 ("Длина ответа вслух", f"{st['max_len']} знаков (≈ {round(st['max_len'] / 12)} секунд)"),
                 ("Каким голосом", who),
                 ("Как спрашивать",
-                 "голосовым сообщением в чат или текстом с упоминанием бота.\n"
+                 "голосовым сообщением в чат, текстом с упоминанием бота — или просто текстом "
+                 "в канале, который отмечен для ИИ (/ai channel).\n"
                  "Разговор в войсе бот не слышит: приём звука в библиотеке не реализован, "
                  "поэтому вопрос надо отправить в чат."),
             ],
@@ -328,8 +344,11 @@ class VoiceAI(commands.Cog):
             return "🔇 Пустой ответ, говорить нечего."
         st = _srv(guild.id)
         speech = speech[:st["max_len"]]
+        s = _voice_settings(user_id)
+        if not s:
+            return "⚠️ Не удалось прочитать настройки голоса — зайди в «Говорит» и попробуй ещё раз."
         try:
-            return await govo.speak(guild, channel, speech, govo.get_settings(int(user_id))) or ""
+            return await govo.speak(guild, channel, speech, s) or ""
         except Exception as e:
             return f"❌ Озвучка не вышла: {type(e).__name__}: {e}"
 
@@ -346,19 +365,45 @@ class VoiceAI(commands.Cog):
             embed=note_embed(err or f"🔊 Сказал в {ch.mention}.", "error" if err else "success"),
             ephemeral=True)
 
-    def decorate(self, message: disnake.Message, text: str) -> None:
-        """Вешает кнопку на карточку ответа; вызывает её ИИ-собеседник."""
+    def decorate(self, message: disnake.Message, text: str, asker=None) -> None:
+        """Вызывается ИИ-собеседником после текстового ответа: вешает кнопку и, если
+        включено «вслух сразу», говорит сам. Спрашивающий для этого обязателен —
+        без него непонятно, в какой канал лезть с голосом."""
         try:
             gid = int(getattr(message.guild, "id", 0) or 0)
         except (TypeError, ValueError):
             return
         if not gid or not _srv(gid)["on"]:
             return
+        speak = asker is not None and bool(_srv(gid)["speak"])
         try:
-            asyncio.get_running_loop().create_task(
-                message.edit(view=SpeakView(self, gid, text)))
+            asyncio.get_running_loop().create_task(self._decorate(message, text, gid, asker if speak else None))
+        except RuntimeError:
+            pass
+
+    async def _decorate(self, message: disnake.Message, text: str, gid: int, asker) -> None:
+        try:
+            await message.edit(view=SpeakView(self, gid, text))
         except Exception:
             pass
+        if asker is None:
+            return
+        ch = _speak_channel(asker)
+        if ch is None:
+            return
+        err = await self.speak_in(message.guild, ch, text, asker.id)
+        if err:
+            print(f"🎙 ИИ в войсе: {err}", flush=True)
+
+    def _in_ai_channel(self, message: disnake.Message) -> bool:
+        """Канал, который руководство явно отвело под ИИ: там спрашивают без упоминаний."""
+        try:
+            from cogs import ai_chat as brain_mod
+
+            allowed = [int(c) for c in (brain_mod.get_settings().get("channels") or []) if str(c).isdigit()]
+            return message.channel.id in allowed
+        except Exception:
+            return False
 
     # ---- слух ----
     @commands.Cog.listener()
@@ -366,62 +411,66 @@ class VoiceAI(commands.Cog):
         me = self.bot.user
         if message.author.bot or not message.guild or me is None or message.mention_everyone:
             return
-        attach = _voice_attach(message)
-        if attach is None:
-            return
         mentioned = me in message.mentions
         ref = message.reference
         cached = getattr(ref, "cached_message", None) if ref else None
         replied = bool(cached is not None and getattr(cached.author, "id", None) == me.id)
-        # Явно названный ИИ-канал тоже повод: там человек записывает голосовое без упоминаний.
-        in_ai_channel = False
-        try:
-            from cogs import ai_chat as brain_mod
-
-            allowed = [int(c) for c in (brain_mod.get_settings().get("channels") or []) if str(c).isdigit()]
-            in_ai_channel = message.channel.id in allowed
-        except Exception:
-            pass
-        if not (mentioned or replied or in_ai_channel):
-            return
+        attach = _voice_attach(message)
+        in_ai = self._in_ai_channel(message)
+        if attach is not None:
+            if not (mentioned or replied or in_ai):
+                return
+            question = ""
+        else:
+            # Голый текст берём только в ИИ-канале и только когда бота не звали по имени:
+            # иначе мы ответим дважды — за нас это уже делает ИИ-собеседник.
+            if not in_ai or mentioned or replied:
+                return
+            question = (message.content or "").strip()
+            if len(question) < 3:
+                return
 
         st = _srv(message.guild.id)
         if not st["on"]:
             return
-        why = ai_hear.size_guard(attach)
-        if why:
-            await message.reply(embed=note_embed(f"🎙 Не возьму запись: {why}.", "error"),
-                                mention_author=False)
-            return
-        if not ai_hear.available():
-            await message.reply(embed=note_embed(
-                "🎙 Не могу тебя услышать: на хостинге не задана **GEMINI_API_KEY** — "
-                "расшифровка голоса работает через неё.", "error"), mention_author=False)
-            return
-
         now = time.time()
         if now - self.last_hear.get(message.author.id, 0) < COOLDOWN:
             return
         if not self._quota_ok():
-            await message.reply(embed=note_embed("🎙 На сегодня я расшифровал достаточно, завтра продолжим.",
+            await message.reply(embed=note_embed("🎙 На сегодня у меня лимит, завтра продолжим.",
                                                  "warning"), mention_author=False)
             return
         self.last_hear[message.author.id] = now
 
-        loading = await message.reply(embed=note_embed("🎙 Слушаю запись…", "info"), mention_author=False)
-        try:
-            data = await attach.read()
-        except Exception as e:
-            await loading.edit(embed=note_embed(f"❌ Запись не скачалась: {e}", "error"))
-            return
-        try:
-            heard = await ai_hear.transcribe(data)
-        except ai_hear.HearError as e:
-            await loading.edit(embed=note_embed(f"🎙 Не расслышал: {e}", "error"))
-            return
-        except Exception as e:
-            await loading.edit(embed=note_embed(f"❌ Расшифровка упала: {type(e).__name__}: {e}", "error"))
-            return
+        if attach is None:
+            loading = await message.reply(embed=note_embed("🧠 Думаю…", "info"), mention_author=False)
+            heard, mark = question[:1200], "🧠"
+        else:
+            why = ai_hear.size_guard(attach)
+            if why:
+                await message.reply(embed=note_embed(f"🎙 Не возьму запись: {why}.", "error"),
+                                    mention_author=False)
+                return
+            if not ai_hear.available():
+                await message.reply(embed=note_embed(
+                    "🎙 Не могу тебя услышать: на хостинге не задана **GEMINI_API_KEY** — "
+                    "расшифровка голоса работает через неё.", "error"), mention_author=False)
+                return
+            loading = await message.reply(embed=note_embed("🎙 Слушаю запись…", "info"), mention_author=False)
+            try:
+                data = await attach.read()
+            except Exception as e:
+                await loading.edit(embed=note_embed(f"❌ Запись не скачалась: {e}", "error"))
+                return
+            try:
+                heard = await ai_hear.transcribe(data)
+            except ai_hear.HearError as e:
+                await loading.edit(embed=note_embed(f"🎙 Не расслышал: {e}", "error"))
+                return
+            except Exception as e:
+                await loading.edit(embed=note_embed(f"❌ Расшифровка упала: {type(e).__name__}: {e}", "error"))
+                return
+            mark = "🎙"
         if not heard:
             await loading.edit(embed=note_embed("🎙 В записи тишина.", "warning"))
             return
@@ -434,7 +483,7 @@ class VoiceAI(commands.Cog):
             return
 
         card = note_embed(
-            f"🎙 Ты спросил: *{heard[:400]}*\n\n{answer[:1600]}",
+            f"{mark} Ты спросил: *{heard[:400]}*\n\n{answer[:1600]}",
             "embed",
             title=None,
             guild=message.guild,
