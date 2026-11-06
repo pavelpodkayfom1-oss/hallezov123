@@ -848,7 +848,8 @@ async def _webhook_for(bot, ch):
 
 
 async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "",
-                       ping: bool = False, author: str = "", speaker: Any = None) -> Dict[str, Any]:
+                       ping: bool = False, author: str = "", speaker: Any = None,
+                       banner: str = "") -> Dict[str, Any]:
     text = (text or "").strip()
     if not text:
         return {"error": "Пустое сообщение — писать нечего"}
@@ -878,15 +879,22 @@ async def post_channel(bot, cid: Any, text: str, title: str = "", color: str = "
         content = "@everyone" + ("\n" + content if content else "")
     mentions = disnake.AllowedMentions(everyone=bool(ping), users=False, roles=False,
                                        replied_user=False)
+    # картинка, нарисованная прямо в форме: без неё пост ушёл бы голым текстом
+    art = None
+    if str(banner or "").strip():
+        art = _banner_file(banner)
+        if art is None:
+            return {"error": "Картинка уже выветрилась из памяти — нарисуй заново"}
+    withfile = {"file": art} if art else {}
     try:
         if sp_name:
             hook = await _webhook_for(bot, ch)
             kw = {"thread": ch} if isinstance(ch, disnake.Thread) else {}
             msg = await hook.send(content=content, embed=emb, username=sp_name,
                                   avatar_url=sp_avatar or disnake.utils.MISSING,
-                                  allowed_mentions=mentions, wait=True, **kw)
+                                  allowed_mentions=mentions, wait=True, **withfile, **kw)
         else:
-            msg = await ch.send(content=content, embed=emb, allowed_mentions=mentions)
+            msg = await ch.send(content=content, embed=emb, allowed_mentions=mentions, **withfile)
     except Exception as e:
         return {"error": _discord_error(e)}
     out = {"link": msg.jump_url, "where": f"#{ch.name}" + (f" · от имени «{sp_name}»" if sp_name else ""),
@@ -1083,6 +1091,37 @@ async def banner_make(bot, cid: Any, mid: Any) -> Dict[str, Any]:
 
 def banner_bytes(key: Any) -> Optional[bytes]:
     return _banners.get(str(key or ""))
+
+
+def _banner_file(key: Any):
+    data = banner_bytes(key)
+    return None if not data else disnake.File(io.BytesIO(data), filename=f"banner_{key}.jpg")
+
+
+async def banner_draw(bot, text: Any) -> Dict[str, Any]:
+    """Картинка по тексту, который человек печатает в форме: сообщения в канале ещё нет."""
+    text = re.sub(r"<[@#][!&]?[0-9]+>", "", str(text or "").strip())
+    text = re.sub(r"[*_`~]", "", text).strip()
+    if len(text) < 8:
+        return {"error": "Напиши хотя бы пару слов — по пустоте рисовать нечего"}
+
+    from utils import event_art
+
+    name = getattr(guild_of(bot), "name", "") or ""
+    art = await event_art.make_event_art(title=text[:70], info=text[:600],
+                                         **({"guild_name": name} if name else {}))
+    if not art.data:
+        return {"error": art.problem_text() or "нейросеть не отдала картинку"}
+    key = secrets.token_hex(4)
+    _banners[key] = art.data
+    _banners.move_to_end(key)
+    while len(_banners) > BANNERS_KEEP:
+        _banners.popitem(last=False)
+    out = {"url": f"/api/banner?id={key}", "key": key, "by": art.source}
+    why = art.problem_text()
+    if why:
+        out["why"] = why
+    return out
 
 
 async def banner_send(bot, cid: Any, mid: Any) -> Dict[str, Any]:

@@ -1101,6 +1101,9 @@ html[data-style=ruby][data-theme=light] body::before,html[data-style=ice][data-t
 .cart .by{font-size:.73rem;color:#949ba4;line-height:1.35;white-space:pre-wrap}
 .cart .by.warn{color:#f0b544}
 .cbtns{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.45rem}
+.artrow{display:flex;gap:.55rem;align-items:center;flex-wrap:wrap;margin:-.3rem 0 .1rem}
+.dcart{margin-top:.4rem}
+.dcart img{width:100%;max-width:420px;aspect-ratio:1280/512;border-radius:12px;display:block;background:#0b0b0d}
 @media (max-width:640px){.cart{flex-direction:column}.cart img{width:100%}}
 .composer{display:flex;flex-direction:column;gap:.6rem;padding:1rem 1.1rem;border:1px solid var(--line);
   border-radius:var(--radius-s);background:var(--panel)}
@@ -2398,7 +2401,7 @@ async function pagePlan() {
   }
   cq.addEventListener('input', () => { clearTimeout(cq._t); cq._t = setTimeout(loadChannels, 300); });
 
-  const f = msgForm(true);
+  const f = msgForm(true, false);
   const when = h('input', { type: 'datetime-local', 'aria-label': 'Когда отправить' });
   when.value = toLocalInput(new Date(Date.now() + 3600 * 1000));
   const repeat = h('select', { 'aria-label': 'Повторять' },
@@ -3817,7 +3820,9 @@ function hexOf(v) {
 }
 
 /* Редактор сообщения: поля слева направо по смыслу + живой предпросмотр «как в Discord» */
-function msgForm(needPing) {
+const ART_BY = { gemini: 'Gemini', pollinations: 'Pollinations', openai: 'OpenAI', fallback: 'запасная подложка' };
+
+function msgForm(needPing, canArt) {
   const author = h('input', { type: 'text', maxlength: '100', placeholder: 'Например: Штаб семьи', 'aria-label': 'От кого' });
   const title = h('input', { type: 'text', maxlength: '256', placeholder: 'Заголовок (можно оставить пустым)', 'aria-label': 'Заголовок' });
   const text = h('textarea', { class: 'msg', placeholder: 'Напиши сообщение здесь…', 'aria-label': 'Текст сообщения' });
@@ -3825,6 +3830,48 @@ function msgForm(needPing) {
   const ping = h('input', { type: 'checkbox' });
   const count = h('small', { class: 'muted' }, '0 / 4000');
   const prev = h('div', { class: 'dcprev' });
+  /* Картинка к этому же сообщению: рисуется по набранному тексту и уходит вместе с постом.
+     Держим её одним узлом и ставим внутрь предпросмотра — так видно ровно то, что дойдёт.
+     В планировщике кнопки нет: картинка живёт в памяти бота, а пост оттуда выходит через
+     часы и после рестарта, и к своему времени она бы просто выветрилась. */
+  const artOk = needPing && canArt !== false;
+  const art = { key: '', url: '', node: null, for: '', by: '', why: '' };
+  const artBtn = h('button', { type: 'button', class: 'btn tiny', onclick: () => drawArt(),
+    title: 'Нарисовать картинку по этому тексту и приложить к сообщению' }, '🖼 картинка');
+  const artNote = h('span', { class: 'muted small' }, 'картинку рисует нейросеть по тексту сообщения');
+  const artBtns = h('div', { class: 'cbtns' });
+  function artStatus() {
+    if (!art.node) { artNote.className = 'muted small'; artNote.textContent = 'картинку рисует нейросеть по тексту сообщения'; return; }
+    if (art.for !== text.value) { artNote.className = 'small warnline'; artNote.textContent = 'текст изменился — картинка от прежнего, нарисуй заново'; return; }
+    artNote.className = 'small' + (art.why ? ' warnline' : ' muted');
+    artNote.textContent = 'Нарисовал: ' + (ART_BY[art.by] || art.by || 'нейросеть') +
+      (art.why ? ' — ' + String(art.why).split('\n')[0] : ' — уйдёт вместе с сообщением');
+  }
+  function artControls() {
+    artBtns.replaceChildren(...(art.node ? [h('button', { class: 'btn tiny', onclick: () => drawArt() }, '🖼 Ещё раз'),
+      h('button', { class: 'btn tiny', onclick: dropArt }, 'Убрать')] : []));
+  }
+  function dropArt() {
+    art.key = ''; art.url = ''; art.node = null; art.for = ''; art.by = ''; art.why = '';
+    artControls(); upd();
+  }
+  async function drawArt() {
+    if (artBtn.disabled) return;
+    artBtn.disabled = true;
+    artNote.className = 'muted small';
+    artNote.textContent = 'Рисую картинку…';
+    try {
+      const d = await api('/api/banner/draw', { method: 'POST', body: { text: text.value } });
+      art.key = d.key; art.url = d.url; art.for = text.value;
+      art.by = d.by || ''; art.why = d.why || '';
+      art.node = h('div', { class: 'dcart' }, h('img', { src: d.url, alt: 'Картинка к сообщению' }));
+      artControls(); upd();
+    } catch (e) {
+      artNote.className = 'small err-text';
+      artNote.textContent = e.message;
+    }
+    artBtn.disabled = false;
+  }
   /* от чьего имени писать: сам бот, подпись и аватар участника или любое своё имя (через вебхук) */
   let spMode = 'bot';
   const spSeg = h('div', { class: 'seg small', role: 'tablist' });
@@ -3882,8 +3929,9 @@ function msgForm(needPing) {
     const who = speakerName() || 'B';
     const pic = spMode === 'member' && spId ? spPic : (spMode === 'custom' && /^https:\/\/cdn\.discordapp\.com\//.test(spAva.value.trim()) ? spAva.value.trim() : '');
     prev.replaceChildren(h('div', { class: 'dcava' }, pic ? h('img', { src: pic, alt: '', referrerpolicy: 'no-referrer' }) : who.slice(0, 1).toUpperCase()),
-      h('div', { class: 'dcbody' }, h('div', { class: 'dchead' }, h('b', null, who), h('span', { class: 'dctag' }, 'БОТ')), body,
+      h('div', { class: 'dcbody' }, h('div', { class: 'dchead' }, h('b', null, who), h('span', { class: 'dctag' }, 'БОТ')), body, art.node,
         needPing && ping.checked ? h('div', { class: 'dcping' }, '@everyone') : null));
+    artStatus();
   }
   [author, title, text, color, spName, spAva].forEach((el) => el.addEventListener('input', upd));
   drawSp();
@@ -3904,12 +3952,14 @@ function msgForm(needPing) {
   const box = h('div', { class: 'compose' },
     needPing ? h('div', { class: 'cfield' }, h('label', null, 'Писать от имени'), spSeg, spBox) : null,
     h('div', { class: 'cfield' },
-      h('div', { class: 'row between' }, h('label', null, 'Текст'), h('span', { class: 'row' }, emojiButton(text), count)), text),
+      h('div', { class: 'row between' }, h('label', null, 'Текст'),
+        h('span', { class: 'row' }, artOk ? artBtn : null, emojiButton(text), count)), text),
+    artOk ? h('div', { class: 'artrow' }, artNote, artBtns) : null,
     h('label', { class: 'row small tick' }, frame, 'Оформить в рамку: заголовок, подпись и цвет (без галочки — обычное сообщение)'),
     frameBox,
     needPing ? h('label', { class: 'row small tick' }, ping, 'Отметить @everyone (все получат уведомление)') : null,
     h('div', { class: 'cfield' }, h('label', null, 'Так это увидят в Discord'), prev));
-  return { box, author, title, color, text, ping, speaker };
+  return { box, author, title, color, text, ping, speaker, banner: () => art.key };
 }
 
 function resultBox() {
@@ -4013,7 +4063,7 @@ async function pageSend() {
     r1.busy();
     try {
       r1.show(await api('/api/send', { method: 'POST', body: { channel: channelId, text: f1.text.value, title: f1.title.value,
-        color: f1.color.value, ping: f1.ping.checked, author: f1.author.value, speaker: f1.speaker() } }));
+        color: f1.color.value, ping: f1.ping.checked, author: f1.author.value, speaker: f1.speaker(), banner: f1.banner() } }));
       toast('Отправлено', 'ok');
     } catch (e) { r1.err(e); }
   } }, 'Отправить в канал');
@@ -4076,7 +4126,6 @@ async function pageSend() {
 /* Раздел работает как обычный аккаунт: выбрал канал — прочитал, что там, написал своё,
    убрал лишнее. Отправка идёт через тот же /api/send, что и раздел «Сообщения», поэтому
    бот пишет в канал одинаково оттуда и отсюда; здесь только лента и скорость. */
-const ART_BY = { gemini: 'Gemini', pollinations: 'Pollinations', openai: 'OpenAI', fallback: 'запасная подложка' };
 
 async function pageChat() {
   const cq = h('input', { type: 'search', placeholder: 'Найти канал…', 'aria-label': 'Поиск канала' });

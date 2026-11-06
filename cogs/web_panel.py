@@ -418,6 +418,7 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/invite", self.h_invite)
             app.router.add_post("/api/chat/delete", self.h_chat_delete)
             app.router.add_post("/api/banner", self.h_banner_make)
+            app.router.add_post("/api/banner/draw", self.h_banner_draw)
             app.router.add_post("/api/banner/send", self.h_banner_send)
             app.router.add_get("/api/banner", self.h_banner_image)
             app.router.add_get("/api/voice", self.h_voice)
@@ -1025,7 +1026,8 @@ class WebPanel(commands.Cog):
                                       str(body.get("text") or ""), str(body.get("title") or ""),
                                       str(body.get("color") or ""), bool(body.get("ping")),
                                       author=str(body.get("author") or ""),
-                                      speaker=body.get("speaker"))
+                                      speaker=body.get("speaker"),
+                                      banner=str(body.get("banner") or ""))
         print(f"✉️ Панель: в {res.get('where', '?')}: {str(res.get('error') or res.get('link'))[:120]}",
               flush=True)
         return _json(res, 400 if self._fail(res) else 200)
@@ -1076,6 +1078,17 @@ class WebPanel(commands.Cog):
         body = await _body(request)
         res = await tools.banner_make(self.bot, body.get("channel"), body.get("message"))
         print(f"🎨 Панель: баннер к {body.get('message')}: "
+              f"{str(res.get('by') or res.get('error'))[:140]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_banner_draw(self, request: web.Request) -> web.Response:
+        """Картинка по тексту из формы: сообщения в канале ещё нет, рисуем по тому, что набрано."""
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        res = await tools.banner_draw(self.bot, body.get("text"))
+        print(f"🎨 Панель: картинка к сообщению: "
               f"{str(res.get('by') or res.get('error'))[:140]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
 
