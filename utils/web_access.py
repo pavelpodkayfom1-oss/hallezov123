@@ -103,13 +103,14 @@ def entries(bot) -> List[Dict[str, Any]]:
         guilds = list(getattr(bot, "guilds", None) or [])
     except Exception:
         guilds = []
-    for g in sorted(guilds, key=lambda g: (str(g.id) != str(_home_id()), str(g.name).lower())):
+    homes = {str(g.id) for g in guilds if _is_home(g.id)}
+    for g in sorted(guilds, key=lambda g: (str(g.id) not in homes, str(g.name).lower())):
         out.append({
             "scope": str(g.id),
             "name": guild_name(g.id) or str(g.name),
             "members": int(getattr(g, "member_count", 0) or 0),
             "set": bool(guild_password(g.id)),
-            "home": str(g.id) == str(_home_id()),
+            "home": str(g.id) in homes,
         })
     out.append({"scope": DEVELOPER, "name": "Разработчик", "members": 0,
                 "set": bool(dev_password()), "home": False})
@@ -196,10 +197,16 @@ def _check_password(password: str) -> Optional[str]:
     return None
 
 
-def _home_id() -> int:
-    try:
-        from utils.checks import load_config
+def _is_home(gid: Any) -> bool:
+    """Домашний сервер.
 
-        return int(load_config().get("guild_id") or 0)
+    Ключа guild_id в живом config.json исторически нет, и по одному только ему «фама»
+    не узнавалась бы никогда — плашка основного сервера врала бы про «основной».
+    Спрашиваем guild_cfg: он умеет узнавать сервер по id каналов и ролей из конфига.
+    """
+    try:
+        from utils import guild_cfg
+
+        return bool(guild_cfg.is_home(gid))
     except Exception:
-        return 0
+        return False

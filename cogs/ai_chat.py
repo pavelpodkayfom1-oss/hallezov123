@@ -140,6 +140,9 @@ class AIChat(commands.Cog):
             sent = await message.reply(answer[:MAX_REPLY], mention_author=False,
                                        allowed_mentions=disnake.AllowedMentions.none())
             self.own_replies.append(sent.id)
+            voice = self.bot.get_cog("VoiceAI")
+            if voice is not None:
+                voice.decorate(sent, answer[:MAX_REPLY])
         except Exception as e:
             print(f"⚠️ ИИ-собеседник: не смог ответить: {e}", flush=True)
 

@@ -69,6 +69,7 @@ SECTIONS = [
     ]),
     ("🎙", "Голос и сборы", [
         ("🔊", "Голос бота", "Govorit.golos", "/golos"),
+        ("🧠", "ИИ в войсе", "VoiceAI.panel", "/ии-войс"),
         ("🎛", "Голос: роль доступа", "Govorit.govorit_panel", "/govorit-panel"),
         ("🏢", "Голос: канал и войс", "GovoritStay.golos_server", "/golos-server"),
         ("🔇", "Заглушить бота", "Govorit.zamolchi", "/zamolchi"),
