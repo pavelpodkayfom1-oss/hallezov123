@@ -20,7 +20,7 @@ from typing import Dict, Optional
 import disnake
 from disnake.ext import commands
 
-from utils import ai_actions, ai_hear, brand
+from utils import ai_actions, ai_hear, ai_taste, brand
 from utils.checks import get_text, is_admin
 from utils.embeds import note_embed, panel_embed
 
@@ -370,6 +370,13 @@ class VoiceAI(commands.Cog):
         voice = _speak_channel(asker)
         parts.append(f"Спрашивает: {asker.display_name}. Он из руководства: {'да' if admin else 'нет'}. "
                      f"Он в голосовом канале: {voice.name if voice else 'нет'}.")
+        mine = ai_taste.recent(asker.id)
+        if mine:
+            parts.append("Что он сам заказывал в музыке (свежее первым): " + "; ".join(mine[:8]))
+        if voice is not None:
+            crowd = ai_taste.summary_for([m for m in voice.members if m.id != asker.id])
+            if crowd:
+                parts.append("Кто сидит с ним в войсе и что заказывал:\n" + crowd)
         hist = self.history.get(asker.id)
         if hist:
             parts.append("Прошлые реплики этого человека и твои ответы:\n" + "\n".join(

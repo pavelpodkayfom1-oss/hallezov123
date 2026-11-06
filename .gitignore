@@ -13,6 +13,7 @@ build/
 
 # Пароли входа на сайт: репа публичная, поэтому файл живёт только на хостинге
 panel_access.json
+ai_taste.json
 panel_state.json
 
 # Database

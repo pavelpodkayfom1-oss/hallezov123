@@ -25,6 +25,12 @@ ACTIONS_HELP = (
     '- {"type":"unmute","user":"ник"} — снять таймаут\n'
     '- {"type":"role_add","user":"ник","role":"название роли"} и role_remove — выдать/снять роль\n'
     '- {"type":"kick","user":"ник","reason":"причина"} — выгнать с сервера\n'
+    '- {"type":"forget_taste"} — стереть музыкальные вкусы этого человека («забудь мои вкусы»)\n'
+    "Музыка под настроение: если человек просит «что-нибудь», «под настроение» или без названия, "
+    "сам выбери КОНКРЕТНЫЙ запрос (исполнитель — трек) в query. Настроение бери только из его "
+    "собственных реплик в истории и не выдумывай его; если непонятно — коротко спроси. Учитывай, "
+    "что он уже заказывал, но не повторяй те же треки подряд. Если в канале несколько людей, "
+    "подбирай так, чтобы зашло большинству по их вкусам из списка.\n"
     "Правила: делай действие только если человек прямо об этом попросил. Если непонятно, кого "
     "или что — action null, а в say коротко переспроси. В say — 1–2 коротких предложения, "
     "без эмодзи. Если просьба не про действия, просто ответь по делу, action null."
@@ -137,6 +143,11 @@ async def run(cog, message: disnake.Message, asker: disnake.Member, act: dict) -
     try:
         if kind == "music":
             return await _music(cog, guild, asker, str(act.get("query") or ""))
+        if kind == "forget_taste":
+            from utils import ai_taste
+
+            done = ai_taste.forget(asker.id)
+            return True, "стёр твои музыкальные вкусы" if done else "про твои вкусы я ничего не хранил"
         if kind == "music_ctl":
             return await _music_ctl(cog, guild, asker, str(act.get("do") or ""), act.get("value"))
         if kind in ("mute", "unmute", "role_add", "role_remove", "kick"):
@@ -176,7 +187,14 @@ async def _music(cog, guild, asker, query: str) -> Tuple[bool, str]:
         await vc.move_to(voice.channel)
     res = await music.web_enqueue(guild, query, asker.mention, key=str(asker.id))
     if res.get("ok"):
-        return True, str(res.get("did") or "включил")
+        did = str(res.get("did") or "включил")
+        try:
+            from utils import ai_taste
+
+            ai_taste.record(asker.id, did.split(": ", 1)[-1], query)
+        except Exception:
+            pass
+        return True, did
     return False, str(res.get("error") or "не вышло")
 
 
