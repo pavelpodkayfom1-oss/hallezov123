@@ -96,7 +96,7 @@ def build_prompt(title: str, info: str) -> str:
     return (
         f"Ultra-detailed cinematic key art for a video-game crime-family announcement. "
         f"Scene: {_scene_for(theme)}. "
-        f"The gathering is described by its organizer (in Russian) as: \"{theme}\" - use it only as "
+        f"The post is described by its author (in Russian) as: \"{theme}\" - use it only as "
         f"inspiration for the scene's mood and setting. "
         f"Lighting: {rnd.choice(_TIMES)}. Camera: {rnd.choice(_CAMERAS)}. "
         f"Color grading: {rnd.choice(_PALETTES)}. "
@@ -494,7 +494,8 @@ def _soft_shadow(base: Image.Image, draw_fn, blur: int = 8, alpha: int = 230) ->
 
 
 def _compose(bg: Optional[bytes], title: str, time_str: str, place: str,
-             guild_name: str, accent=(200, 30, 45)) -> bytes:
+             guild_name: str, accent=(200, 30, 45), tag: str = "ОБЪЯВЛЕН СБОР",
+             place_label: str = "МЕСТО") -> bytes:
     img = None
     if bg:
         try:
@@ -531,8 +532,12 @@ def _compose(bg: Optional[bytes], title: str, time_str: str, place: str,
     f_label = _efont(21, bold=True)
     label = clean_text(guild_name).upper() or "HALLEZ FAMQ"
     lw = _tracked(probe, (x0, 50), label, f_label, GOLD, tracking=5)
-    f_tag = _efont(21, bold=False)
-    _tracked(probe, (x0 + lw + 22, 50), "ОБЪЯВЛЕН СБОР", f_tag, (255, 255, 255), tracking=5)
+    # справа от бренда — что это. Пустой tag значит «ни о чём не заявляем»: баннер рисуют
+    # по любому тексту, а «объявлен сбор» из произвольной фразы было бы враньём.
+    tag = clean_text(tag)
+    if tag:
+        f_tag = _efont(21, bold=False)
+        _tracked(probe, (x0 + lw + 22, 50), tag, f_tag, (255, 255, 255), tracking=5)
     probe.line([(x0, 90), (x0 + 130, 90)], fill=GOLD, width=2)
 
     # название: до двух строк, шрифт сам уменьшается
@@ -577,14 +582,23 @@ def _compose(bg: Optional[bytes], title: str, time_str: str, place: str,
         d.text((cx + 24, by + 24), t, font=f_time, fill=(255, 255, 255))
         cx += 24 + tw + 44
     place = clean_text(place)
+    # подпись «МЕСТО» под тем же словом, что уже крупно в заголовке, — это не место, а
+    # дубль заголовка (так рисуются баннеры по одному тексту и розыгрыши с одной призмой)
+    if place.casefold().replace(" ", "") == title.casefold().replace(" ", ""):
+        place = ""
     if place:
         if time_str:
             d.line([(cx - 22, by + 8), (cx - 22, by + 104)], fill=(255, 255, 255, 90), width=2)
         pw = max(160, W - 60 - cx)
-        _tracked(d, (cx, by), "МЕСТО", f_cap, GOLD, tracking=5)
+        # place_label пустой — значит нижний блок это не адрес, а остаток текста:
+        # врать «МЕСТО: всем привет» баннер не имеет права
+        label = clean_text(place_label)
+        if label:
+            _tracked(d, (cx, by), label, f_cap, GOLD, tracking=5)
+        py0 = by + 30 if label else by + 6
         plines, _ = _wrap(d, place, f_place, pw, 2)
         for i, pl in enumerate(plines):
-            py = by + 30 + i * 42
+            py = py0 + i * 42
             img = _soft_shadow(img, lambda dd, fill, pl=pl, py=py: dd.text((cx, py), pl, font=f_place, fill=fill),
                                blur=5, alpha=200)
             d = ImageDraw.Draw(img)
@@ -599,8 +613,12 @@ def _compose(bg: Optional[bytes], title: str, time_str: str, place: str,
 
 
 async def make_event_art(title: str, time_str: str = "", info: str = "",
-                         guild_name: str = "Hallez FAMQ", accent=None) -> Art:
-    """Всегда возвращает Art (при полном провале data=None). Исключений не бросает."""
+                         guild_name: str = "Hallez FAMQ", accent=None,
+                         tag: str = "ОБЪЯВЛЕН СБОР", place_label: str = "МЕСТО") -> Art:
+    """Всегда возвращает Art (при полном провале data=None). Исключений не бросает.
+
+    tag — слово справа от бренда («ОБЪЯВЛЕН СБОР» по умолчанию). Пустая строка = ничего
+    не заявляем: так рисуют баннеры по произвольному тексту, где сбор объявлен не был."""
     art = Art()
     try:
         bg, art.source = await _generate_background(clean_text(title), clean_text(info), art.notes)
@@ -609,7 +627,7 @@ async def make_event_art(title: str, time_str: str = "", info: str = "",
         place = (info or "").strip().replace("\n", " ")
         art.data = await asyncio.to_thread(
             _compose, bg, title or "", time_str or "", place, guild_name or "Hallez FAMQ",
-            accent or (200, 30, 45))
+            accent or (200, 30, 45), tag, place_label)
     except Exception as e:
         art.notes.append(f"сборка картинки: {type(e).__name__}: {_snip(str(e), 120)}")
         _log(art.notes[-1])

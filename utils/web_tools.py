@@ -1055,6 +1055,22 @@ def _banner_text(msg) -> str:
     return text.strip()[:600]
 
 
+def _art_split(text: str) -> tuple:
+    """Один текст на баннере дважды — заголовком и подписью — выглядит как случайность.
+    Крупно идёт первая строка (или первое предложение), остаток — мелким блоком ниже."""
+    head, sep, rest = text.partition("\n")
+    if not sep:
+        m = re.match(r"^(.*?[.!?])\s+(.*)$", text, re.S)
+        if m:
+            head, rest = m.group(1), m.group(2)
+    head, rest = head.strip(), rest.strip()
+    if len(head) > 70:
+        cut = head.rfind(" ", 0, 71)
+        cut = cut if cut > 30 else 70
+        head, rest = head[:cut].strip(), (head[cut:] + " " + rest).strip()
+    return head, rest
+
+
 async def banner_make(bot, cid: Any, mid: Any) -> Dict[str, Any]:
     """Нарисовать баннер по смыслу этого сообщения и держать его в памяти под id."""
     ch, err = await _resolve_channel(bot, cid)
@@ -1073,7 +1089,8 @@ async def banner_make(bot, cid: Any, mid: Any) -> Dict[str, Any]:
     from utils import event_art
 
     name = getattr(msg.guild, "name", "")
-    art = await event_art.make_event_art(title=text[:70], info=text,
+    head, rest = _art_split(text)
+    art = await event_art.make_event_art(title=head, info=rest[:600], tag="", place_label="",
                                          **({"guild_name": name} if name else {}))
     if not art.data:
         return {"error": art.problem_text() or "нейросеть не отдала картинку"}
@@ -1108,7 +1125,8 @@ async def banner_draw(bot, text: Any) -> Dict[str, Any]:
     from utils import event_art
 
     name = getattr(guild_of(bot), "name", "") or ""
-    art = await event_art.make_event_art(title=text[:70], info=text[:600],
+    head, rest = _art_split(text)
+    art = await event_art.make_event_art(title=head, info=rest[:600], tag="", place_label="",
                                          **({"guild_name": name} if name else {}))
     if not art.data:
         return {"error": art.problem_text() or "нейросеть не отдала картинку"}
