@@ -75,16 +75,21 @@ def _put(gid, st: dict) -> None:
 
 
 def flat(text: str) -> str:
-    """Вслух читают иначе: разметка, ссылки и эмодзи превращаются в кашу из букв."""
+    """Вслух читают иначе: разметка, ссылки и эмодзи превращаются в кашу из слов
+    («рука для помахать» вместо 👋), поэтому всё, что не буквы и не знаки, выкидываем."""
+    import re
+    import unicodedata
+
+    text = re.sub(r"<a?:\w+:\d+>", "", text)          # кастомные эмодзи Discord
+    text = re.sub(r"https?://\S+", "", text)           # ссылки
     out = []
     for ch in text.replace("`", ""):
-        if ch in "*#_>[]()":
+        if ch in "*#_>[]()~|":
             continue
+        if unicodedata.category(ch) in ("So", "Sk", "Cf", "Cs", "Co", "Cn"):
+            continue                                    # эмодзи, значки, невидимые знаки
         out.append(ch)
-    s = "".join(out)
-    for a, b in (("https://", ""), ("http://", "")):
-        s = s.replace(a, "")
-    return " ".join(s.split())[:MAX_TTS]
+    return " ".join("".join(out).split())[:MAX_TTS]
 
 
 def _voice_attach(message: disnake.Message):
@@ -341,7 +346,9 @@ class VoiceAI(commands.Cog):
         s = _brain_settings() or {"enabled": True}
         if not s.get("enabled"):
             raise RuntimeError("ИИ-собеседник выключен (команда /ai toggle)")
-        persona = str(s.get("persona") or "") or ASK_SYSTEM
+        persona = (str(s.get("persona") or "") or ASK_SYSTEM) + (
+            " Твой ответ прозвучит вслух: говори как живой человек в разговоре, "
+            "коротко, без эмодзи, смайлов, списков, звёздочек и ссылок.")
         prompt = f"{context(guild)}\n\n{asker.display_name} спрашивает: {question[:900]}"
         return await brain._ask(persona, prompt)
 
@@ -361,6 +368,12 @@ class VoiceAI(commands.Cog):
         s = _voice_settings(user_id)
         if not s:
             return "⚠️ Не удалось прочитать настройки голоса — зайди в «Говорит» и попробуй ещё раз."
+        s = dict(s)
+        try:
+            s["pitch"] = max(int(s.get("pitch", 0)), -8)
+            s["rate"] = max(int(s.get("rate", 0)), -5)
+        except (TypeError, ValueError):
+            pass
         try:
             return await govo.speak(guild, channel, speech, s) or ""
         except Exception as e:
@@ -396,10 +409,6 @@ class VoiceAI(commands.Cog):
             pass
 
     async def _decorate(self, message: disnake.Message, text: str, gid: int, asker) -> None:
-        try:
-            await message.edit(view=SpeakView(self, gid, text))
-        except Exception:
-            pass
         if asker is None:
             return
         ch = _speak_channel(asker)
@@ -501,7 +510,7 @@ class VoiceAI(commands.Cog):
             guild=message.guild,
         )
         try:
-            sent = await loading.edit(embed=card, view=SpeakView(self, message.guild.id, answer))
+            sent = await loading.edit(embed=card, view=None)
         except Exception:
             sent = await message.reply(embed=card, mention_author=False,
                                        allowed_mentions=disnake.AllowedMentions.none())
