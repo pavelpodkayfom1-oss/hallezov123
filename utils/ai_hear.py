@@ -221,7 +221,7 @@ async def transcribe(data: bytes, timeout: float = 45.0) -> str:
     return text[:1200]
 
 
-async def think(system: str, prompt: str, timeout: float = 9.0) -> str:
+async def think(system: str, prompt: str, timeout: float = 9.0, json_mode: bool = False) -> str:
     """Думать текст по-человечески через Gemini.
 
     Это запасной мозг: ключ GEMINI_API_KEY на хостинге уже есть, а ANTHROPIC_API_KEY
@@ -235,6 +235,9 @@ async def think(system: str, prompt: str, timeout: float = 9.0) -> str:
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.5, "maxOutputTokens": 700},
     }
+    if json_mode:
+        body["generationConfig"]["responseMimeType"] = "application/json"
+        body["generationConfig"]["temperature"] = 0.3
     return await _generate(body, timeout)
 
 

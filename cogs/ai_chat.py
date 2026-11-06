@@ -63,13 +63,13 @@ class AIChat(commands.Cog):
         self.used_today = 0
 
     # ---- запрос к модели ----
-    async def _ask(self, system: str, prompt: str) -> str:
+    async def _ask(self, system: str, prompt: str, json_mode: bool = False) -> str:
         key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         if not key:
             # Ключ Gemini на хостинге есть почти всегда — без Anthropic бот думает им.
             from utils import ai_hear
 
-            return await ai_hear.think(system, prompt)
+            return await ai_hear.think(system, prompt, json_mode=json_mode)
         model = os.getenv("AI_CHAT_MODEL", "claude-haiku-5-5").strip()
         body = {"model": model, "max_tokens": 500, "system": system,
                 "messages": [{"role": "user", "content": prompt}]}
@@ -89,7 +89,7 @@ class AIChat(commands.Cog):
             if not ai_hear.available():
                 raise
             print(f"⚠️ ИИ-собеседник: Anthropic не ответил ({e}), думаю через Gemini", flush=True)
-            return await ai_hear.think(system, prompt)
+            return await ai_hear.think(system, prompt, json_mode=json_mode)
 
     def _quota_ok(self, limit: int) -> bool:
         today = date.today()
@@ -126,6 +126,17 @@ class AIChat(commands.Cog):
             return
         self.last_ask[message.author.id] = now
         self.used_today += 1
+
+        # Если жив ког «ИИ в войсе», отвечает он: у него действия (музыка, роли, мут),
+        # память о разговоре и озвучка. Старый путь ниже — запасной.
+        voice = self.bot.get_cog("VoiceAI")
+        if voice is not None and voice.wants_text(message):
+            loading = await message.reply(embed=note_embed("🧠 Думаю…", "info"), mention_author=False,
+                                          allowed_mentions=disnake.AllowedMentions.none())
+            sent = await voice.respond(message, question[:1200], "🧠", loading)
+            if sent is not None:
+                self.own_replies.append(sent.id)
+            return
 
         lines = []
         try:
