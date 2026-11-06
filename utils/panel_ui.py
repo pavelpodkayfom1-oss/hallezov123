@@ -1089,6 +1089,19 @@ html[data-style=ruby][data-theme=light] body::before,html[data-style=ice][data-t
   padding:.1em .45em;border-radius:6px;cursor:pointer;opacity:0}
 .cmsg:hover .cdel,.cmsg:focus-within .cdel{opacity:1}
 .cdel:hover{color:#fff;background:var(--err)}
+.cbart{margin-left:auto;border:0;background:none;color:#949ba4;font:inherit;font-size:.78rem;
+  padding:.1em .45em;border-radius:6px;cursor:pointer;opacity:0}
+.cmsg:hover .cbart,.cmsg:focus-within .cbart{opacity:1}
+.cbart:hover{color:#fff;background:#5865f2}
+.cmeta .cbart + .cdel{margin-left:0}
+.cart{display:flex;gap:.8rem;align-items:flex-start;max-width:560px;padding:.6rem .8rem .7rem;
+  border-radius:18px 18px 18px 5px;border:1px solid rgba(255,255,255,.08);
+  background:linear-gradient(155deg,rgba(88,101,242,.18),rgba(0,0,0,.3))}
+.cart img{width:300px;flex:none;aspect-ratio:1280/512;border-radius:12px;background:#0b0b0d;display:block}
+.cart .by{font-size:.73rem;color:#949ba4;line-height:1.35;white-space:pre-wrap}
+.cart .by.warn{color:#f0b544}
+.cbtns{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.45rem}
+@media (max-width:640px){.cart{flex-direction:column}.cart img{width:100%}}
 .composer{display:flex;flex-direction:column;gap:.6rem;padding:1rem 1.1rem;border:1px solid var(--line);
   border-radius:var(--radius-s);background:var(--panel)}
 .composer textarea.msg{min-height:86px;font-size:.95rem}
@@ -4063,6 +4076,8 @@ async function pageSend() {
 /* Раздел работает как обычный аккаунт: выбрал канал — прочитал, что там, написал своё,
    убрал лишнее. Отправка идёт через тот же /api/send, что и раздел «Сообщения», поэтому
    бот пишет в канал одинаково оттуда и отсюда; здесь только лента и скорость. */
+const ART_BY = { gemini: 'Gemini', pollinations: 'Pollinations', openai: 'OpenAI', fallback: 'запасная подложка' };
+
 async function pageChat() {
   const cq = h('input', { type: 'search', placeholder: 'Найти канал…', 'aria-label': 'Поиск канала' });
   const listBox = h('div', { class: 'picks tall chatlist' });
@@ -4075,11 +4090,17 @@ async function pageChat() {
 
   let chanRows = [], rows = [], older = '', canManage = false, canWrite = true, busy = false;
   let channelId = state.chatChannel || '';
+  const art = {};   // id сообщения → нарисованный баннер, чтобы перерисовка ленты его не съедала
 
   const when = (r) => {
     const ms = r.time ? Date.parse(r.time) : NaN;
     return isNaN(ms) ? '' : fmtWhen(Math.floor(ms / 1000));
   };
+
+  /* Картинку просим рисовать только там, где есть о чём: голый стикер или вложение
+     без текста — сервер всё равно откажет, а кнопка без дела выглядит сломанной. */
+  const hasText = (m) => !!((m.text || '').trim() ||
+    (m.embeds || []).some((e) => (e.title || '').trim() || (e.text || '').trim()));
 
   async function drop(m) {
     const what = (m.text || '').slice(0, 90) || (m.files || []).map((f) => f.name).join(', ') || 'вложение';
@@ -4088,9 +4109,44 @@ async function pageChat() {
     try {
       await api('/api/chat/delete', { method: 'POST', body: { channel: channelId, message: m.id } });
       rows = rows.filter((x) => x.id !== m.id);
+      delete art[m.id];
       draw();
       toast('Убрал сообщение', 'ok');
     } catch (e) { toast(e.message, 'err'); }
+  }
+
+  /* Баннер рисуется по смыслу самого сообщения: берём текст на сервере, а не то,
+     что принёс браузер, — иначе картинка легко врёт про то, что было в канале. */
+  async function makeArt(m, box) {
+    box.replaceChildren(h('div', { class: 'cart' }, spinner('Рисую баннер по тексту…')));
+    try {
+      art[m.id] = await api('/api/banner', { method: 'POST', body: { channel: channelId, message: m.id } });
+      showArt(m, box);
+    } catch (e) {
+      box.replaceChildren(h('div', { class: 'cart' }, h('p', { class: 'err' }, e.message)));
+    }
+  }
+
+  async function postArt(m) {
+    try {
+      const r = await api('/api/banner/send', { method: 'POST', body: { channel: channelId, message: m.id } });
+      toast('Баннер лёг в канал ' + r.sent, 'ok');
+      await pull(false);
+    } catch (e) { toast(e.message, 'err'); }
+  }
+
+  function showArt(m, box) {
+    const d = art[m.id];
+    if (!d) { box.replaceChildren(); return; }
+    box.replaceChildren(h('div', { class: 'cart' },
+      h('img', { src: d.url, alt: 'Баннер по тексту сообщения' }),
+      h('div', null,
+        h('div', { class: 'by' + (d.why ? ' warn' : '') },
+          'Нарисовал: ' + (ART_BY[d.by] || d.by || 'неизвестно') + (d.why ? '\n' + String(d.why).split('\n')[0] : '')),
+        h('div', { class: 'cbtns' },
+          h('button', { class: 'btn tiny primary', onclick: () => postArt(m) }, '📤 В канал'),
+          h('button', { class: 'btn tiny', onclick: () => makeArt(m, box) }, '🖼 Ещё раз'),
+          h('a', { class: 'btn tiny', href: d.url, target: '_blank', rel: 'noopener noreferrer' }, 'Открыть')))));
   }
 
   function msgNode(m) {
@@ -4111,6 +4167,14 @@ async function pageChat() {
     if ((m.reactions || []).length) body.append(h('div', { class: 'creact' },
       m.reactions.map((r) => h('i', { class: r.mine ? 'on' : '', title: 'реакций: ' + r.count },
         ...emojiNodes(r.emoji), h('span', null, String(r.count))))));
+    if (m.author.bot && !m.system && hasText(m)) {
+      const box = h('div');
+      meta.append(h('button', {
+        class: 'cbart', title: 'Нарисовать картинку по смыслу этого сообщения',
+        onclick: () => makeArt(m, box) }, '🖼 баннер'));
+      body.append(box);
+      showArt(m, box);
+    }
     if (m.mine || canManage) meta.append(h('button', { class: 'cdel', title: 'Удалить это сообщение', onclick: () => drop(m) }, '🗑 убрать'));
     const ava = h('div', { class: 'dcava' }, m.author.avatar
       ? h('img', { src: m.author.avatar, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })

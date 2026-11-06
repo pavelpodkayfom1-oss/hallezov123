@@ -417,6 +417,9 @@ class WebPanel(commands.Cog):
             app.router.add_get("/api/chat", self.h_chat)
             app.router.add_get("/api/invite", self.h_invite)
             app.router.add_post("/api/chat/delete", self.h_chat_delete)
+            app.router.add_post("/api/banner", self.h_banner_make)
+            app.router.add_post("/api/banner/send", self.h_banner_send)
+            app.router.add_get("/api/banner", self.h_banner_image)
             app.router.add_get("/api/voice", self.h_voice)
             app.router.add_post("/api/voice/join", self.h_voice_join)
             app.router.add_post("/api/voice/leave", self.h_voice_leave)
@@ -1065,6 +1068,36 @@ class WebPanel(commands.Cog):
         print(f"🧹 Панель: чистка {res.get('where', '?')}: "
               f"{str(res.get('error') or res.get('what'))[:120]}", flush=True)
         return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_banner_make(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        res = await tools.banner_make(self.bot, body.get("channel"), body.get("message"))
+        print(f"🎨 Панель: баннер к {body.get('message')}: "
+              f"{str(res.get('by') or res.get('error'))[:140]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_banner_send(self, request: web.Request) -> web.Response:
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        body = await _body(request)
+        res = await tools.banner_send(self.bot, body.get("channel"), body.get("message"))
+        print(f"🎨 Панель: баннер в канал {body.get('channel')}: "
+              f"{str(res.get('sent') or res.get('error'))[:140]}", flush=True)
+        return _json(res, 400 if self._fail(res) else 200)
+
+    async def h_banner_image(self, request: web.Request) -> web.Response:
+        """Свежая картинка лежит в памяти бота под id сообщения, а не на диске."""
+        tools, err = self._tools()
+        if err:
+            return _json({"error": err}, 503)
+        data = tools.banner_bytes(request.query.get("id"))
+        if not data:
+            return _json({"error": "Баннер уже выветрился — нарисуй заново"}, 404)
+        return web.Response(body=data, content_type="image/jpeg")
 
     async def h_voice(self, request: web.Request) -> web.Response:
         tools, err = self._tools()

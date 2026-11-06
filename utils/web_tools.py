@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import contextvars
+import io
 import json
 import re
 import secrets
@@ -1024,6 +1025,81 @@ async def chat_delete(bot, cid: Any, mid: Any) -> Dict[str, Any]:
     except Exception as e:
         return {"error": _discord_error(e)}
     return {"deleted": str(msg.id), "where": f"#{ch.name}", "what": what}
+
+
+# ─────────────────────────── баннер по смыслу сообщения ───────────────────────────
+
+BANNERS_KEEP = 12      # картинок в памяти: на этом хостинге лишние мегабайты платят нервами слушателей
+_banners: "OrderedDict[str, bytes]" = OrderedDict()
+
+
+def _banner_text(msg) -> str:
+    """Что человек реально видит под сообщением: подпись, а если её нет — текст карточек."""
+    parts = [(msg.clean_content or msg.content or "").strip()]
+    for e in list(msg.embeds or [])[:3]:
+        for field in ("title", "description"):
+            val = str(getattr(e, field, "") or "").strip()
+            if val:
+                parts.append(val)
+    text = "\n".join(p for p in parts if p)
+    text = re.sub(r"<[@#][!&]?[0-9]+>", "", text)
+    text = re.sub(r"[*_`~]", "", text)
+    return text.strip()[:600]
+
+
+async def banner_make(bot, cid: Any, mid: Any) -> Dict[str, Any]:
+    """Нарисовать баннер по смыслу этого сообщения и держать его в памяти под id."""
+    ch, err = await _resolve_channel(bot, cid)
+    if err:
+        return {"error": err}
+    if not str(mid or "").isdigit():
+        return {"error": "Не выбрано сообщение"}
+    try:
+        msg = await ch.fetch_message(int(mid))
+    except Exception as e:
+        return {"error": _discord_error(e)}
+    text = _banner_text(msg)
+    if len(text) < 8:
+        return {"error": "В сообщении нет текста, по которому можно что-то нарисовать"}
+
+    from utils import event_art
+
+    name = getattr(msg.guild, "name", "")
+    art = await event_art.make_event_art(title=text[:70], info=text,
+                                         **({"guild_name": name} if name else {}))
+    if not art.data:
+        return {"error": art.problem_text() or "нейросеть не отдала картинку"}
+    key = str(msg.id)
+    _banners[key] = art.data
+    _banners.move_to_end(key)
+    while len(_banners) > BANNERS_KEEP:
+        _banners.popitem(last=False)
+    out = {"url": f"/api/banner?id={key}", "by": art.source}
+    why = art.problem_text()
+    if why:
+        out["why"] = why
+    return out
+
+
+def banner_bytes(key: Any) -> Optional[bytes]:
+    return _banners.get(str(key or ""))
+
+
+async def banner_send(bot, cid: Any, mid: Any) -> Dict[str, Any]:
+    """Выложить нарисованное в тот же канал — картинкой, а не ссылкой."""
+    data = banner_bytes(mid)
+    if not data:
+        return {"error": "Баннер уже выветрился из памяти — нарисуй заново"}
+    ch, err = await _resolve_channel(bot, cid)
+    if err:
+        return {"error": err}
+    if not _can(bot, ch, "send_messages"):
+        return {"error": f"Боту нельзя писать в канал «{ch.name}»"}
+    try:
+        await ch.send(file=disnake.File(io.BytesIO(data), filename=f"banner_{mid}.jpg"))
+    except Exception as e:
+        return {"error": _discord_error(e)}
+    return {"sent": f"#{ch.name}"}
 
 
 VOICE_PEOPLE = 30      # человек на канал: дальше только счётчик «и ещё N»
