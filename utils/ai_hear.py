@@ -6,6 +6,8 @@
 тот же, что для картинок событий.
 
 Цепочка: файл .ogg (opus) → ffmpeg → wav 16 кГц моно → inline_data в Gemini → текст.
+Здесь же think() — ответ моделью одним текстом: тот же ключ спасает, когда мозгу
+не хватило ANTHROPIC_API_KEY.
 """
 import asyncio
 import base64
@@ -149,6 +151,51 @@ async def transcribe(data: bytes, timeout: float = 45.0) -> str:
             except Exception as e:
                 err = f"{type(e).__name__}: {e}"
     raise HearError(err or "ни одна модель не взяла аудио")
+
+
+async def think(system: str, prompt: str, timeout: float = 45.0) -> str:
+    """Думать текст по-человечески через Gemini.
+
+    Это запасной мозг: ключ GEMINI_API_KEY на хостинге уже есть, а ANTHROPIC_API_KEY
+    может не быть — без него бот не обязан молчать.
+    """
+    key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not key:
+        raise HearError("в переменных хостинга нет ни ANTHROPIC_API_KEY, ни GEMINI_API_KEY")
+
+    import aiohttp
+
+    body = {
+        "systemInstruction": {"parts": [{"text": system}]},
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.5, "maxOutputTokens": 700},
+    }
+    err = ""
+    hdr = {"x-goog-api-key": key, "Content-Type": "application/json"}
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
+        for model in _order(await _models(session, key)):
+            try:
+                async with session.post(f"{_GEM}/models/{model}:generateContent",
+                                        headers=hdr, json=body) as r:
+                    blob = await r.json()
+                    if r.status != 200:
+                        err = str(blob.get("error", {}).get("message", r.status))[:200]
+                        if r.status in (400, 404):
+                            continue
+                        raise HearError(f"Gemini: {err}")
+                    parts = (((blob.get("candidates") or [{}])[0]).get("content") or {}).get("parts") or []
+                    text = "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
+                    if text:
+                        return text
+                    err = "модель ответила пустотой"
+            except HearError:
+                raise
+            except aiohttp.ClientError as e:
+                err = f"сеть до Gemini: {e}"
+                break
+            except Exception as e:
+                err = f"{type(e).__name__}: {e}"
+    raise HearError(err or "ни одна модель не ответила")
 
 
 def size_guard(attachment) -> str:

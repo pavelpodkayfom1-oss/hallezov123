@@ -1,6 +1,7 @@
 """ИИ-собеседник: бот отвечает в чате, когда его упомянули или ответили на его сообщение.
 
- • нужен ANTHROPIC_API_KEY в переменных окружения хостинга (модель: AI_CHAT_MODEL)
+ • нужен ANTHROPIC_API_KEY в переменных окружения хостинга (модель: AI_CHAT_MODEL);
+   если его нет, а есть GEMINI_API_KEY — отвечаю им, отдельного ключа не требуется
  • /ai status | toggle | persona | channel — настройка для руководства
 Настройки лежат в ai_chat_settings.json.
 """
@@ -65,7 +66,10 @@ class AIChat(commands.Cog):
     async def _ask(self, system: str, prompt: str) -> str:
         key = os.getenv("ANTHROPIC_API_KEY", "").strip()
         if not key:
-            raise RuntimeError("нет ANTHROPIC_API_KEY")
+            # Ключ Gemini на хостинге есть почти всегда — без Anthropic бот думает им.
+            from utils import ai_hear
+
+            return await ai_hear.think(system, prompt)
         model = os.getenv("AI_CHAT_MODEL", "claude-haiku-5-5").strip()
         body = {"model": model, "max_tokens": 500, "system": system,
                 "messages": [{"role": "user", "content": prompt}]}
@@ -131,7 +135,8 @@ class AIChat(commands.Cog):
             except Exception as e:
                 print(f"⚠️ ИИ-собеседник: {e}", flush=True)
                 if "ANTHROPIC_API_KEY" in str(e):
-                    answer = "ИИ не подключён: руководству нужно добавить ANTHROPIC_API_KEY на хостинге."
+                    answer = ("ИИ не подключён: на хостинге нет ни ANTHROPIC_API_KEY, "
+                              "ни GEMINI_API_KEY — хотя бы один ключ нужен.")
                 else:
                     return
         if not answer:
@@ -163,7 +168,12 @@ class AIChat(commands.Cog):
             return
         s = get_settings()
         chans = ", ".join(f"<#{c}>" for c in s["channels"]) or "все каналы"
-        key = "есть" if os.getenv("ANTHROPIC_API_KEY", "").strip() else "НЕТ (добавь на хостинге)"
+        if os.getenv("ANTHROPIC_API_KEY", "").strip():
+            key = "есть"
+        elif os.getenv("GEMINI_API_KEY", "").strip():
+            key = "нет — думаю через Gemini"
+        else:
+            key = "НЕТ ни одного (добавь на хостинге)"
         await inter.response.send_message(embed=note_embed(
             f"**Включён:** {'да' if s['enabled'] else 'нет'}\n**Ключ ANTHROPIC_API_KEY:** {key}\n"
             f"**Каналы:** {chans}\n**Лимит в сутки:** {s['daily_limit']} (сегодня: {self.used_today})\n"
