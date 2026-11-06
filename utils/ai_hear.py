@@ -34,7 +34,6 @@ _SKIP_WORDS = ("tts", "image", "imagen", "embed", "veo", "aqa", "robotics", "com
                "learnlm", "gemma", "live", "native-audio", "vision", "thinking-exp")
 _MAX_MODELS = 6                          # больше шести моделей подряд пробовать незачем
 _TRANSIENT = (429, 500, 502, 503, 504)   # временные сбои: перегрузка, лимит, сервер упал
-_RETRY_PAUSE = 1.5                       # пауза перед повтором на той же модели, секунд
 
 HEAR_PROMPT = (
     "Перед тобой запись человеческого голоса. Точно расшифруй, что сказано, по-русски, "
@@ -128,12 +127,60 @@ def _extract_text(blob: dict) -> str:
     return "".join(p.get("text", "") for p in parts if isinstance(p, dict)).strip()
 
 
-async def _generate(body: dict, timeout: float) -> str:
-    """Один запрос к Gemini с повтором и запасными моделями.
+_HEDGE = 3.0   # если модель молчит дольше, параллельно запускаем следующую
 
-    Возвращает первый непустой текст. Временные сбои (503/429/5xx) не фатальны: один
-    повтор, потом следующая модель. Фатальны только неверный ключ и сеть.
+
+def _tune(model: str, body: dict) -> dict:
+    """У gemini-2.5-flash по умолчанию включены «размышления»: ответ идёт 5–15 секунд.
+    Для чата и расшифровки они не нужны — выключаем, это главное ускорение."""
+    if not model.startswith("gemini-2.5-flash"):
+        return body
+    out = dict(body)
+    cfg = dict(out.get("generationConfig") or {})
+    cfg["thinkingConfig"] = {"thinkingBudget": 0}
+    out["generationConfig"] = cfg
+    return out
+
+
+async def _call_model(session, hdr: dict, model: str, body: dict):
+    """Один запрос к одной модели. Не бросает: возвращает (вид, текст или причина).
+
+    Виды: ok — есть текст; busy — временный сбой (503/429/5xx/таймаут); auth — ключ не
+    подошёл (фатально); skip — модель не умеет такой запрос или ответила пустотой.
     """
+    import aiohttp
+
+    try:
+        async with session.post(f"{_GEM}/models/{model}:generateContent",
+                                headers=hdr, json=_tune(model, body)) as r:
+            try:
+                blob = await r.json(content_type=None)
+            except Exception:
+                blob = {}
+            if not isinstance(blob, dict):
+                blob = {}
+            status = r.status
+    except asyncio.TimeoutError:
+        return "busy", f"модель {model} не успела ответить"
+    except aiohttp.ClientError as e:
+        return "busy", f"сеть до Gemini: {e}"
+    except Exception as e:
+        return "skip", f"{type(e).__name__}: {e}"
+
+    if status == 200:
+        text = _extract_text(blob)
+        return ("ok", text) if text else ("skip", "модель ответила пустотой")
+    msg = str((blob.get("error") or {}).get("message", status))[:200]
+    if status in (401, 403):
+        return "auth", f"Gemini не принял ключ GEMINI_API_KEY ({status}): {msg}"
+    if status in _TRANSIENT:
+        return "busy", f"Gemini: {msg}"
+    return "skip", f"Gemini: {msg}"
+
+
+async def _generate(body: dict, timeout: float) -> str:
+    """Запрос к Gemini с «хеджем»: если первая модель молчит дольше _HEDGE секунд или
+    упала, сразу идёт следующая, а первая не отменяется. Берём ответ того, кто успел."""
     import aiohttp
 
     key = os.getenv("GEMINI_API_KEY", "").strip()
@@ -142,57 +189,47 @@ async def _generate(body: dict, timeout: float) -> str:
 
     deadline = time.monotonic() + timeout
     hdr = {"x-goog-api-key": key, "Content-Type": "application/json"}
-    err = ""
-    busy = False
-    per_request = aiohttp.ClientTimeout(total=min(5.0, timeout))
+    per_request = aiohttp.ClientTimeout(total=min(10.0, timeout))
+    err, busy = "", False
 
     async with aiohttp.ClientSession(timeout=per_request) as session:
-        for model in _order(await _models(session, key)):
-            for attempt in range(2):
-                if time.monotonic() > deadline:
-                    break
-                try:
-                    async with session.post(f"{_GEM}/models/{model}:generateContent",
-                                            headers=hdr, json=body) as r:
-                        try:
-                            blob = await r.json(content_type=None)
-                        except Exception:
-                            blob = {}
-                        if not isinstance(blob, dict):
-                            blob = {}
-                        status = r.status
-                except aiohttp.ClientError as e:
-                    err = f"сеть до Gemini: {e}"
-                    break
-                except asyncio.TimeoutError:
-                    err = f"модель {model} не успела ответить"
-                    busy = True
-                    break
-                except Exception as e:
-                    err = f"{type(e).__name__}: {e}"
-                    break
+        models = _order(await _models(session, key))
+        tasks = {}
+        idx = 0
 
-                if status == 200:
-                    text = _extract_text(blob)
-                    if text:
-                        return text
-                    err = "модель ответила пустотой"
+        def start():
+            nonlocal idx
+            model = models[idx]
+            idx += 1
+            tasks[asyncio.ensure_future(_call_model(session, hdr, model, body))] = model
+
+        start()
+        try:
+            while tasks:
+                left = deadline - time.monotonic()
+                if left <= 0:
                     break
-                msg = str((blob.get("error") or {}).get("message", status))[:200]
-                if status in (401, 403):
-                    raise HearError(f"Gemini не принял ключ GEMINI_API_KEY ({status}): {msg}")
-                if status in _TRANSIENT:
-                    busy = True
-                    err = f"Gemini: {msg}"
-                    if attempt == 0 and time.monotonic() + _RETRY_PAUSE < deadline:
-                        await asyncio.sleep(_RETRY_PAUSE)
-                        continue          # один повтор на той же модели
-                    break                 # потом — следующая модель
-                # 400/404 и прочее: модель не умеет такой запрос — пробуем следующую
-                err = f"Gemini: {msg}"
-                break
-            if time.monotonic() > deadline:
-                break
+                more = idx < len(models)
+                done, _ = await asyncio.wait(list(tasks), timeout=min(_HEDGE, left) if more else left,
+                                             return_when=asyncio.FIRST_COMPLETED)
+                if not done:
+                    if more:
+                        start()
+                    continue
+                for d in done:
+                    tasks.pop(d, None)
+                    kind, val = d.result()
+                    if kind == "ok":
+                        return val
+                    if kind == "auth":
+                        raise HearError(val)
+                    busy = busy or kind == "busy"
+                    err = val
+                if not tasks and idx < len(models):
+                    start()
+        finally:
+            for t in tasks:
+                t.cancel()
 
     if busy:
         raise HearError("Gemini сейчас перегружен (высокий спрос) — попробуй ещё раз через минуту")
@@ -221,7 +258,7 @@ async def transcribe(data: bytes, timeout: float = 45.0) -> str:
     return text[:1200]
 
 
-async def think(system: str, prompt: str, timeout: float = 9.0, json_mode: bool = False) -> str:
+async def think(system: str, prompt: str, timeout: float = 11.0, json_mode: bool = False) -> str:
     """Думать текст по-человечески через Gemini.
 
     Это запасной мозг: ключ GEMINI_API_KEY на хостинге уже есть, а ANTHROPIC_API_KEY

@@ -27,7 +27,17 @@ from utils.embeds import note_embed, panel_embed
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE_FILE = os.path.join(BASE_DIR, "voice_ai.json")
 
-DEFAULT = {"on": True, "speak": True, "max_len": 420}
+AI_VOICES = {
+    "en-US-AndrewMultilingualNeural": "Andrew — тёплый, самый живой",
+    "en-US-AvaMultilingualNeural": "Ava — женский, живой",
+    "en-US-BrianMultilingualNeural": "Brian — спокойный мужской",
+    "en-US-EmmaMultilingualNeural": "Emma — женский, мягкий",
+    "ru-RU-SvetlanaNeural": "Svetlana — русский женский",
+    "ru-RU-DmitryNeural": "Dmitry — русский мужской",
+}
+AI_RATE = 5      # чуть бодрее обычного: так речь звучит живее, чем «диктор»
+AI_PITCH = 0     # без понижения: глубокий низкий тон и даёт «роботизированный» голос
+DEFAULT = {"on": True, "speak": True, "max_len": 420, "voice": "en-US-AndrewMultilingualNeural"}
 
 COOLDOWN = 25            # секунд между расшифровками одного человека: Gemini за звук платит
 TEXT_COOLDOWN = 3        # текст стоит копейки, поэтому спрашивать можно почти сразу
@@ -63,6 +73,8 @@ def _srv(gid) -> dict:
         out.update({k: v for k, v in one.items() if k in DEFAULT})
     out["on"] = bool(out["on"])
     out["speak"] = True  # всегда говорим сразу; старая сохранённая настройка не мешает
+    if out.get("voice") not in AI_VOICES:
+        out["voice"] = DEFAULT["voice"]
     try:
         out["max_len"] = max(120, min(1200, int(out["max_len"])))
     except (TypeError, ValueError):
@@ -189,6 +201,7 @@ BTN_TEXTS = {
     "hzvai:short": "vai_btn_short",
     "hzvai:long": "vai_btn_long",
     "hzvai:test": "vai_btn_test",
+    "hzvai:voice": "vai_btn_voice",
 }
 
 BRAND = {
@@ -199,6 +212,7 @@ BRAND = {
     "hzvai:short": ("hz_trainicon", "⏱"),
     "hzvai:long": ("hz_followicon", "⏱"),
     "hzvai:test": ("hz_pcicon", "🎧"),
+    "hzvai:voice": ("hz_megaphone", "🎙"),
 }
 
 
@@ -261,11 +275,7 @@ class SettingsView(disnake.ui.View):
 
     def embed(self, inter: disnake.MessageInteraction) -> disnake.Embed:
         st = _srv(self.gid)
-        govo = inter.bot.get_cog("Govorit")
-        s = _voice_settings(int(inter.author.id))
-        who = ("не найден ког «Говорит»" if not govo else
-               f"{s.get('voice')}, темп {s.get('rate')}%, высота {s.get('pitch')} Гц" if s else
-               "настройки голоса не читаются")
+        who = AI_VOICES.get(st["voice"], st["voice"])
         return panel_embed(
             "🧠 ИИ в войсе",
             [
@@ -276,7 +286,7 @@ class SettingsView(disnake.ui.View):
                  "🔊 да — если спрашивающий сидит в войсе, ответ прозвучит там"
                  if st["speak"] else "🔇 нет — вслух только по кнопке под ответом"),
                 ("Длина ответа вслух", f"{st['max_len']} знаков (≈ {round(st['max_len'] / 12)} секунд)"),
-                ("Каким голосом", who),
+                ("Каким голосом", f"{who}\nМеняется кнопкой «Голос», послушать — «Проверка»."),
                 ("Как спрашивать",
                  "голосовым сообщением в чат, текстом с упоминанием бота — или просто текстом "
                  "в канале, который отмечен для ИИ (/ai channel).\n"
@@ -314,6 +324,14 @@ class SettingsView(disnake.ui.View):
     async def len_up(self, button, inter: disnake.MessageInteraction):
         st = _srv(self.gid)
         st["max_len"] = min(1200, st["max_len"] + 80)
+        _put(self.gid, st)
+        await self.refresh(inter)
+
+    @disnake.ui.button(label="Голос", custom_id="hzvai:voice", row=2)
+    async def next_voice(self, button, inter: disnake.MessageInteraction):
+        st = _srv(self.gid)
+        names = list(AI_VOICES)
+        st["voice"] = names[(names.index(st["voice"]) + 1) % len(names)]
         _put(self.gid, st)
         await self.refresh(inter)
 
@@ -398,15 +416,7 @@ class VoiceAI(commands.Cog):
             return "🔇 Пустой ответ, говорить нечего."
         st = _srv(guild.id)
         speech = speech[:st["max_len"]]
-        s = _voice_settings(user_id)
-        if not s:
-            return "⚠️ Не удалось прочитать настройки голоса — зайди в «Говорит» и попробуй ещё раз."
-        s = dict(s)
-        try:
-            s["pitch"] = max(int(s.get("pitch", 0)), -8)
-            s["rate"] = max(int(s.get("rate", 0)), -5)
-        except (TypeError, ValueError):
-            pass
+        s = {"voice": st["voice"], "rate": AI_RATE, "pitch": AI_PITCH}
         try:
             return await govo.speak(guild, channel, speech, s) or ""
         except Exception as e:
@@ -537,7 +547,7 @@ class VoiceAI(commands.Cog):
         guild, asker = message.guild, message.author
         self.used_today += 1
         try:
-            say, act = await asyncio.wait_for(self.ask(guild, asker, heard, message), timeout=10)
+            say, act = await asyncio.wait_for(self.ask(guild, asker, heard, message), timeout=13)
         except asyncio.TimeoutError:
             await loading.edit(embed=note_embed("🧠 Не дождался ответа от ИИ — попробуй ещё раз.", "error"))
             return None
