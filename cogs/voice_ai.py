@@ -1,14 +1,15 @@
 """ИИ в войсе: спрашивают голосом или текстом — бот отвечает в чате и проговаривает вслух.
 
  • голосовое сообщение в чат → бот его расшифровывает (utils/ai_hear) и отвечает
- • на каждом ответе ИИ-собеседника кнопка «🔊 В войс» — ответ слышно в голосовом канале
+ • под каждым ответом — кнопки «Сказать вслух» и «Молчать»: ответ слышно в войсе
  • человек в войсе и просит вслух сам → бот отвечает ему в тот же канал голосом
 
 Слушать разговор внутри войса disnake 2.12 не умеет: у VoiceClient только отдача звука,
 приёма нет. Поэтому вопрос всегда приходит либо текстом, либо войс-сообщением в чат.
 
-Настройки держит voice_ai.json, по отдельному набору на каждый сервер. Голос, темп и
-высота берутся из кога «Говорит» (golos_settings.json) — второй настройка не плодит.
+Настройки держит voice_ai.json, по отдельному набору на каждый сервер. Голос выбирается
+кнопкой «Голос» на экране, темп и высота свои: от кога «Говорит» нужны только ffmpeg и
+подключение к войсу, а не его голос.
 """
 import asyncio
 import json
@@ -41,6 +42,7 @@ DEFAULT = {"on": True, "speak": True, "max_len": 420, "voice": "en-US-AndrewMult
 
 COOLDOWN = 25            # секунд между расшифровками одного человека: Gemini за звук платит
 TEXT_COOLDOWN = 3        # текст стоит копейки, поэтому спрашивать можно почти сразу
+DAILY_LIMIT = 120        # ответов в сутки: хостинг платит за каждый запрос к мозгу
 MAX_TTS = 700            # вслух длиннее этого не читают
 VOICE_EXT = (".ogg", ".opus", ".mp3", ".m4a", ".aac", ".wav", ".webm", ".mp4")
 
@@ -72,7 +74,7 @@ def _srv(gid) -> dict:
     if isinstance(one, dict):
         out.update({k: v for k, v in one.items() if k in DEFAULT})
     out["on"] = bool(out["on"])
-    out["speak"] = True  # всегда говорим сразу; старая сохранённая настройка не мешает
+    out["speak"] = bool(out["speak"])
     if out.get("voice") not in AI_VOICES:
         out["voice"] = DEFAULT["voice"]
     try:
@@ -122,6 +124,47 @@ def _speak_channel(member) -> Optional[disnake.VoiceChannel]:
     return vs.channel if vs else None
 
 
+def _same_voice(member, vc) -> bool:
+    """Бот сидит в том же войсе, что и человек: там спрашивают без всяких @."""
+    ch = _speak_channel(member)
+    bot_ch = getattr(vc, "channel", None)
+    return bool(ch is not None and bot_ch is not None and ch.id == bot_ch.id)
+
+
+def _names(message, me) -> list:
+    """Как бота могут назвать словами: серверный ник, имя и первое слово из них."""
+    gme = getattr(message.guild, "me", None)
+    out = []
+    for src in (getattr(gme, "nick", None), getattr(gme, "display_name", None),
+                getattr(me, "display_name", None), getattr(me, "name", None)):
+        low = str(src or "").strip().lower()
+        for cand in (low, low.split(" ")[0] if low else ""):
+            if cand and cand not in out:
+                out.append(cand)
+    if "бот" not in out:
+        out.append("бот")
+    return out
+
+
+def _by_name(text, names) -> bool:
+    """«бот, какие идеи?» или «abu bot — привет»: кличка в начале фразы, дальше не буква."""
+    low = str(text or "").strip().lower()
+    for n in names:
+        if n and low.startswith(n) and len(low) > len(n) and not low[len(n)].isalnum():
+            return True
+    return False
+
+
+def _strip_name(text, names) -> str:
+    """Слово-обращение — не часть вопроса: в карточке и в мозг оно не нужно."""
+    raw = str(text or "").strip()
+    low = raw.lower()
+    for n in names:
+        if n and low.startswith(n) and len(low) > len(n) and not low[len(n)].isalnum():
+            return raw[len(n):].lstrip(" ,:;!?-—") or raw
+    return raw
+
+
 def _voice_settings(user_id: int) -> dict:
     """Чей голос, темп и высота — из «Говорит».
 
@@ -135,6 +178,15 @@ def _voice_settings(user_id: int) -> dict:
         return dict(mod.get_settings(int(user_id)) or {})
     except Exception:
         return {}
+
+
+def _key_name() -> str:
+    """Чем мозг думает: только имя ключа — значения на экране быть не должно."""
+    if os.getenv("ANTHROPIC_API_KEY", "").strip():
+        return "Anthropic"
+    if os.getenv("GEMINI_API_KEY", "").strip():
+        return "Gemini"
+    return ""
 
 
 def _brain_settings() -> dict:
@@ -202,6 +254,7 @@ BTN_TEXTS = {
     "hzvai:long": "vai_btn_long",
     "hzvai:test": "vai_btn_test",
     "hzvai:voice": "vai_btn_voice",
+    "hzvai:probe": "vai_btn_probe",
 }
 
 BRAND = {
@@ -213,6 +266,7 @@ BRAND = {
     "hzvai:long": ("hz_followicon", "⏱"),
     "hzvai:test": ("hz_pcicon", "🎧"),
     "hzvai:voice": ("hz_megaphone", "🎙"),
+    "hzvai:probe": ("hz_pcicon", "🧠"),
 }
 
 
@@ -273,27 +327,66 @@ class SettingsView(disnake.ui.View):
             return False
         return True
 
+    def _why_silent(self, st: dict, s: dict) -> str:
+        """Одна честная причина тишины: чтобы «он молчит» превращалось в «вот это выключено»."""
+        if not st["on"]:
+            return "«Слушать вопросы» выключено — нажми первую кнопку."
+        if not s.get("enabled"):
+            return "мозг выключен — включи `/ai toggle`."
+        if not _key_name():
+            return "на хостинге нет ни одного ключа — думать нечем."
+        return ""
+
     def embed(self, inter: disnake.MessageInteraction) -> disnake.Embed:
         st = _srv(self.gid)
+        s = _brain_settings()
         who = AI_VOICES.get(st["voice"], st["voice"])
+        why = self._why_silent(st, s)
+        verdict = "⛔ **Сейчас молчу:** " + why if why else "✅ **Всё включено: слышу и отвечаю.**"
+        if not why:
+            verdict += f" Мозг думает через {_key_name()}."
+
+        govo = self.cog.bot.get_cog("Govorit")
+        if not st["speak"]:
+            mouth = "🔇 нет — вслух только по кнопке «Сказать вслух» под ответом"
+        elif govo is None:
+            mouth = "⚠️ включено, но молчу: ког «Говорит» выключен"
+        elif not ai_hear.ffmpeg_exe():
+            mouth = "⚠️ включено, но молчу: на хостинге нет ffmpeg"
+        else:
+            mouth = "🔊 да — скажу голосом в том войсе, где сидит спрашивающий"
+
+        chans = [int(c) for c in (s.get("channels") or []) if str(c).isdigit()]
+        where = (", ".join(f"<#{c}>" for c in chans) if chans else
+                 "пока ни один. Отметь канал командой `/ai channel`.")
+        gme = getattr(inter.guild, "me", None)
+        nick = str(getattr(gme, "nick", "") or getattr(gme, "display_name", "")
+                   or getattr(self.cog.bot.user, "display_name", "") or "бот")
+        ch_here = _speak_channel(inter.author)
+
         return panel_embed(
             "🧠 ИИ в войсе",
             [
-                ("Отвечать на вопросы",
-                 "✅ включено — слышит войс-сообщения, упоминания и текст в ИИ-канале"
-                 if st["on"] else "⛔ выключено — бот молчит"),
-                ("Отвечать вслух сразу",
-                 "🔊 да — если спрашивающий сидит в войсе, ответ прозвучит там"
-                 if st["speak"] else "🔇 нет — вслух только по кнопке под ответом"),
-                ("Длина ответа вслух", f"{st['max_len']} знаков (≈ {round(st['max_len'] / 12)} секунд)"),
-                ("Каким голосом", f"{who}\nМеняется кнопкой «Голос», послушать — «Проверка»."),
-                ("Как спрашивать",
-                 "голосовым сообщением в чат, текстом с упоминанием бота — или просто текстом "
-                 "в канале, который отмечен для ИИ (/ai channel).\n"
-                 "Разговор в войсе бот не слышит: приём звука в библиотеке не реализован, "
-                 "поэтому вопрос надо отправить в чат."),
+                ("Как обратиться",
+                 f"• напиши **{nick}, вопрос** — без знака @\n"
+                 f"• упомяни меня: **@{nick}**\n"
+                 "• ответь на моё сообщение\n"
+                 "• кинь **голосовое сообщение** в чат, пока я сижу в вашем войсе\n"
+                 "• или просто напиши в канале из блока «Каналы без @» ниже\n"
+                 "Разговор внутри войса я не слышу: приём звука в библиотеке не реализован."),
+                ("Отвечать вслух", mouth),
+                ("Ты сейчас",
+                 f"в войсе «{ch_here.name}» — отвечу там же голосом" if ch_here else
+                 "не в голосовом канале: в чат напишу, а вслух — нет"),
+                ("Голос и длина",
+                 f"{who} · до {st['max_len']} знаков вслух (≈ {round(st['max_len'] / 12)} секунд)"),
+                ("Каналы без @", where),
+                ("Паузы и лимит",
+                 f"между записями — {COOLDOWN} секунд, между текстами — {TEXT_COOLDOWN}. "
+                 f"Сегодня отвечено {self.cog.used_today} из {DAILY_LIMIT}."),
             ],
             guild=inter.guild,
+            intro=verdict,
         )
 
     async def refresh(self, inter: disnake.MessageInteraction):
@@ -350,6 +443,26 @@ class SettingsView(disnake.ui.View):
                                       inter.author.id)
         await inter.followup.send(embed=note_embed(err or "🔊 Готово.", "error" if err else "success"),
                                   ephemeral=True)
+
+    @disnake.ui.button(label="Тест: спроси меня", style=disnake.ButtonStyle.success,
+                       custom_id="hzvai:probe", row=2)
+    async def probe(self, button, inter: disnake.MessageInteraction):
+        """Прогон вопроса через весь путь: мозг → ответ. Тишина здесь = названная причина."""
+        await inter.response.defer(ephemeral=True, thinking=True)
+        st, s = _srv(self.gid), _brain_settings()
+        why = self._why_silent(st, s)
+        if why:
+            await inter.followup.send(embed=note_embed(f"⛔ Молчу: {why}", "warning"), ephemeral=True)
+            return
+        try:
+            say, _act = await self.cog.ask(inter.guild, inter.author,
+                                           "Это проверка связи. Ответь одной короткой фразой.")
+        except Exception as e:
+            await inter.followup.send(embed=note_embed(f"⛔ Мозг не ответил: {e}", "error"), ephemeral=True)
+            return
+        await inter.followup.send(
+            embed=note_embed(f"🧠 {say or 'мозг вернул пустоту — значит он молчит.'}", "info"),
+            ephemeral=True)
 
 
 # ────────────────────────── ког ──────────────────────────
@@ -452,6 +565,10 @@ class VoiceAI(commands.Cog):
             pass
 
     async def _decorate(self, message: disnake.Message, text: str, gid: int, asker) -> None:
+        try:
+            await message.edit(view=relabel(SpeakView(self, gid, text), self.bot))
+        except Exception as e:
+            print(f"🎙 ИИ в войсе: кнопку под ответ не повесил: {e}", flush=True)
         if asker is None:
             return
         ch = _speak_channel(asker)
@@ -478,16 +595,22 @@ class VoiceAI(commands.Cog):
         replied = bool(cached is not None and getattr(cached.author, "id", None) == me.id)
         attach = _voice_attach(message)
         in_ai = self._in_ai_channel(message)
+        named = _by_name(message.content, _names(message, me))
+        in_my_voice = _same_voice(message.author, getattr(message.guild, "voice_client", None))
         if attach is not None:
-            if not (mentioned or replied or in_ai):
+            # Запись в чат слушаем, когда к нам обратились любым способом — включая то,
+            # что бот сидит рядом в голосовом: это и есть «вопрос в гс».
+            if not (mentioned or replied or in_ai or named or in_my_voice):
                 return
             question = ""
         else:
-            # Голый текст берём только в ИИ-канале и только когда бота не звали по имени:
-            # иначе мы ответим дважды — за нас это уже делает ИИ-собеседник.
-            if not in_ai or mentioned or replied:
+            # Обращение (@ или кличка) несёт ИИ-собеседник и передаёт его сюда сам,
+            # поэтому здесь его берём только когда он не дожил до этого места.
+            if mentioned or replied:
                 return
-            question = (message.content or "").strip()
+            if not (in_ai or named or in_my_voice):
+                return
+            question = _strip_name(message.content, _names(message, me))
             if len(question) < 3:
                 return
 
@@ -575,14 +698,19 @@ class VoiceAI(commands.Cog):
             if not ok:
                 speech = info
 
+        bot_name = str(getattr(getattr(guild, "me", None), "display_name", "") or
+                       getattr(self.bot.user, "display_name", "") or "Бот")
+
         def card_with(extra: str):
-            return note_embed(f"{mark} Ты спросил: *{heard[:400]}*\n\n{say[:1500]}{extra}",
+            return note_embed(f"{mark} **{asker.display_name}** — {heard[:400]}\n\n"
+                              f"🤖 **{bot_name}:** {say[:1500]}{extra}",
                               "embed", title=None, guild=guild)
 
+        buttons = SpeakView(self, guild.id, speech)
         try:
-            sent = await loading.edit(embed=card_with(line), view=None)
+            sent = await loading.edit(embed=card_with(line), view=buttons)
         except Exception:
-            sent = await message.reply(embed=card_with(line), mention_author=False,
+            sent = await message.reply(embed=card_with(line), view=buttons, mention_author=False,
                                        allowed_mentions=disnake.AllowedMentions.none())
         if not isinstance(sent, disnake.Message):
             sent = loading
@@ -620,7 +748,7 @@ class VoiceAI(commands.Cog):
         day = time.strftime("%Y-%m-%d")
         if day != self.day:
             self.day, self.used_today = day, 0
-        return self.used_today < 120
+        return self.used_today < DAILY_LIMIT
 
     # ---- экран настроек: он же из Discord, он же из сайта ----
     @commands.slash_command(name="ии-войс", description="ИИ в войсе: настройка ответов вслух")

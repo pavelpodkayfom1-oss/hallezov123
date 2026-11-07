@@ -119,9 +119,8 @@ class AIChat(commands.Cog):
         s = get_settings()
         if not s.get("enabled"):
             return
-        allowed = [int(c) for c in s.get("channels", []) if str(c).isdigit()]
-        if allowed and message.channel.id not in allowed:
-            return
+        # Список каналов из /ai channel — про «отвечать, когда не звали». Обращение
+        # через @ или ответ на моё сообщение глушать нельзя: это выглядит как поломка.
 
         now = time.time()
         if now - self.last_ask.get(message.author.id, 0) < USER_COOLDOWN:
@@ -227,7 +226,7 @@ class AIChat(commands.Cog):
         save_settings(s)
         await inter.response.send_message(embed=note_embed("✅ Характер сохранён.", "success"), ephemeral=True)
 
-    @ai.sub_command(name="channel", description="В каких каналах отвечает ИИ (по умолчанию во всех)")
+    @ai.sub_command(name="channel", description="Каналы, где бот отвечает, его не упомянув")
     async def ai_channel(self, inter: disnake.ApplicationCommandInteraction,
                          action: str = commands.Param(choices=["add", "remove", "clear"], description="Что сделать"),
                          channel: Optional[disnake.TextChannel] = commands.Param(default=None, description="Канал")):
