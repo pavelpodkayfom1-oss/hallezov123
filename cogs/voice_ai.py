@@ -38,9 +38,11 @@ AI_VOICES = {
 }
 AI_RATE = 5      # чуть бодрее обычного: так речь звучит живее, чем «диктор»
 AI_PITCH = 0     # без понижения: глубокий низкий тон и даёт «роботизированный» голос
-DEFAULT = {"on": True, "speak": True, "max_len": 420, "voice": "en-US-AndrewMultilingualNeural"}
+DEFAULT = {"on": True, "speak": True, "max_len": 260, "voice": "en-US-AndrewMultilingualNeural"}
+OLD_LEN = 420            # прежняя мера: она лежит там, где кнопку «Длиннее» не жали ни разу
+LEN_STEP = 60            # знак ≈ 5 секунд речи вслух
 
-COOLDOWN = 25            # секунд между расшифровками одного человека: Gemini за звук платит
+COOLDOWN = 8             # секунд между расшифровками одного человека: Gemini за звук платит
 TEXT_COOLDOWN = 3        # текст стоит копейки, поэтому спрашивать можно почти сразу
 DAILY_LIMIT = 120        # ответов в сутки: хостинг платит за каждый запрос к мозгу
 MAX_TTS = 700            # вслух длиннее этого не читают
@@ -80,6 +82,10 @@ def _srv(gid) -> dict:
     try:
         out["max_len"] = max(120, min(1200, int(out["max_len"])))
     except (TypeError, ValueError):
+        out["max_len"] = DEFAULT["max_len"]
+    if out["max_len"] == OLD_LEN:
+        # voice_ai.json на хостинге старше новой меры, и человек кнопку не трогал:
+        # держим её, иначе «сделай короче» до него никогда не дойдёт.
         out["max_len"] = DEFAULT["max_len"]
     return out
 
@@ -146,23 +152,38 @@ def _names(message, me) -> list:
     return out
 
 
+ADDR_WORDS = 3         # обращение стоит в начале фразы, но не обязательно первым словом
+
+
+def _addr_at(low, names):
+    """Сколько первых слов фразы — обращение: (первое слово, сколько), иначе None.
+
+    Только самое первое слово сравнивать нельзя: зовут как «абу бот, как дела», и тогда
+    бот молчал бы ровно там, где его звали. Кличка бывает и из двух слов.
+    """
+    words = str(low or "").split()
+    for i in range(min(ADDR_WORDS, len(words))):
+        for take in (2, 1):
+            if i + take > len(words):
+                continue
+            chunk = " ".join(w.strip(" ,.:;!?-—()") for w in words[i:i + take])
+            if chunk and chunk in names:
+                return i, take
+    return None
+
+
 def _by_name(text, names) -> bool:
-    """«бот, какие идеи?» или «abu bot — привет»: кличка в начале фразы, дальше не буква."""
-    low = str(text or "").strip().lower()
-    for n in names:
-        if n and low.startswith(n) and len(low) > len(n) and not low[len(n)].isalnum():
-            return True
-    return False
+    """«бот, какие идеи?», «abu bot — привет» и «абу бот как дела»: кличка в первых словах."""
+    return _addr_at(str(text or "").strip().lower(), names) is not None
 
 
 def _strip_name(text, names) -> str:
-    """Слово-обращение — не часть вопроса: в карточке и в мозг оно не нужно."""
+    """Обращение — не часть вопроса: срезаем первые слова до клички включительно."""
     raw = str(text or "").strip()
-    low = raw.lower()
-    for n in names:
-        if n and low.startswith(n) and len(low) > len(n) and not low[len(n)].isalnum():
-            return raw[len(n):].lstrip(" ,:;!?-—") or raw
-    return raw
+    at = _addr_at(raw.lower(), names)
+    if at is None:
+        return raw
+    return " ".join(raw.split()[at[0] + at[1]:]).lstrip(" ,:;!?-—") or raw
 
 
 def _voice_settings(user_id: int) -> dict:
@@ -368,7 +389,8 @@ class SettingsView(disnake.ui.View):
             "🧠 ИИ в войсе",
             [
                 ("Как обратиться",
-                 f"• напиши **{nick}, вопрос** — без знака @\n"
+                 f"• напиши **{nick}, вопрос** — без знака @, кличка может быть "
+                 "не первым словом: «абу бот, как дела» тоже подойдёт\n"
                  f"• упомяни меня: **@{nick}**\n"
                  "• ответь на моё сообщение\n"
                  "• кинь **голосовое сообщение** в чат, пока я сижу в вашем войсе\n"
@@ -409,14 +431,16 @@ class SettingsView(disnake.ui.View):
     @disnake.ui.button(label="Короче", custom_id="hzvai:short", row=1)
     async def len_down(self, button, inter: disnake.MessageInteraction):
         st = _srv(self.gid)
-        st["max_len"] = max(120, st["max_len"] - 80)
+        # Шаг 60, не 80: с 80 кнопка ровно на третьем нажатии возвращала бы к старой
+        # мере 420, а её миграция снова молча съедает в 260.
+        st["max_len"] = max(120, st["max_len"] - LEN_STEP)
         _put(self.gid, st)
         await self.refresh(inter)
 
     @disnake.ui.button(label="Длиннее", custom_id="hzvai:long", row=1)
     async def len_up(self, button, inter: disnake.MessageInteraction):
         st = _srv(self.gid)
-        st["max_len"] = min(1200, st["max_len"] + 80)
+        st["max_len"] = min(1200, st["max_len"] + LEN_STEP)
         _put(self.gid, st)
         await self.refresh(inter)
 
@@ -448,7 +472,9 @@ class SettingsView(disnake.ui.View):
                        custom_id="hzvai:probe", row=2)
     async def probe(self, button, inter: disnake.MessageInteraction):
         """Прогон вопроса через весь путь: мозг → ответ. Тишина здесь = названная причина."""
-        await inter.response.defer(ephemeral=True, thinking=True)
+        # thinking= — выдуманный аргумент: в disnake 2.12 у defer() его нет, и кнопка
+        # падала до первого ответа. Человек видел просто ничего.
+        await inter.response.defer(ephemeral=True)
         st, s = _srv(self.gid), _brain_settings()
         why = self._why_silent(st, s)
         if why:
@@ -471,6 +497,7 @@ class VoiceAI(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.last_hear: Dict[int, float] = {}
+        self.told_cool: Dict[int, float] = {}   # кому уже объяснил паузу
         self.history: Dict[int, deque] = {}   # последние реплики каждого человека
         self.day = time.strftime("%Y-%m-%d")
         self.used_today = 0
@@ -618,7 +645,15 @@ class VoiceAI(commands.Cog):
         if not st["on"]:
             return
         now = time.time()
-        if now - self.last_hear.get(message.author.id, 0) < (COOLDOWN if attach is not None else TEXT_COOLDOWN):
+        wait = COOLDOWN if attach is not None else TEXT_COOLDOWN
+        left = wait - (now - self.last_hear.get(message.author.id, 0))
+        if left > 0:
+            # Тишину на паузе человек читает как поломку: объясняем один раз в минуту.
+            if now - self.told_cool.get(message.author.id, 0) > 60:
+                self.told_cool[message.author.id] = now
+                await message.reply(embed=note_embed(f"⏳ Спроси ещё раз через {int(left) + 1} сек: "
+                                                      f"между обращениями у меня пауза {wait} сек.", "info"),
+                                    mention_author=False)
             return
         if not self._quota_ok():
             await message.reply(embed=note_embed("🎙 На сегодня у меня лимит, завтра продолжим.",
