@@ -1,0 +1,3 @@
+discord.py[voice]>=2.7.0
+davey
+discord-ext-voice-recv @ https://github.com/Florian-85/discord-ext-voice-recv/archive/refs/tags/dave-receive-2.zip

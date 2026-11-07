@@ -5,15 +5,19 @@
  • человек в войсе и просит вслух сам → бот отвечает ему в тот же канал голосом
 
 Слушать разговор внутри войса disnake 2.12 не умеет: у VoiceClient только отдача звука,
-приёма нет. Поэтому вопрос всегда приходит либо текстом, либо войс-сообщением в чат.
+приёма нет. Поэтому живую речь слушает отдельный бот-«ухо» (ear_bot.py, discord.py): он
+стоит в том же войсе и присылает услышанное карточкой «🎙 Имя» с пометкой hzear:<id>, а
+здесь on_ear() её разбирает. Без EAR_BOT_TOKEN остаются текст и войс-сообщения в чат.
 
 Настройки держит voice_ai.json, по отдельному набору на каждый сервер. Голос выбирается
 кнопкой «Голос» на экране, темп и высота свои: от кога «Говорит» нужны только ffmpeg и
 подключение к войсу, а не его голос.
 """
 import asyncio
+import base64
 import json
 import os
+import sys
 import time
 from collections import deque
 from typing import Dict, Optional
@@ -27,6 +31,18 @@ from utils.embeds import note_embed, panel_embed
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATE_FILE = os.path.join(BASE_DIR, "voice_ai.json")
+EAR_SCRIPT = os.path.join(BASE_DIR, "ear_bot.py")
+EAR_MARK = "hzear:"
+
+
+def _ear_id() -> int:
+    """id бота-«уха»: он зашит в первый кусок его токена, отдельной переменной не надо."""
+    tok = os.getenv("EAR_BOT_TOKEN", "").strip()
+    try:
+        part = tok.split(".")[0]
+        return int(base64.b64decode(part + "=" * (-len(part) % 4)))
+    except Exception:
+        return 0
 
 AI_VOICES = {
     "en-US-AndrewMultilingualNeural": "Andrew — тёплый, самый живой",
@@ -498,6 +514,8 @@ class VoiceAI(commands.Cog):
         self.bot = bot
         self.last_hear: Dict[int, float] = {}
         self.told_cool: Dict[int, float] = {}   # кому уже объяснил паузу
+        self.ear_task = None
+        self.ear_proc = None
         self.history: Dict[int, deque] = {}   # последние реплики каждого человека
         self.day = time.strftime("%Y-%m-%d")
         self.used_today = 0
@@ -610,10 +628,76 @@ class VoiceAI(commands.Cog):
         allowed = [int(c) for c in (_brain_settings().get("channels") or []) if str(c).isdigit()]
         return message.channel.id in allowed
 
+    # ---- ухо: отдельный бот, слушающий микрофоны в войсе ----
+    @commands.Cog.listener()
+    async def on_ready(self):
+        if self.ear_task is None and os.getenv("EAR_BOT_TOKEN", "").strip() and os.path.exists(EAR_SCRIPT):
+            self.ear_task = asyncio.create_task(self._run_ear())
+
+    def cog_unload(self):
+        if self.ear_task:
+            self.ear_task.cancel()
+        if self.ear_proc and self.ear_proc.returncode is None:
+            try:
+                self.ear_proc.terminate()
+            except Exception:
+                pass
+
+    async def _run_ear(self):
+        """Держит процесс «уха» живым. Он отдельный, поэтому его падение основного бота не трогает."""
+        pause = 20
+        while True:
+            env = dict(os.environ, MAIN_BOT_ID=str(self.bot.user.id))
+            try:
+                self.ear_proc = await asyncio.create_subprocess_exec(
+                    sys.executable, EAR_SCRIPT, env=env, cwd=BASE_DIR)
+            except Exception as e:
+                print(f"👂 ухо не запустилось: {e}", flush=True)
+                return
+            started = time.monotonic()
+            code = await self.ear_proc.wait()
+            print(f"👂 ухо остановилось (код {code})", flush=True)
+            if code == 3:
+                return                      # не хватает настроек: повтор ничего не изменит
+            pause = 20 if time.monotonic() - started > 120 else min(pause * 2, 600)
+            await asyncio.sleep(pause)
+
+    async def on_ear(self, message: disnake.Message):
+        """Карточка «🎙 Имя» от бота-«уха»: человек сказал это голосом в войсе."""
+        guild = message.guild
+        emb = message.embeds[0] if message.embeds else None
+        foot = (emb.footer.text if emb and emb.footer else "") or ""
+        if not foot.startswith(EAR_MARK) or not _srv(guild.id)["on"]:
+            return
+        try:
+            uid = int(foot[len(EAR_MARK):])
+        except ValueError:
+            return
+        asker = guild.get_member(uid)
+        if asker is None:
+            try:
+                asker = await guild.fetch_member(uid)
+            except Exception:
+                return
+        question = (emb.description or "").strip()
+        if len(question) < 2 or asker.bot:
+            return
+        now = time.time()
+        if now - self.last_hear.get(uid, 0) < TEXT_COOLDOWN or not self._quota_ok():
+            return
+        self.last_hear[uid] = now
+        loading = await message.reply(embed=note_embed("🧠 Думаю…", "info"), mention_author=False,
+                                      allowed_mentions=disnake.AllowedMentions.none())
+        await self.respond(message, question[:1200], "🎙", loading, asker=asker)
+
     # ---- слух ----
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message):
         me = self.bot.user
+        ear = _ear_id()
+        if ear and message.author.id == ear and message.guild:
+            await self.on_ear(message)
+            return
         if message.author.bot or not message.guild or me is None or message.mention_everyone:
             return
         mentioned = me in message.mentions
@@ -708,9 +792,11 @@ class VoiceAI(commands.Cog):
         """ИИ-собеседник передаёт сюда ответы на упоминания: тут есть и действия, и голос."""
         return bool(message.guild) and _srv(message.guild.id)["on"]
 
-    async def respond(self, message: disnake.Message, heard: str, mark: str, loading: disnake.Message):
+    async def respond(self, message: disnake.Message, heard: str, mark: str, loading: disnake.Message,
+                      asker=None):
         """Спросить ИИ, выполнить просьбу, показать карточку и (если надо) сказать вслух."""
-        guild, asker = message.guild, message.author
+        guild = message.guild
+        asker = asker or message.author
         self.used_today += 1
         try:
             say, act = await asyncio.wait_for(self.ask(guild, asker, heard, message), timeout=13)
